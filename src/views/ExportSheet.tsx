@@ -1,0 +1,230 @@
+import { useMemo, useState } from 'react'
+import { Icon } from '../components/Icon'
+import { Segmented } from '../components/Segmented'
+import { dayKey, formatMDShort } from '../lib/date'
+import { sortTasks } from '../lib/tasks'
+import { toCsv } from '../ports/out/toCsv'
+import { toBulletList, toDailyReport, toStandupText } from '../ports/out/toPlainText'
+import { toGoogleCalendarUrl, toIcs, workHoursIcs } from '../ports/out/toCalendar'
+import { copyText, downloadText } from '../ports/out/download'
+import { workHoursSummary } from '../lib/workday'
+import type { Settings, Task } from '../types'
+
+/* =========================================================
+ * 出力形式の選択
+ *
+ * 入れた情報が使いたい形で取り出せること。
+ * どの形式も「Task[] を渡すだけ」で、変換処理は ports/out に置いてある。
+ * =======================================================*/
+
+type Kind = 'text' | 'calendar' | 'csv'
+
+const KINDS: { key: Kind; label: string }[] = [
+  { key: 'text', label: 'テキスト' },
+  { key: 'calendar', label: 'カレンダー' },
+  { key: 'csv', label: 'CSV' },
+]
+
+type TextForm = 'report' | 'standup' | 'bullets'
+
+export function ExportSheet({
+  tasks,
+  today,
+  settings,
+  onClose,
+  onNotify,
+}: {
+  tasks: Task[]
+  today: string
+  settings: Settings
+  onClose: () => void
+  onNotify: (text: string, tone?: 'ok' | 'error') => void
+}) {
+  const [kind, setKind] = useState<Kind>('text')
+  const [form, setForm] = useState<TextForm>('report')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+
+  const open = useMemo(() => sortTasks(tasks.filter((t) => t.status === 'open')), [tasks])
+  const withDue = useMemo(() => open.filter((t) => !!t.due), [open])
+  const selected = useMemo(() => withDue.filter((t) => picked.has(t.id)), [withDue, picked])
+  const wh = workHoursSummary(settings.workHours)
+
+  const preview =
+    form === 'report'
+      ? toDailyReport(tasks, today)
+      : form === 'standup'
+        ? toStandupText(tasks, today)
+        : toBulletList(open)
+
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const copy = async (text: string, what: string) => {
+    const ok = await copyText(text)
+    onNotify(
+      ok ? `${what}をコピーしました` : 'コピーできませんでした。文面を選んで手動でコピーしてください。',
+      ok ? 'ok' : 'error',
+    )
+  }
+
+  return (
+    <div className="tp-sheet" role="dialog" aria-modal="true" aria-label="書き出し">
+      <div className="tp-sheet-card">
+        <header className="tp-sheet-head">
+          <h2>書き出し</h2>
+          <button type="button" className="tp-icon-btn" onClick={onClose} aria-label="閉じる">
+            <Icon name="close" size={18} />
+          </button>
+        </header>
+
+        <div className="tp-sheet-body">
+          <Segmented items={KINDS} value={kind} onChange={setKind} ariaLabel="書き出す形式" />
+
+          {kind === 'text' && (
+            <>
+              <Segmented
+                items={[
+                  { key: 'report' as TextForm, label: '日報' },
+                  { key: 'standup' as TextForm, label: '朝会' },
+                  { key: 'bullets' as TextForm, label: '箇条書き' },
+                ]}
+                value={form}
+                onChange={setForm}
+                ariaLabel="テキストの形"
+              />
+              <pre className="tp-preview">{preview}</pre>
+              <div className="tp-row-end">
+                <button type="button" className="tp-btn-primary" onClick={() => copy(preview, '文面')}>
+                  <Icon name="copy" size={16} />
+                  クリップボードにコピー
+                </button>
+              </div>
+            </>
+          )}
+
+          {kind === 'calendar' && (
+            <>
+              <p className="tp-note">
+                時刻のないタスクは終日予定になります。見込み時間を入れておくと、その長さで登録されます。
+              </p>
+
+              <div className="tp-pick-head">
+                <span className="tp-label">対象のタスク（{selected.length}件を選択中）</span>
+                <button
+                  type="button"
+                  className="tp-link"
+                  onClick={() =>
+                    setPicked(picked.size === withDue.length ? new Set() : new Set(withDue.map((t) => t.id)))
+                  }
+                >
+                  {picked.size === withDue.length ? 'すべて外す' : 'すべて選ぶ'}
+                </button>
+              </div>
+
+              {withDue.length === 0 ? (
+                <p className="tp-empty-body">期限のあるタスクがありません。期限を入れると登録できます。</p>
+              ) : (
+                <ul className="tp-picklist">
+                  {withDue.map((t) => (
+                    <li key={t.id}>
+                      <label className="tp-pick">
+                        <input type="checkbox" checked={picked.has(t.id)} onChange={() => toggle(t.id)} />
+                        <span className="tp-pick-title">{t.title}</span>
+                        <span className="tp-mono tp-muted">
+                          {formatMDShort(t.due as string)}
+                          {t.dueTime ? ` ${t.dueTime}` : ''}
+                        </span>
+                      </label>
+                      <a
+                        className="tp-link"
+                        href={toGoogleCalendarUrl(t, settings.defaultEstimateMin) ?? '#'}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        1件だけ登録
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="tp-row-end">
+                <button
+                  type="button"
+                  className="tp-btn-ghost"
+                  onClick={() => {
+                    downloadText(
+                      `taskport-workhours-${today}.ics`,
+                      workHoursIcs(today, settings.workHours),
+                      'text/calendar',
+                    )
+                    onNotify('勤務時間の予定を書き出しました')
+                  }}
+                >
+                  <Icon name="clock" size={15} />
+                  勤務時間（{wh.span}）
+                </button>
+                <button
+                  type="button"
+                  className="tp-btn-primary"
+                  disabled={selected.length === 0}
+                  onClick={() => {
+                    downloadText(
+                      `taskport-${today}.ics`,
+                      toIcs(selected, settings.defaultEstimateMin),
+                      'text/calendar',
+                    )
+                    onNotify(`${selected.length}件を .ics に書き出しました`)
+                  }}
+                >
+                  <Icon name="download" size={16} />
+                  {selected.length}件を .ics で書き出す
+                </button>
+              </div>
+            </>
+          )}
+
+          {kind === 'csv' && (
+            <>
+              <p className="tp-note">
+                全項目を CSV で出します。Excel での集計や、上長への共有に使ってください。
+              </p>
+              <div className="tp-row-end">
+                <button
+                  type="button"
+                  className="tp-btn-ghost"
+                  onClick={() => copy(toCsv(tasks), 'CSV')}
+                >
+                  <Icon name="copy" size={15} />
+                  コピー
+                </button>
+                <button
+                  type="button"
+                  className="tp-btn-primary"
+                  onClick={() => {
+                    downloadText(`taskport-${dayKey()}.csv`, toCsv(tasks), 'text/csv')
+                    onNotify(`${tasks.length}件を CSV に書き出しました`)
+                  }}
+                >
+                  <Icon name="download" size={16} />
+                  {tasks.length}件を CSV で書き出す
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <footer className="tp-sheet-foot">
+          <button type="button" className="tp-btn-ghost" onClick={onClose}>
+            閉じる
+          </button>
+        </footer>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,45 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# gh-pages ブランチへ push する方式。
+# Pages の Source を「Deploy from a branch → gh-pages / (root)」に設定して使う。
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          # 設定画面からも入れられるので必須ではない。
+          # リポジトリの Variables に登録しておくと初回から AI 解析が効く。
+          VITE_PARSE_ENDPOINT: ${{ vars.VITE_PARSE_ENDPOINT }}
+      # Jekyll 処理を無効化（_ 始まりのファイルが無視されるのを防ぐ）
+      - run: touch dist/.nojekyll
+      - name: Publish dist to gh-pages branch
+        run: |
+          cd dist
+          git init -q
+          git checkout -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA} to GitHub Pages"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

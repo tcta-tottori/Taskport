@@ -1,0 +1,91 @@
+import { isDayKey, isTimeKey } from './date'
+import { PRIORITIES, type Priority, type Settings, type Source, type Task } from '../types'
+
+/* =========================================================
+ * JSON バックアップ（端末故障・キャッシュ削除への備え）
+ *
+ * 端末内にしかデータが無いので、書き出しと取り込みは必須機能。
+ * 取り込み時は形を検証し、壊れたレコードは黙って捨てずに件数で知らせる。
+ * =======================================================*/
+
+export interface BackupFile {
+  app: 'taskport'
+  version: 1
+  exportedAt: string
+  tasks: Task[]
+  settings?: Settings
+}
+
+export function makeBackup(tasks: Task[], settings: Settings): string {
+  const payload: BackupFile = {
+    app: 'taskport',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    tasks,
+    settings,
+  }
+  return JSON.stringify(payload, null, 2)
+}
+
+const SOURCES: Source[] = ['voice', 'text', 'form', 'share', 'calendar']
+
+function toTask(raw: unknown): Task | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const o = raw as Record<string, unknown>
+  const id = typeof o.id === 'string' ? o.id : ''
+  const title = typeof o.title === 'string' ? o.title.trim() : ''
+  if (!id || !title) return null
+  const now = new Date().toISOString()
+  return {
+    id,
+    title,
+    note: typeof o.note === 'string' ? o.note : '',
+    due: isDayKey(o.due) ? o.due : null,
+    dueTime: isTimeKey(o.dueTime) ? o.dueTime : null,
+    estimateMin: typeof o.estimateMin === 'number' && o.estimateMin > 0 ? Math.round(o.estimateMin) : null,
+    priority: PRIORITIES.includes(o.priority as Priority) ? (o.priority as Priority) : 'mid',
+    category: typeof o.category === 'string' ? o.category : '',
+    status: o.status === 'done' ? 'done' : 'open',
+    source: SOURCES.includes(o.source as Source) ? (o.source as Source) : 'form',
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : now,
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : now,
+    doneAt: typeof o.doneAt === 'string' ? o.doneAt : null,
+  }
+}
+
+export interface RestoreResult {
+  tasks: Task[]
+  settings: Partial<Settings> | null
+  /** 形が合わずに取り込めなかった件数 */
+  skipped: number
+}
+
+/** バックアップJSONを読む。読めない場合は例外を投げ、呼び出し側で文言にする。 */
+export function readBackup(json: string): RestoreResult {
+  let data: unknown
+  try {
+    data = JSON.parse(json)
+  } catch {
+    throw new Error('ファイルをJSONとして読めませんでした。書き出したファイルをそのままお使いください。')
+  }
+  const arr =
+    Array.isArray(data)
+      ? data
+      : typeof data === 'object' && data !== null && Array.isArray((data as BackupFile).tasks)
+        ? (data as BackupFile).tasks
+        : null
+  if (!arr) throw new Error('タスクの配列が見つかりませんでした。Taskport から書き出したファイルか確認してください。')
+
+  const tasks: Task[] = []
+  let skipped = 0
+  for (const raw of arr) {
+    const t = toTask(raw)
+    if (t) tasks.push(t)
+    else skipped++
+  }
+  const settings =
+    typeof data === 'object' && data !== null && typeof (data as BackupFile).settings === 'object'
+      ? ((data as BackupFile).settings as Partial<Settings>)
+      : null
+  return { tasks, settings, skipped }
+}
