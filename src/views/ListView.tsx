@@ -3,9 +3,10 @@ import { Segmented } from '../components/Segmented'
 import { TaskCard } from '../components/TaskCard'
 import { Icon } from '../components/Icon'
 import { FilterBar } from '../components/FilterBar'
+import { TodayFlow } from './TodayFlow'
 import { filterByTab, LIST_TABS, type ListTab } from '../lib/tasks'
 import { applyFilter, isFilterActive } from '../lib/taskFilter'
-import { durationLabel } from '../lib/date'
+import { diffDays, durationLabel } from '../lib/date'
 import { workloadOf } from '../lib/stats'
 import { trim, workHoursSummary } from '../lib/workday'
 import type { SavedFilter, Settings, Task, TaskFilter } from '../types'
@@ -48,6 +49,9 @@ export function ListView({
   saved,
   onSaveFilter,
   onRemoveSavedFilter,
+  nowMin,
+  onTriage,
+  onWrapUp,
 }: {
   tasks: Task[]
   today: string
@@ -62,6 +66,10 @@ export function ListView({
   saved: SavedFilter[]
   onSaveFilter: (name: string) => void
   onRemoveSavedFilter: (id: string) => void
+  /** いまの時刻（0時からの分） */
+  nowMin: number
+  onTriage: () => void
+  onWrapUp: () => void
 }) {
   const counts = useMemo(
     () =>
@@ -83,6 +91,10 @@ export function ListView({
     [searching, found, tasks, tab, today],
   )
   const load = useMemo(() => workloadOf(tasks, today, settings), [tasks, today, settings])
+  const overdueCount = useMemo(
+    () => tasks.filter((t) => t.status === 'open' && !!t.due && diffDays(t.due, today) < 0).length,
+    [tasks, today],
+  )
   const wh = workHoursSummary(settings.workHours)
   const pct = Math.round(load.ratio * 100)
 
@@ -120,6 +132,21 @@ export function ListView({
               : `${load.tasks.length}件・残り${durationLabel(load.capacity - load.planned)}ぶん空いています。`}
         </p>
       </section>
+
+      {/* 今日タブのときだけ「今日の進めかた」を出す。
+          ほかのタブは範囲が違うので、枠の話を持ち込むと読み違える。 */}
+      {!searching && tab === 'today' && (
+        <TodayFlow
+          tasks={load.tasks}
+          settings={settings}
+          nowMin={nowMin}
+          overdue={overdueCount}
+          onToggle={onToggle}
+          onEdit={onEdit}
+          onTriage={onTriage}
+          onWrapUp={onWrapUp}
+        />
+      )}
 
       <FilterBar
         filter={filter}
@@ -165,6 +192,7 @@ export function ListView({
               onToggle={onToggle}
               onEdit={onEdit}
               onToggleSubtask={onToggleSubtask}
+              workHours={settings.workHours}
             />
           ))}
         </ul>

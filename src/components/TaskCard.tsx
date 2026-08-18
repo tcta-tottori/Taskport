@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { dueLabel } from '../lib/date'
 import { overdueDays } from '../lib/tasks'
 import { repeatLabel } from '../lib/repeat'
+import { timeboxLabel } from '../lib/timebox'
 import { durationLabel } from '../lib/date'
 import { Icon } from './Icon'
-import { PRIORITY_LABEL, type Task } from '../types'
+import { PRIORITY_LABEL, type Task, type WorkHours } from '../types'
 
 /**
  * 一覧の1件。
@@ -20,9 +21,12 @@ export function TaskCard({
   onToggle,
   onEdit,
   onToggleSubtask,
+  workHours,
 }: {
   task: Task
   today: string
+  /** 時間枠の名前を出すために使う。省略すると枠は出さない */
+  workHours?: WorkHours
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
   /** 手順1つの済／未了を切り替える */
@@ -33,6 +37,7 @@ export function TaskCard({
   const subs = task.subtasks
   const subDone = subs.filter((s) => s.done).length
   const [openSubs, setOpenSubs] = useState(false)
+  const box = workHours && task.timebox ? timeboxLabel(task.timebox, workHours) : ''
 
   return (
     <li className={`tp-card tp-pri-${task.priority}${done ? ' is-done' : ''}`}>
@@ -60,6 +65,7 @@ export function TaskCard({
               </span>
             )}
             {task.estimateMin && <span className="tp-chip-est">{durationLabel(task.estimateMin)}</span>}
+            {box && <span className="tp-chip-box">{box}</span>}
             {task.repeat && (
               <span className="tp-chip-rep">
                 <Icon name="repeat" size={11} /> {repeatLabel(task.repeat)}

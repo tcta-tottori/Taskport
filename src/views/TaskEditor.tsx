@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
 import { taskToDraft } from '../lib/tasks'
-import { SOURCE_LABEL, type Draft, type Task } from '../types'
+import { SOURCE_LABEL, type Draft, type Task, type WorkHours } from '../types'
 
 /* =========================================================
  * 既存タスクの編集 / フォーム直接入力
@@ -16,10 +16,12 @@ export function TaskEditor({
   onSave,
   onDelete,
   onClose,
+  workHours,
 }: {
   /** 既存タスクの編集なら渡す。新規作成なら undefined */
   task?: Task
   initialDraft: Draft
+  workHours: WorkHours
   onSave: (draft: Draft) => void
   onDelete?: (task: Task) => void
   onClose: () => void
@@ -38,7 +40,12 @@ export function TaskEditor({
         </header>
 
         <div className="tp-sheet-body">
-          <DraftFields draft={draft} idPrefix="edit" onChange={(p) => setDraft({ ...draft, ...p })} />
+          <DraftFields
+            draft={draft}
+            idPrefix="edit"
+            workHours={workHours}
+            onChange={(p) => setDraft({ ...draft, ...p })}
+          />
           {task && (
             <p className="tp-edit-meta">
               入口: {SOURCE_LABEL[task.source]} ／ 登録 {task.createdAt.slice(0, 10)}

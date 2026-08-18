@@ -10,6 +10,8 @@ import { SettingsView } from './views/SettingsView'
 import { ExportSheet } from './views/ExportSheet'
 import { ReviewSheet } from './views/ReviewSheet'
 import { TaskEditor } from './views/TaskEditor'
+import { TriageSheet, type TriageAction } from './views/TriageSheet'
+import { WrapUpSheet } from './views/WrapUpSheet'
 import { RecordingOverlay } from './views/RecordingOverlay'
 import { RecordingsView } from './views/RecordingsView'
 import { repository } from './repository'
@@ -21,7 +23,7 @@ import { useShareTarget } from './ports/in/useShareTarget'
 import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
 import { voiceSupported } from './ports/in/useVoiceInput'
-import { dayKey, formatMD } from './lib/date'
+import { addDaysKey, dayKey, diffDays, formatMD, timeKey, toMinutes } from './lib/date'
 import { draftToTask, emptyDraft, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
@@ -80,6 +82,10 @@ export default function App() {
   const [confirmReset, setConfirmReset] = useState(false)
   /** 保存データの開き具合。時間がかかっていることを画面に出すために見張る。 */
   const [dbStatus, setDbStatus] = useState<DbStatus>('idle')
+  const [triaging, setTriaging] = useState(false)
+  const [wrappingUp, setWrappingUp] = useState(false)
+  /** いまの時刻（0時からの分）。1分ごとに更新する */
+  const [nowMin, setNowMin] = useState(() => toMinutes(timeKey()) ?? 0)
   const [view, setView] = useState<ViewKey>('list')
   const [tab, setTab] = useState<ListTab>('today')
   const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER)
@@ -193,6 +199,7 @@ export default function App() {
     const id = window.setInterval(() => {
       const k = dayKey()
       setToday((prev) => (prev === k ? prev : k))
+      setNowMin(toMinutes(timeKey()) ?? 0)
     }, 60_000)
     return () => window.clearInterval(id)
   }, [])
@@ -338,6 +345,7 @@ export default function App() {
           priority: draft.priority,
           category: draft.category.trim(),
           subtasks: draft.subtasks.filter((t) => t.title.trim()).map((t) => ({ ...t, title: t.title.trim() })),
+          timebox: draft.timebox,
           repeat: draft.due ? draft.repeat : null,
         })
         notify('保存しました')
@@ -436,6 +444,44 @@ export default function App() {
   useEffect(() => {
     fgRef.current?.refresh()
   }, [tasks, settings])
+
+  /* --- 朝の仕分け・明日の準備 --- */
+
+  const overdueTasks = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.status === 'open' && !!t.due && diffDays(t.due, today) < 0)
+        .sort((a, b) => (a.due ?? '').localeCompare(b.due ?? '')),
+    [tasks, today],
+  )
+
+  const applyTriage = useCallback(
+    async (task: Task, action: TriageAction) => {
+      if (action.kind === 'today') {
+        await repository.update(task.id, { due: today, timebox: action.timebox })
+      } else if (action.kind === 'tomorrow') {
+        await repository.update(task.id, { due: addDaysKey(today, 1), timebox: null })
+      } else if (action.kind === 'someday') {
+        await repository.update(task.id, { due: null, timebox: null })
+      } else {
+        await repository.update(task.id, { status: 'done', doneAt: new Date().toISOString() })
+        const next = nextOccurrence(task, today, settings.workHours.workDays)
+        if (next) await repository.add([next])
+      }
+      await reload()
+    },
+    [today, reload, settings.workHours.workDays],
+  )
+
+  const pushToTomorrow = useCallback(
+    async (list: Task[]) => {
+      const due = addDaysKey(today, 1)
+      for (const t of list) await repository.update(t.id, { due, timebox: null })
+      await reload()
+      notify(list.length === 1 ? '明日へ送りました' : `${list.length}件を明日へ送りました`)
+    },
+    [today, reload, notify],
+  )
 
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
 
@@ -616,6 +662,9 @@ export default function App() {
             saved={settings.savedFilters}
             onSaveFilter={saveFilter}
             onRemoveSavedFilter={removeSavedFilter}
+            nowMin={nowMin}
+            onTriage={() => setTriaging(true)}
+            onWrapUp={() => setWrappingUp(true)}
           />
         ) : view === 'schedule' ? (
           <ScheduleView
@@ -665,6 +714,7 @@ export default function App() {
           hint={pending.hint}
           sourceText={pending.sourceText}
           today={today}
+          workHours={settings.workHours}
           onCommit={(d) => void guard(() => commitDrafts(d))}
           onCancel={() => setPending(null)}
         />
@@ -674,12 +724,34 @@ export default function App() {
         <TaskEditor
           task={editing ?? undefined}
           initialDraft={emptyDraft('form')}
+          workHours={settings.workHours}
           onSave={(d) => void guard(() => saveEdit(d))}
           onDelete={(t) => void guard(() => removeTask(t))}
           onClose={() => {
             setEditing(null)
             setCreating(false)
           }}
+        />
+      )}
+
+      {triaging && (
+        <TriageSheet
+          tasks={overdueTasks}
+          today={today}
+          settings={settings}
+          onApply={(t, a) => guard(() => applyTriage(t, a))}
+          onClose={() => setTriaging(false)}
+        />
+      )}
+
+      {wrappingUp && (
+        <WrapUpSheet
+          tasks={tasks}
+          today={today}
+          settings={settings}
+          onPush={(t) => guard(() => pushToTomorrow([t]))}
+          onPushAll={(list) => guard(() => pushToTomorrow(list))}
+          onClose={() => setWrappingUp(false)}
         />
       )}
 

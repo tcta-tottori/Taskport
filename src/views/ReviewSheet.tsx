@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
 import { dueLabel } from '../lib/date'
-import { PRIORITY_LABEL, SOURCE_LABEL, type Draft } from '../types'
+import { PRIORITY_LABEL, SOURCE_LABEL, type Draft, type WorkHours } from '../types'
 
 /* =========================================================
  * 確認画面
@@ -19,6 +19,7 @@ export function ReviewSheet({
   hint,
   sourceText,
   today,
+  workHours,
   onCommit,
   onCancel,
 }: {
@@ -27,6 +28,7 @@ export function ReviewSheet({
   hint?: string
   sourceText: string
   today: string
+  workHours: WorkHours
   onCommit: (drafts: Draft[]) => void
   onCancel: () => void
 }) {
@@ -105,6 +107,7 @@ export function ReviewSheet({
                   <DraftFields
                     draft={d}
                     idPrefix={`rev-${d.tempId}`}
+                    workHours={workHours}
                     onChange={(p) => patch(d.tempId, p)}
                   />
                 )}

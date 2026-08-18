@@ -1,7 +1,15 @@
 import { Icon } from '../components/Icon'
-import { PRIORITIES, PRIORITY_LABEL, type Draft, type RepeatUnit, type Subtask } from '../types'
+import {
+  PRIORITIES,
+  PRIORITY_LABEL,
+  type Draft,
+  type RepeatUnit,
+  type Subtask,
+  type WorkHours,
+} from '../types'
 import { CATEGORY_MASTER } from '../lib/workCategories'
 import { emptyRepeat, REPEAT_UNITS } from '../lib/repeat'
+import { bands } from '../lib/timebox'
 import { weekdayOf } from '../lib/date'
 import { ulid } from '../lib/ulid'
 
@@ -14,10 +22,13 @@ export function DraftFields({
   draft,
   onChange,
   idPrefix,
+  workHours,
 }: {
   draft: Draft
   onChange: (patch: Partial<Draft>) => void
   idPrefix: string
+  /** 時間枠の並びを勤務時間から作るために使う */
+  workHours: WorkHours
 }) {
   const repeat = draft.repeat
   const WEEK = ['日', '月', '火', '水', '木', '金', '土']
@@ -123,6 +134,38 @@ export function DraftFields({
           ))}
         </datalist>
       </label>
+
+      <div className="tp-field">
+        <span className="tp-label">
+          時間枠 <Icon name="clock" size={12} />
+        </span>
+        <div className="tp-chips" role="group" aria-label="どの時間帯にやるか">
+          <button
+            type="button"
+            className={`tp-fchip${!draft.timebox ? ' is-on' : ''}`}
+            aria-pressed={!draft.timebox}
+            onClick={() => onChange({ timebox: null })}
+          >
+            決めない
+          </button>
+          {bands(workHours).map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              className={`tp-fchip${draft.timebox === b.key ? ' is-on' : ''}`}
+              aria-pressed={draft.timebox === b.key}
+              onClick={() => onChange({ timebox: b.key })}
+            >
+              {b.label}
+              <small className="tp-fchip-sub tp-mono">{b.span}</small>
+            </button>
+          ))}
+        </div>
+        <p className="tp-hint">
+          「何時ちょうど」ではなく「どの帯でやるか」を決めます。枠ごとの残り時間は一覧に出ます。
+          {draft.dueTime && !draft.timebox && ' 時刻を入れてあるので、その時刻の枠として数えます。'}
+        </p>
+      </div>
 
       <div className="tp-field">
         <span className="tp-label">

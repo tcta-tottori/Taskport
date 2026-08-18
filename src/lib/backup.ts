@@ -1,6 +1,6 @@
 import { isDayKey, isTimeKey } from './date'
 import { ulid } from './ulid'
-import { PRIORITIES, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task } from '../types'
+import { PRIORITIES, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task, type TimeboxKey } from '../types'
 
 /* =========================================================
  * JSON バックアップ（端末故障・キャッシュ削除への備え）
@@ -30,6 +30,7 @@ export function makeBackup(tasks: Task[], settings: Settings): string {
 
 const SOURCES: Source[] = ['voice', 'text', 'form', 'share', 'calendar']
 const REPEAT_KINDS: RepeatUnit[] = ['day', 'workday', 'week', 'month', 'monthEnd']
+const TIMEBOXES: TimeboxKey[] = ['am1', 'am2', 'pm1', 'pm2', 'out']
 
 /** 取り込んだ手順。件名の無いものは落とす。 */
 function toSubtasks(raw: unknown): Subtask[] {
@@ -77,6 +78,7 @@ function toTask(raw: unknown): Task | null {
     priority: PRIORITIES.includes(o.priority as Priority) ? (o.priority as Priority) : 'mid',
     category: typeof o.category === 'string' ? o.category : '',
     subtasks: toSubtasks(o.subtasks),
+    timebox: TIMEBOXES.includes(o.timebox as TimeboxKey) ? (o.timebox as TimeboxKey) : null,
     repeat: isDayKey(o.due) ? toRepeat(o.repeat) : null,
     status: o.status === 'done' ? 'done' : 'open',
     source: SOURCES.includes(o.source as Source) ? (o.source as Source) : 'form',

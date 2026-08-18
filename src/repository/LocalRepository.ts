@@ -341,6 +341,7 @@ function normalizeTask(raw: Task): Task {
     priority: raw.priority ?? 'mid',
     category: raw.category ?? '',
     subtasks: Array.isArray(raw.subtasks) ? raw.subtasks : [],
+    timebox: raw.timebox ?? null,
     repeat: raw.repeat ?? null,
     status: raw.status ?? 'open',
     source: raw.source ?? 'form',

@@ -1419,3 +1419,122 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   border-radius: 8px; font-size: 12px; color: var(--ink);
 }
 .tp-origin-copy { flex: none; min-height: 38px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; }
+
+/* ---------- 時間枠（タイムボックス） ---------- */
+.tp-chip-box {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px;
+  background: color-mix(in srgb, var(--brand2) 12%, transparent);
+  color: var(--brand2);
+}
+/* 枠の選択チップは2段（名前＋時刻）にする */
+.tp-fchip { flex-direction: column; gap: 0; line-height: 1.35; padding-top: 4px; padding-bottom: 4px; }
+.tp-fchip-sub { display: block; font-size: 10px; font-weight: 600; opacity: .78; }
+
+/* ---------- 今日の進めかた ---------- */
+.tp-flow {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: clamp(12px, 2.4vw, 16px);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+}
+.tp-flow-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tp-flow-head h2 { margin: 0; font-size: 14px; font-weight: 800; color: var(--ink); }
+.tp-flow-now {
+  font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--brand1) 12%, transparent); color: var(--brand1);
+}
+
+/* いま やる1件 */
+.tp-now {
+  padding: 12px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--brand1) 7%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--brand1) 26%, transparent);
+}
+.tp-now-label {
+  margin: 0 0 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .1em; color: var(--brand1);
+}
+.tp-now-row { display: flex; align-items: center; gap: 8px; }
+.tp-now-body { flex: 1; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 3px; min-height: 44px; justify-content: center; }
+.tp-now-title { font-size: 16px; font-weight: 800; line-height: 1.45; color: var(--ink); word-break: break-word; }
+.tp-now-meta { font-size: 11.5px; color: var(--muted); }
+.tp-now-hint { margin: 8px 0 0; font-size: 11.5px; color: var(--faint); }
+.tp-now-empty {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  margin: 0; padding: 14px; border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 13px; font-weight: 700; color: var(--go);
+}
+
+/* 枠ごとの積み上げ */
+.tp-bands { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tp-band {
+  padding: 9px 11px; border-radius: var(--radius-card);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.tp-band.is-now { border-color: color-mix(in srgb, var(--brand1) 42%, transparent); background: var(--surface); }
+.tp-band.is-passed { opacity: .62; }
+.tp-band-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.tp-band-head b { font-size: 12.5px; font-weight: 800; color: var(--ink); }
+.tp-band-span { font-size: 10.5px; color: var(--faint); }
+.tp-band-num { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.tp-band-num.is-over { color: var(--pri-high); }
+.tp-band .tp-progress { height: 6px; }
+.tp-band-note { margin: 5px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+.tp-band-free {
+  display: flex; align-items: flex-start; gap: 6px; margin: 0;
+  font-size: 11.5px; line-height: 1.7; color: var(--faint);
+}
+.tp-band-free > svg { flex: none; margin-top: 2px; }
+.tp-band-free b { color: var(--ink); }
+
+.tp-flow-acts { display: flex; gap: 8px; }
+.tp-flow-acts > button { flex: 1; min-height: 44px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 700; }
+.tp-flow-acts > button:disabled { opacity: .45; }
+.tp-flow-n {
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 2px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 11px; font-weight: 800;
+  background: color-mix(in srgb, var(--pri-high) 14%, transparent); color: var(--pri-high);
+}
+.tp-flow-foot { margin: 0; font-size: 11px; color: var(--faint); }
+
+/* ---------- 朝の仕分け ---------- */
+.tp-triage-lead { margin: 0 0 12px; font-size: 13px; line-height: 1.8; color: var(--muted); }
+.tp-triage-card {
+  padding: 14px; margin-bottom: 14px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-left: 5px solid var(--pri-high);
+}
+.tp-triage-card h3 { margin: 0; font-size: 16px; font-weight: 800; line-height: 1.5; color: var(--ink); }
+.tp-triage-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.tp-triage-meta { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); }
+.tp-triage-meta .is-over { color: var(--pri-high); font-weight: 700; }
+.tp-triage-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.tp-triage-acts > button { flex: 1 1 46%; min-height: 46px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; }
+
+/* ---------- 明日の準備 ---------- */
+.tp-wrap-done {
+  display: flex; align-items: center; gap: 7px; margin: 0 0 14px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--go) 9%, var(--surface-2));
+  font-size: 13px; color: var(--muted);
+}
+.tp-wrap-done > svg { color: var(--go); }
+.tp-wrap-done b { color: var(--ink); font-size: 15px; }
+.tp-wrap-h {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 18px 0 8px; font-size: 13px; font-weight: 800; color: var(--ink);
+}
+.tp-wrap-h b { color: var(--brand1); }
+.tp-wrap-sum { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.tp-wrap-empty { margin: 0; font-size: 12.5px; color: var(--faint); }
+.tp-wrap-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tp-wrap-list > li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px; border-radius: var(--radius-card);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.tp-wrap-list > li > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tp-wrap-list b { font-size: 13px; font-weight: 700; line-height: 1.5; color: var(--ink); word-break: break-word; }
+.tp-wrap-list small { font-size: 11px; color: var(--muted); }
+.tp-wrap-list > li > button { flex: none; min-height: 38px; padding: 0 12px; border-radius: 999px; font-size: 12px; }
+.tp-wrap-all { width: 100%; min-height: 44px; margin-top: 8px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 700; }

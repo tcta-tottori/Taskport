@@ -19,6 +19,7 @@ export function emptyDraft(source: Source = 'form'): Draft {
     priority: 'mid',
     category: '',
     subtasks: [],
+    timebox: null,
     repeat: null,
     source,
   }
@@ -38,6 +39,7 @@ export function draftToTask(draft: Draft): Task {
     priority: draft.priority,
     category: draft.category.trim(),
     subtasks: draft.subtasks.filter((s) => s.title.trim()).map((s) => ({ ...s, title: s.title.trim() })),
+    timebox: draft.timebox,
     // 期限が無いと次回の日が決まらないので、繰り返しは落とす
     repeat: draft.due && draft.repeat ? draft.repeat : null,
     status: 'open',
@@ -59,6 +61,7 @@ export function taskToDraft(task: Task): Draft {
     priority: task.priority,
     category: task.category,
     subtasks: task.subtasks,
+    timebox: task.timebox,
     repeat: task.repeat,
     source: task.source,
   }
