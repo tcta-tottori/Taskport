@@ -10,8 +10,18 @@
  * ここに固定値を書かない。
  * =======================================================*/
 
-/** 予定の読み書きに必要な範囲。カレンダーの設定そのものは触らない。 */
-const SCOPE = 'https://www.googleapis.com/auth/calendar.events'
+/**
+ * 求める範囲。
+ *   calendar.events … 予定の読み書き。カレンダーの設定そのものは触らない
+ *   drive.appdata   … 端末どうしの同期に使う置き場。**アプリ専用フォルダだけ**で、
+ *                     利用者の Drive のほかのファイルは見えないし触れない
+ * 2つまとめて求めるのは、あとから足すと同意を取り直すことになるため。
+ */
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/drive.appdata',
+]
+const SCOPE = SCOPES.join(' ')
 const GIS_SRC = 'https://accounts.google.com/gsi/client'
 
 interface TokenResponse {

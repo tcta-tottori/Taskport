@@ -1538,3 +1538,22 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-wrap-list small { font-size: 11px; color: var(--muted); }
 .tp-wrap-list > li > button { flex: none; min-height: 38px; padding: 0 12px; border-radius: 999px; font-size: 12px; }
 .tp-wrap-all { width: 100%; min-height: 44px; margin-top: 8px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 700; }
+
+/* ---------- 同期 ---------- */
+.tp-sync {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  min-height: 34px; margin-bottom: 8px; padding: 0 10px;
+  border-radius: 999px; font-size: 11.5px; font-weight: 700; text-align: left;
+  background: rgba(255, 255, 255, .14); color: var(--on-chrome);
+  border: 1px solid rgba(255, 255, 255, .22); transition: .16s;
+}
+.tp-sync:hover:not(:disabled) { background: rgba(255, 255, 255, .26); }
+.tp-sync:disabled { opacity: .7; }
+.tp-sync-error { border-color: color-mix(in srgb, var(--on-chrome) 70%, transparent); }
+.tp-sync-running > svg { animation: tpSpin 1.1s linear infinite; }
+@keyframes tpSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tp-sync-running > svg { animation: none; } }
+
+.tp-sync-panel { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; }
+.tp-sync-panel.is-error { color: var(--danger); }
+.tp-sync-panel.is-ok { color: var(--go); }

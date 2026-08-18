@@ -27,6 +27,8 @@ import { addDaysKey, dayKey, diffDays, formatMD, timeKey, toMinutes } from './li
 import { draftToTask, emptyDraft, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
+import { clearRemote, syncOnce } from './lib/driveSync'
+import { isConnected } from './lib/googleAuth'
 import { nextOccurrence, repeatLabel } from './lib/repeat'
 import {
   rescheduleReminders,
@@ -86,6 +88,12 @@ export default function App() {
   const [wrappingUp, setWrappingUp] = useState(false)
   /** いまの時刻（0時からの分）。1分ごとに更新する */
   const [nowMin, setNowMin] = useState(() => toMinutes(timeKey()) ?? 0)
+  /** 同期の様子。画面に出して、動いているのか失敗しているのかを分かるようにする */
+  const [sync, setSync] = useState<{
+    state: 'off' | 'idle' | 'running' | 'ok' | 'error'
+    at: string | null
+    message: string
+  }>({ state: 'off', at: null, message: '' })
   const [view, setView] = useState<ViewKey>('list')
   const [tab, setTab] = useState<ListTab>('today')
   const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER)
@@ -445,6 +453,90 @@ export default function App() {
     fgRef.current?.refresh()
   }, [tasks, settings])
 
+  /* --- 端末どうしの同期 ---
+     置き場は Google Drive のアプリ専用フォルダ。1件ずつ更新時刻で
+     突き合わせるので、スマホとPCで同時に触っても片方が消えない。
+     既定は切で、設定で入れたときだけ動く。 */
+
+  const syncingRef = useRef(false)
+
+  const runSync = useCallback(
+    async (manual: boolean) => {
+      const s = liveRef.current.settings
+      if (!s.syncEnabled || !s.googleClientId) {
+        setSync((v) => (v.state === 'off' ? v : { ...v, state: 'off' }))
+        return
+      }
+      // 手動でないときは、既に繋がっているときだけ動かす。
+      // 黙って同意画面を出すと、操作の途中で邪魔になる。
+      if (!manual && !isConnected()) return
+      if (syncingRef.current) return
+      syncingRef.current = true
+      setSync((v) => ({ ...v, state: 'running', message: '' }))
+      try {
+        const [tasksNow, tombstones] = await Promise.all([
+          repository.list(),
+          repository.listTombstones(),
+        ])
+        const out = await syncOnce(
+          s.googleClientId,
+          { tasks: tasksNow, deleted: tombstones },
+          (upsert, removeIds, deleted) => repository.applySync(upsert, removeIds, deleted),
+        )
+        await reload()
+        setSync({ state: 'ok', at: out.at, message: '' })
+        if (manual) {
+          notify(
+            out.pulled + out.removed > 0
+              ? `同期しました（取り込み ${out.pulled}件・削除 ${out.removed}件）`
+              : '同期しました（変わりなし）',
+          )
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '同期できませんでした'
+        setSync((v) => ({ state: 'error', at: v.at, message }))
+        if (manual) notify(message, 'error')
+      } finally {
+        syncingRef.current = false
+      }
+    },
+    [reload, notify],
+  )
+
+  // 読み込み直後と、画面に戻ってきたときに合わせる
+  useEffect(() => {
+    if (loading || loadError) return
+    void runSync(false)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void runSync(false)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [loading, loadError, runSync])
+
+  // 手元が変わったら少し置いてから上げる（連打でも1回にまとめる）
+  useEffect(() => {
+    if (loading || !settings.syncEnabled) return
+    const id = window.setTimeout(() => void runSync(false), 4000)
+    return () => window.clearTimeout(id)
+  }, [tasks, loading, settings.syncEnabled, runSync])
+
+  /**
+   * 置き場を空にする。手元の台帳には触らない。
+   * 同期を入れたまま消しても、次の同期ですぐ上がり直してしまうので、
+   * ここで同期も切る（消したのに残っている、という嘘をつかないため）。
+   */
+  const clearSyncStore = useCallback(async () => {
+    const s = liveRef.current.settings
+    if (!s.googleClientId) throw new Error('GoogleのクライアントIDが未設定です。')
+    const off: Settings = { ...s, syncEnabled: false }
+    setSettings(off)
+    await repository.saveSettings(off)
+    const n = await clearRemote(s.googleClientId)
+    setSync({ state: 'off', at: null, message: '' })
+    notify(n > 0 ? '置き場を空にし、同期を切りました' : '置き場は空でした。同期を切りました')
+  }, [notify])
+
   /* --- 朝の仕分け・明日の準備 --- */
 
   const overdueTasks = useMemo(
@@ -566,6 +658,26 @@ export default function App() {
           <span>書き出し</span>
         </button>
         <div className="tp-drawer-foot">
+          {/* 同期の様子。動いているのか失敗しているのかを、押さずに分かるようにする */}
+          {settings.syncEnabled && (
+            <button
+              type="button"
+              className={`tp-sync tp-sync-${sync.state}`}
+              onClick={() => void runSync(true)}
+              disabled={sync.state === 'running'}
+            >
+              <Icon name={sync.state === 'error' ? 'alert' : 'repeat'} size={13} />
+              <span>
+                {sync.state === 'running'
+                  ? '同期しています…'
+                  : sync.state === 'error'
+                    ? '同期できていません'
+                    : sync.at
+                      ? `同期 ${sync.at.slice(11, 16)}`
+                      : '押すと同期します'}
+              </span>
+            </button>
+          )}
           <p className="tp-mono tp-drawer-count">
             未完了 {ov.open} ／ 超過 {ov.overdue}
           </p>
@@ -684,6 +796,9 @@ export default function App() {
             settings={settings}
             tasks={tasks}
             onSave={(s) => void guard(() => saveSettings(s))}
+            sync={sync}
+            onSyncNow={() => void runSync(true)}
+            onClearRemote={() => guard(() => clearSyncStore())}
             onRestore={restore}
             onNotify={notify}
           />

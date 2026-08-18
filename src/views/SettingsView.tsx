@@ -46,16 +46,26 @@ export function SettingsView({
   onSave,
   onRestore,
   onNotify,
+  sync,
+  onSyncNow,
+  onClearRemote,
 }: {
   settings: Settings
   tasks: Task[]
   onSave: (s: Settings) => void
   onRestore: (tasks: Task[], settings: Partial<Settings> | null) => Promise<void>
   onNotify: (text: string, tone?: 'ok' | 'error') => void
+  /** 同期の様子 */
+  sync: { state: 'off' | 'idle' | 'running' | 'ok' | 'error'; at: string | null; message: string }
+  onSyncNow: () => void
+  /** Drive 側の置き場を空にする */
+  onClearRemote: () => Promise<void>
 }) {
   const [draft, setDraft] = useState<Settings>(settings)
   const [connected, setConnected] = useState(isConnected())
   const [connecting, setConnecting] = useState(false)
+  const [clearingRemote, setClearingRemote] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const whError = validateWorkHours(draft.workHours)
   const summary = workHoursSummary(draft.workHours)
@@ -302,6 +312,131 @@ export function SettingsView({
             </b>
             {!notificationsUsable() && ' この環境では通知そのものが使えません。'}
           </p>
+
+          <div className="tp-row-end">
+            <button
+              type="button"
+              className="tp-btn-primary"
+              disabled={!dirty}
+              onClick={() => {
+                onSave(draft)
+                onNotify('設定を保存しました')
+              }}
+            >
+              <Icon name="check" size={16} />
+              保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">スマホとPCで共有する</h2>
+          <p className="tp-note">
+            同じ台帳をどちらの端末からも使えるようにします。
+            置き場は <b>自分の Google Drive のアプリ専用フォルダ</b>で、
+            マイドライブには出てこず、ほかのアプリからも見えません。
+          </p>
+          <p className="tp-note">
+            <b>入れると、タスクの件名・メモ・区分が Google に保存されます。</b>
+            これまでは端末の中だけでした。音声そのものは今までどおり外へ出しません。
+            切れば、以後は上げません（すでに上がったぶんは下の「置き場を空にする」で消せます）。
+          </p>
+
+          <label className="tp-switch">
+            <span>
+              <b>ほかの端末と同じ台帳を使う</b>
+              <small>
+                下の Googleカレンダーと同じクライアントIDを使います。先にそちらを設定してください。
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.syncEnabled}
+              disabled={!draft.googleClientId}
+              onChange={(e) => setDraft({ ...draft, syncEnabled: e.target.checked })}
+            />
+          </label>
+
+          {!draft.googleClientId && (
+            <p className="tp-note">
+              クライアントIDがまだ入っていません。下の「Googleカレンダー」の手順で作って貼ると、ここが使えるようになります。
+            </p>
+          )}
+
+          {settings.syncEnabled && (
+            <>
+              <p className={`tp-sync-panel${sync.state === 'error' ? ' is-error' : sync.state === 'ok' ? ' is-ok' : ''}`}>
+                <Icon name={sync.state === 'error' ? 'alert' : sync.state === 'ok' ? 'check' : 'repeat'} size={14} />
+                {sync.state === 'running'
+                  ? '同期しています…'
+                  : sync.state === 'error'
+                    ? sync.message
+                    : sync.at
+                      ? `最後に同期したのは ${sync.at.slice(11, 16)}`
+                      : 'まだ同期していません'}
+              </p>
+              <p className="tp-note">
+                アプリを開いたときと、画面に戻ってきたとき、変更してから数秒後に自動で合わせます。
+                <b>同じ1件を2台でほぼ同時に直すと、あとから保存したほうだけが残ります。</b>
+                通信が切れているときは手元にだけ残り、次につながったときに合流します。
+              </p>
+              <div className="tp-row-end">
+                <button type="button" className="tp-btn-ghost" onClick={onSyncNow} disabled={sync.state === 'running'}>
+                  <Icon name="repeat" size={15} />
+                  {sync.state === 'running' ? '同期中…' : 'いま同期する'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* 置き場の後始末。同期を切っただけでは、上げたぶんは残ったまま。 */}
+          <div className="tp-edit-danger">
+            {confirmClear ? (
+              <>
+                <p>
+                  Google Drive に置いたぶんを消し、<b>同期も切ります</b>
+                  （入れたままだと、次の同期ですぐ上がり直してしまうため）。
+                  <b>この端末のタスクは消えません。</b>ほかの端末にあるぶんも消えません。
+                  <b>ほかの端末で同期が入ったままだと、そちらから上がり直します。</b>
+                  完全にやめるなら、両方の端末で切ってから消してください。
+                </p>
+                <div className="tp-row-end">
+                  <button type="button" className="tp-btn-ghost" onClick={() => setConfirmClear(false)}>
+                    やめる
+                  </button>
+                  <button
+                    type="button"
+                    className="tp-btn-danger"
+                    disabled={clearingRemote}
+                    onClick={async () => {
+                      setClearingRemote(true)
+                      try {
+                        await onClearRemote()
+                        setConfirmClear(false)
+                      } finally {
+                        setClearingRemote(false)
+                      }
+                    }}
+                  >
+                    <Icon name="trash" size={15} />
+                    {clearingRemote ? '消しています…' : '置き場を空にする'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="tp-link-danger"
+                disabled={!draft.googleClientId}
+                onClick={() => setConfirmClear(true)}
+              >
+                <Icon name="trash" size={14} />
+                Google に置いたぶんを消す
+              </button>
+            )}
+          </div>
 
           <div className="tp-row-end">
             <button

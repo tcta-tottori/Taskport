@@ -25,6 +25,8 @@ import {
  * =======================================================*/
 
 const MAIN_DB = 'taskport'
+/** meta ストアの中で墓標を置くキー。保存先を増やさずに済ませる */
+const TOMBSTONE_KEY = 'tombstones'
 const MEDIA_DB = 'taskport-media'
 
 /** 開けなかったときに諦めるまでの回数（端末が寝起きのときは1回目だけ落ちることがある） */
@@ -374,7 +376,35 @@ export class LocalRepository implements Repository {
   }
 
   async remove(id: string): Promise<void> {
-    await (await main()).delete('tasks', id)
+    const d = await main()
+    const tx = d.transaction(['tasks', 'meta'], 'readwrite')
+    await tx.objectStore('tasks').delete(id)
+    // 消した跡を残す。これが無いと、同期のときに相手から戻ってくる
+    const meta = tx.objectStore('meta')
+    const raw = (await meta.get(TOMBSTONE_KEY)) as Record<string, string> | undefined
+    await meta.put({ ...(raw ?? {}), [id]: new Date().toISOString() }, TOMBSTONE_KEY)
+    await tx.done
+  }
+
+  async listTombstones(): Promise<Record<string, string>> {
+    const raw = (await (await main()).get('meta', TOMBSTONE_KEY)) as
+      | Record<string, string>
+      | undefined
+    return raw && typeof raw === 'object' ? raw : {}
+  }
+
+  async applySync(
+    upsert: Task[],
+    removeIds: string[],
+    tombstones: Record<string, string>,
+  ): Promise<void> {
+    const d = await main()
+    const tx = d.transaction(['tasks', 'meta'], 'readwrite')
+    const tasks = tx.objectStore('tasks')
+    for (const t of upsert) await tasks.put(normalizeTask(t))
+    for (const id of removeIds) await tasks.delete(id)
+    await tx.objectStore('meta').put(tombstones, TOMBSTONE_KEY)
+    await tx.done
   }
 
   async replaceAll(tasks: Task[]): Promise<void> {
@@ -416,6 +446,7 @@ export class LocalRepository implements Repository {
       workHours: { ...DEFAULT_WORK_HOURS, ...(raw.workHours ?? {}) },
       // 後から足した項目。古い保存には無いので既定で埋める
       savedFilters: Array.isArray(raw.savedFilters) ? raw.savedFilters : [],
+      syncEnabled: raw.syncEnabled === true,
       reminderEnabled: raw.reminderEnabled === true,
       reminderLeadMin: typeof raw.reminderLeadMin === 'number' ? raw.reminderLeadMin : 10,
     }

@@ -20,6 +20,26 @@ export interface Repository {
   /** バックアップ用の全置換（JSON取り込み） */
   replaceAll(tasks: Task[]): Promise<void>
 
+  /* --- 端末どうしの同期 --- */
+
+  /**
+   * 消したタスクの跡（墓標）。ID → 消した時刻。
+   * これが無いと、消したはずのタスクが相手の端末から戻ってくる。
+   */
+  listTombstones(): Promise<Record<string, string>>
+
+  /**
+   * 併合の結果を手元へ書き戻す。1つの取引でまとめて行う。
+   * @param upsert  入れ直すタスク
+   * @param removeIds 消すタスクのID
+   * @param tombstones 併合後の墓標（丸ごと置き換える）
+   */
+  applySync(
+    upsert: Task[],
+    removeIds: string[],
+    tombstones: Record<string, string>,
+  ): Promise<void>
+
   /**
    * 保存データそのものを作り直す。**中身は消える。**
    * 保存領域が壊れて開けなくなったときの最後の手段。
