@@ -102,6 +102,35 @@ export const DEFAULT_WORK_HOURS: WorkHours = {
   workDays: [1, 2, 3, 4, 5],
 }
 
+/* ---------------------------------------------------------
+ * 録音
+ * ------------------------------------------------------- */
+
+/**
+ * 1回の録音。音声そのものは別ストアに置き、ここは一覧に出す情報だけ持つ。
+ * 音声は端末内にしか置かない（外部へ送信しない）。
+ */
+export interface Recording {
+  /** ULID */
+  id: string
+  createdAt: string
+  /** 録音時間（秒） */
+  durationSec: number
+  /** 認識できたテキスト */
+  transcript: string
+  /** 音声の形式（audio/mp4 など）。音声が残らなかった場合は空 */
+  mimeType: string
+  /** 音声のバイト数。0 なら音声なし */
+  bytes: number
+  /** この録音から登録したタスクのID */
+  taskIds: string[]
+  /** 取りこぼしなどの注意（あれば） */
+  warning: string | null
+}
+
+/** 端末に残す録音の本数。古いものから消す。 */
+export const RECORDING_KEEP = 20
+
 export interface Settings {
   workHours: WorkHours
   /** 見積が未入力のタスクを稼働量に積むときの既定値（分） */
@@ -110,6 +139,14 @@ export interface Settings {
   parseEndpoint: string
   /** 音声入力を使うか（非対応環境では自動的に false 扱い） */
   voiceEnabled: boolean
+  /** 録音した音声を端末内に残すか */
+  keepAudio: boolean
+  /** 録音中に画面を点けたままにするか */
+  keepAwake: boolean
+  /** Googleカレンダー連携のクライアントID（利用者が自分の Google Cloud で作る） */
+  googleClientId: string
+  /** 読み込むカレンダーID。既定は primary */
+  googleCalendarId: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -117,4 +154,28 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultEstimateMin: 30,
   parseEndpoint: '',
   voiceEnabled: true,
+  keepAudio: true,
+  keepAwake: false,
+  googleClientId: '',
+  googleCalendarId: 'primary',
+}
+
+/* ---------------------------------------------------------
+ * Googleカレンダーの予定
+ * ------------------------------------------------------- */
+
+/** 読み込んだ予定。タスクとは別物として扱い、台帳には混ぜない。 */
+export interface CalendarEvent {
+  id: string
+  title: string
+  /** "YYYY-MM-DD" */
+  day: string
+  /** "HH:mm"。終日予定は null */
+  startTime: string | null
+  endTime: string | null
+  /** 終日予定か */
+  allDay: boolean
+  location: string
+  /** Googleカレンダー上のURL */
+  htmlLink: string
 }

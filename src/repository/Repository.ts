@@ -1,4 +1,4 @@
-import type { Settings, Task } from '../types'
+import type { Recording, Settings, Task } from '../types'
 
 /**
  * 保存層の境界。
@@ -19,4 +19,12 @@ export interface Repository {
 
   /** バックアップ用の全置換（JSON取り込み） */
   replaceAll(tasks: Task[]): Promise<void>
+
+  /* --- 録音。音声は端末内にのみ置く --- */
+  listRecordings(): Promise<Recording[]>
+  addRecording(rec: Recording, audio: Blob | null): Promise<void>
+  /** 再生用に音声を取り出す。残っていなければ null */
+  getRecordingAudio(id: string): Promise<Blob | null>
+  removeRecording(id: string): Promise<void>
+  updateRecording(id: string, patch: Partial<Recording>): Promise<void>
 }

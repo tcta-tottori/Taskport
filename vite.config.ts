@@ -57,6 +57,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,json,woff2}'],
+        // 録音中の常駐通知の操作を受け取る処理を差し込む。
+        // generateSW では sw.js を直接書けないので importScripts で足す。
+        importScripts: ['sw-notify.js'],
         // /taskport/share も index.html に落として SPA で処理する
         navigateFallback: `${BASE}index.html`,
         cleanupOutdatedCaches: true,

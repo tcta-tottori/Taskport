@@ -10,15 +10,29 @@ import { SettingsView } from './views/SettingsView'
 import { ExportSheet } from './views/ExportSheet'
 import { ReviewSheet } from './views/ReviewSheet'
 import { TaskEditor } from './views/TaskEditor'
+import { RecordingOverlay } from './views/RecordingOverlay'
+import { RecordingsView } from './views/RecordingsView'
 import { repository } from './repository'
 import { APP_VERSION, buildLabel } from './version'
 import { checkForUpdate } from './lib/updater'
 import { parseToTasks, type ParseEngine } from './ports/in/parseToTasks'
 import { useShareTarget } from './ports/in/useShareTarget'
+import { eventToDraft } from './ports/in/fromCalendar'
+import { useRecordingSession } from './ports/in/useRecordingSession'
+import { voiceSupported } from './ports/in/useVoiceInput'
 import { dayKey } from './lib/date'
 import { draftToTask, emptyDraft, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
-import { DEFAULT_SETTINGS, type Draft, type Settings, type Source, type Task } from './types'
+import { ulid } from './lib/ulid'
+import {
+  DEFAULT_SETTINGS,
+  type CalendarEvent,
+  type Draft,
+  type Recording,
+  type Settings,
+  type Source,
+  type Task,
+} from './types'
 
 /* =========================================================
  * 画面の組み立てと状態
@@ -27,12 +41,13 @@ import { DEFAULT_SETTINGS, type Draft, type Settings, type Source, type Task } f
  * 自然文はどの入口から来ても parseToTasks を通り、必ず確認画面に出る。
  * =======================================================*/
 
-type ViewKey = 'list' | 'schedule' | 'dashboard' | 'settings'
+type ViewKey = 'list' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
 
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   { key: 'list', label: '一覧', icon: 'list' },
   { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
   { key: 'dashboard', label: '分析', icon: 'chart' },
+  { key: 'recordings', label: '録音', icon: 'mic' },
   { key: 'settings', label: '設定', icon: 'gear' },
 ]
 
@@ -41,6 +56,8 @@ interface Pending {
   engine: ParseEngine
   fallbackReason?: string
   sourceText: string
+  /** 音声から来た場合、確定後にタスクIDを紐づける録音 */
+  recordingId?: string
 }
 
 export default function App() {
@@ -60,6 +77,10 @@ export default function App() {
   const [checking, setChecking] = useState(false)
 
   const share = useShareTarget()
+  const session = useRecordingSession({
+    keepAudio: settings.keepAudio,
+    keepAwake: settings.keepAwake,
+  })
 
   const notify = useCallback((text: string, tone: 'ok' | 'error' = 'ok') => {
     setToast({ id: Date.now(), text, tone })
@@ -96,7 +117,7 @@ export default function App() {
 
   /** 自然文 → 候補（必ず確認画面へ）。ここ以外に登録の経路を作らない。 */
   const runParse = useCallback(
-    async (text: string, source: Source) => {
+    async (text: string, source: Source, recordingId?: string) => {
       setBusy(true)
       try {
         const result = await parseToTasks(text, source, {
@@ -112,6 +133,7 @@ export default function App() {
           engine: result.engine,
           fallbackReason: result.fallbackReason,
           sourceText: text,
+          recordingId,
         })
       } finally {
         setBusy(false)
@@ -128,16 +150,77 @@ export default function App() {
     void runParse(body, 'share')
   }, [share, loading, runParse])
 
+  /**
+   * 録音を止めて、認識テキストをタスク候補にする。
+   * 音声と認識テキストは録音履歴に残し、後から元を確かめられるようにする。
+   * 議事録は作らない。ここが NoteLoop との違い。
+   */
+  const finishRecording = useCallback(async () => {
+    const result = await session.stop()
+    const text = result.transcript.trim()
+
+    let recordingId: string | undefined
+    if (settings.keepAudio || text) {
+      const rec: Recording = {
+        id: ulid(),
+        createdAt: new Date().toISOString(),
+        durationSec: result.durationSec,
+        transcript: text,
+        mimeType: result.audio?.type ?? '',
+        bytes: result.audio?.size ?? 0,
+        taskIds: [],
+        warning: result.warning,
+      }
+      try {
+        await repository.addRecording(rec, settings.keepAudio ? result.audio : null)
+        recordingId = rec.id
+      } catch {
+        notify('録音を保存できませんでした。端末の空き容量を確認してください。', 'error')
+      }
+    }
+    if (result.warning) notify(result.warning, 'error')
+
+    session.reset()
+    if (!text) {
+      notify('音声を聞き取れませんでした。もう一度話すか、キーボード入力をお使いください。', 'error')
+      return
+    }
+    await runParse(text, 'voice', recordingId)
+  }, [session, settings.keepAudio, runParse, notify])
+
+  /** 録音を捨ててやめる。音声も残さない。 */
+  const cancelRecording = useCallback(async () => {
+    await session.stop()
+    session.reset()
+  }, [session])
+
+  /**
+   * カレンダーの予定をタスクにする。
+   * AIの候補と同じく確認画面を通す（無確認では登録しない）。
+   */
+  const importEvent = useCallback((ev: CalendarEvent) => {
+    setPending({
+      drafts: [eventToDraft(ev)],
+      engine: 'local',
+      sourceText: `${ev.day} ${ev.startTime ?? '終日'} ${ev.title}`,
+      fallbackReason: 'Googleカレンダーの予定から作りました。期限と見込み時間を確認してください。',
+    })
+  }, [])
+
   const commitDrafts = useCallback(
     async (drafts: Draft[]) => {
       const newTasks = drafts.map(draftToTask)
       await repository.add(newTasks)
+      // どの録音から出たタスクかを残す（録音履歴から辿れるようにする）
+      if (pending?.recordingId) {
+        await repository.updateRecording(pending.recordingId, { taskIds: newTasks.map((t) => t.id) })
+      }
       await reload()
       setPending(null)
       notify(`${newTasks.length}件を登録しました`)
       setView('list')
     },
-    [reload, notify],
+    [reload, notify, pending],
   )
 
   const toggleDone = useCallback(
@@ -207,11 +290,12 @@ export default function App() {
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
 
   // 起動時のクエリ（PWAショートカット）
-  const params = new URLSearchParams(window.location.search)
-  const autoVoice = params.get('dock') === 'voice'
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
     const v = params.get('view')
-    if (v === 'schedule' || v === 'dashboard' || v === 'settings') setView(v)
+    if (v === 'schedule' || v === 'dashboard' || v === 'recordings' || v === 'settings') setView(v)
+    // ?dock=voice で開いたときはそのまま録音を始める
+    if (params.get('dock') === 'voice' && voiceSupported()) void session.start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -317,9 +401,18 @@ export default function App() {
             onEdit={setEditing}
           />
         ) : view === 'schedule' ? (
-          <ScheduleView tasks={tasks} today={today} settings={settings} onEdit={setEditing} />
+          <ScheduleView
+            tasks={tasks}
+            today={today}
+            settings={settings}
+            onEdit={setEditing}
+            onImportEvent={importEvent}
+            onNotify={notify}
+          />
         ) : view === 'dashboard' ? (
           <DashboardView tasks={tasks} today={today} settings={settings} />
+        ) : view === 'recordings' ? (
+          <RecordingsView onNotify={notify} />
         ) : (
           <SettingsView
             settings={settings}
@@ -331,12 +424,21 @@ export default function App() {
         )}
       </main>
 
-      {view !== 'settings' && (
+      {view !== 'settings' && !session.recording && (
         <InputDock
           busy={busy}
-          autoOpenVoice={autoVoice}
+          voiceSupported={voiceSupported()}
           onSubmitText={(text, source) => void runParse(text, source)}
+          onStartVoice={() => void session.start()}
           onOpenForm={() => setCreating(true)}
+        />
+      )}
+
+      {session.recording && (
+        <RecordingOverlay
+          session={session}
+          onFinish={() => void finishRecording()}
+          onCancel={() => void cancelRecording()}
         />
       )}
 

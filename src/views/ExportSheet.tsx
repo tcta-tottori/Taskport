@@ -6,6 +6,7 @@ import { sortTasks } from '../lib/tasks'
 import { toCsv } from '../ports/out/toCsv'
 import { toBulletList, toDailyReport, toStandupText } from '../ports/out/toPlainText'
 import { toGoogleCalendarUrl, toIcs, workHoursIcs } from '../ports/out/toCalendar'
+import { pushTasks } from '../ports/out/toGoogleCalendar'
 import { copyText, downloadText } from '../ports/out/download'
 import { workHoursSummary } from '../lib/workday'
 import type { Settings, Task } from '../types'
@@ -43,6 +44,7 @@ export function ExportSheet({
   const [kind, setKind] = useState<Kind>('text')
   const [form, setForm] = useState<TextForm>('report')
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [pushing, setPushing] = useState(false)
 
   const open = useMemo(() => sortTasks(tasks.filter((t) => t.status === 'open')), [tasks])
   const withDue = useMemo(() => open.filter((t) => !!t.due), [open])
@@ -153,7 +155,43 @@ export function ExportSheet({
                 </ul>
               )}
 
+              {settings.googleClientId && (
+                <p className="tp-note tp-note-warn">
+                  <Icon name="alert" size={14} />
+                  Googleカレンダーに追加すると、選んだタスクの件名とメモが Google に渡ります。
+                </p>
+              )}
+
               <div className="tp-row-end">
+                {settings.googleClientId && (
+                  <button
+                    type="button"
+                    className="tp-btn-ghost"
+                    disabled={selected.length === 0 || pushing}
+                    onClick={async () => {
+                      setPushing(true)
+                      try {
+                        const r = await pushTasks(
+                          settings.googleClientId,
+                          settings.googleCalendarId,
+                          selected,
+                          settings.defaultEstimateMin,
+                        )
+                        const parts = [`${r.ok}件を追加しました`]
+                        if (r.skipped > 0) parts.push(`期限なし${r.skipped}件は送れません`)
+                        if (r.failed.length > 0) parts.push(`${r.failed.length}件が失敗`)
+                        onNotify(parts.join('／'), r.failed.length > 0 ? 'error' : 'ok')
+                      } catch (err) {
+                        onNotify(err instanceof Error ? err.message : 'カレンダーに追加できませんでした', 'error')
+                      } finally {
+                        setPushing(false)
+                      }
+                    }}
+                  >
+                    <Icon name="calendar" size={15} />
+                    {pushing ? '追加中…' : `${selected.length}件をGoogleカレンダーへ`}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="tp-btn-ghost"

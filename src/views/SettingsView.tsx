@@ -7,15 +7,21 @@ import { makeBackup, readBackup } from '../lib/backup'
 import { downloadText } from '../ports/out/download'
 import { DEFAULT_WORK_HOURS, type Settings, type Task, type WorkHours } from '../types'
 import { APP_VERSION, buildLabel } from '../version'
+import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
 
 /* =========================================================
  * 設定
  *   - 勤務時間（既定は 8:20 始業 / 12:25〜13:05 昼休憩 / 17:10 終業）
+ *   - 録音（音声を残すか・画面を点けたままにするか）
  *   - AI構造化プロキシのURL
+ *   - Googleカレンダー連携
  *   - JSON バックアップの書き出し／取り込み
  * =======================================================*/
 
 const WEEKDAY = ['日', '月', '火', '水', '木', '金', '土']
+
+/** 承認済みの JavaScript 生成元として Google Cloud に入れる値 */
+const origin = window.location.origin
 
 /** 始業 < 昼休憩開始 < 昼休憩終了 < 終業 の順になっているか */
 function validateWorkHours(wh: WorkHours): string | null {
@@ -44,6 +50,8 @@ export function SettingsView({
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [draft, setDraft] = useState<Settings>(settings)
+  const [connected, setConnected] = useState(isConnected())
+  const [connecting, setConnecting] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const whError = validateWorkHours(draft.workHours)
   const summary = workHoursSummary(draft.workHours)
@@ -170,6 +178,140 @@ export function SettingsView({
               type="button"
               className="tp-btn-primary"
               disabled={!!whError || !dirty}
+              onClick={() => {
+                onSave(draft)
+                onNotify('設定を保存しました')
+              }}
+            >
+              <Icon name="check" size={16} />
+              保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">録音</h2>
+          <p className="tp-note">
+            録音した音声は<b>端末の中だけ</b>に残ります。外部には送信しません。
+            AIに渡るのは認識後のテキストだけです。
+          </p>
+          <label className="tp-switch">
+            <span>
+              <b>音声を端末に残す</b>
+              <small>「本当にそう言ったか」を後から録音履歴で確かめられます。切ると認識テキストだけ残ります。</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.keepAudio}
+              onChange={(e) => setDraft({ ...draft, keepAudio: e.target.checked })}
+            />
+          </label>
+          <label className="tp-switch">
+            <span>
+              <b>録音中は画面を点けたままにする</b>
+              <small>電池を使います。画面を消しても録音は続くので、通常は切ったままで構いません。</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.keepAwake}
+              onChange={(e) => setDraft({ ...draft, keepAwake: e.target.checked })}
+            />
+          </label>
+          <div className="tp-row-end">
+            <button
+              type="button"
+              className="tp-btn-primary"
+              disabled={!dirty}
+              onClick={() => {
+                onSave(draft)
+                onNotify('設定を保存しました')
+              }}
+            >
+              <Icon name="check" size={16} />
+              保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">Googleカレンダー</h2>
+          <p className="tp-note">
+            予定の読み込みと追加ができます。<b>予定を追加すると、タスクの件名とメモが Google に渡ります。</b>
+            送るのは押したときに選んだ分だけで、自動では送りません。
+          </p>
+          <p className="tp-note">
+            使うには、自分の Google Cloud で OAuth クライアントID（ウェブアプリケーション）を作り、
+            承認済みの JavaScript 生成元に <code className="tp-mono">{origin}</code> を入れてください。
+            Google Calendar API の有効化も必要です。
+          </p>
+          <label className="tp-field">
+            <span className="tp-label">クライアントID</span>
+            <input
+              type="text"
+              inputMode="url"
+              placeholder="xxxxxxxx.apps.googleusercontent.com"
+              value={draft.googleClientId}
+              onChange={(e) => setDraft({ ...draft, googleClientId: e.target.value.trim() })}
+            />
+          </label>
+          <label className="tp-field">
+            <span className="tp-label">カレンダーID</span>
+            <input
+              type="text"
+              placeholder="primary"
+              value={draft.googleCalendarId}
+              onChange={(e) => setDraft({ ...draft, googleCalendarId: e.target.value.trim() })}
+            />
+          </label>
+          <p className={`tp-conn tp-conn-${connected ? 'on' : 'off'}`}>
+            <Icon name={connected ? 'check' : 'alert'} size={14} />
+            {connected ? '接続しています' : '接続していません'}
+          </p>
+          <div className="tp-row-end">
+            {connected ? (
+              <button
+                type="button"
+                className="tp-btn-ghost"
+                onClick={() => {
+                  disconnect()
+                  setConnected(false)
+                  onNotify('Googleとの接続を切りました')
+                }}
+              >
+                接続を切る
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="tp-btn-ghost"
+                disabled={!draft.googleClientId || connecting}
+                onClick={async () => {
+                  setConnecting(true)
+                  try {
+                    // 接続前に設定を確定させる（IDが未保存だと読み込みで使えない）
+                    if (dirty) onSave(draft)
+                    await acquireToken(draft.googleClientId, true)
+                    setConnected(isConnected())
+                    onNotify('Googleと接続しました')
+                  } catch (err) {
+                    onNotify(err instanceof Error ? err.message : 'Googleと接続できませんでした', 'error')
+                  } finally {
+                    setConnecting(false)
+                  }
+                }}
+              >
+                <Icon name="calendar" size={15} />
+                {connecting ? '接続中…' : 'Googleと接続'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="tp-btn-primary"
+              disabled={!dirty}
               onClick={() => {
                 onSave(draft)
                 onNotify('設定を保存しました')
