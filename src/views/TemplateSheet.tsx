@@ -9,8 +9,9 @@ import { PRIORITY_LABEL, type CategoryGroup, type TaskTemplate } from '../types'
 /* =========================================================
  * 記憶したタスクを呼び出す
  *
+ * ＋の扇の「記憶」から開く独立した画面。
  * 一度作ったタスクは登録した時点で控えてある。同じ作業を毎回打ち直さない。
- * 押すと直接入力の欄が埋まる（そのまま登録はしない。期限は毎回違うので、
+ * 押すと中身の入ったフォームが開く（そのまま登録はしない。期限は毎回違うので、
  * 呼び出したあとに人が入れる）。
  * =======================================================*/
 
@@ -31,7 +32,7 @@ export function TemplateSheet({
   const list = useMemo(() => searchTemplates(templates, q), [templates, q])
 
   return (
-    <div className="tp-sheet tp-sheet-over" role="dialog" aria-modal="true" aria-label="記憶したタスクを呼び出す">
+    <div className="tp-sheet" role="dialog" aria-modal="true" aria-label="記憶したタスクを呼び出す">
       <div className="tp-sheet-card">
         <header className="tp-sheet-head">
           <h2>

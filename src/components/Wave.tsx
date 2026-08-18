@@ -107,8 +107,8 @@ export function Wave({ active, level }: { active: boolean; level: number }) {
     const draw = () => {
       const w = canvas.width
       const h = canvas.height
-      // 上部は経過時間の表示に譲るため、バーの中心は少し下に置く
-      const mid = h * 0.6
+      // 経過時間は canvas の外（上）に出しているので、中心は真ん中でよい
+      const mid = h * 0.52
       ctx.clearRect(0, 0, w, h)
 
       // 等間隔・同じ太さで並べる。幅から決めた本数から、
@@ -118,8 +118,8 @@ export function Wave({ active, level }: { active: boolean; level: number }) {
       const count = Math.max(5, full - 4)
       const left = (w - (count - 1) * pitch) / 2
       // 太さ（無音時の「点」の大きさでもある）。高さに対して太くなりすぎないよう抑える。
-      const barW = Math.max(4, Math.min(Math.round(pitch * 0.32), Math.round(h * 0.1)))
-      const maxH = h * 0.6
+      const barW = Math.max(5, Math.min(Math.round(pitch * 0.38), Math.round(h * 0.085)))
+      const maxH = h * 0.78
       const minH = barW
 
       if (barsRef.current.length !== count) {

@@ -35,11 +35,21 @@
   /* ブランド色で塗った面の上に置く文字色 */
   --on-brand:    #ffffff;
 
-  /* --- 色面のヘッダー・引き出し --- */
-  --chrome-1:    #3f4fc4;
-  --chrome-2:    #5b45bd;
-  --chrome-3:    #7b3fae;
-  --on-chrome:   #ffffff;
+  /* --- ヘッダーと引き出し（v1.13.0 で色面をやめた） ---
+     ヘッダーは藍〜菫の色面だったが、利用者の指示で**グレー**にした。
+     地の白に近い明るいグレーに墨文字。上端が静かになり、
+     一覧の色（優先度・区分）だけが前に出る。
+     引き出しは逆に**暗い墨**へ落として、開いたときの落ち着きを出す。 */
+  --header-1:    #eceef4;
+  --header-2:    #e2e5ee;
+  --header-line: #d3d7e2;
+  --on-header:   #232733;
+  /* ヘッダー上の控えめな文字（タグライン） */
+  --on-header-2: #5c6375;
+
+  --drawer-1:    #262b38;
+  --drawer-2:    #191c26;
+  --on-drawer:   #f1f3f8;
 
   /* --- 優先度（design.md §7.1 の値。白地を想定した色） --- */
   --pri-high:    #b03a28;
@@ -94,8 +104,17 @@
   --safe-b:      env(safe-area-inset-bottom, 0px);
   --safe-t:      env(safe-area-inset-top, 0px);
 
-  /* --- 等幅（日付・件数・優先度は桁を揃えて走査を速くする） --- */
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Roboto Mono", monospace;
+  /* --- 文字 ---
+     ラテンと数字は Inter（可変・ラテンのみ・48KB を同梱）。日本語は端末のもの。
+     外部から取りに行かないので、圏外でも同じ見た目で出る。
+
+     数字は Inter の等幅数字（tabular figures）で桁を揃える。
+     等幅フォントに切り替えていた箇所（日付・件数・優先度）は、
+     字面が本文と揃うぶん読みやすくなる。 */
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP", "Yu Gothic UI", "Segoe UI", Meiryo, system-ui, sans-serif;
+  /* 桁を揃えたい場所（日付・件数・時間）。書体は本文と同じ */
+  --mono: var(--font);
 
   /* 日付入力・音声プレイヤーなど標準UIも白地にそろえる */
   color-scheme: light;

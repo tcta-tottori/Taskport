@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Icon, type IconName } from './Icon'
 
 /* =========================================================
@@ -38,6 +38,8 @@ const ITEMS: { mode: MakeMode; label: string; icon: IconName; angle: number; hin
 
 /** ここまで押し続けたら「長押し」とみなす（ミリ秒） */
 const HOLD_MS = 300
+/** 閉じるアニメーションの長さ（CSS の tpFanOut ＋ ずらしぶんと合わせる） */
+const CLOSE_MS = 320
 
 export function QuickBar({
   onStartVoice,
@@ -53,6 +55,9 @@ export function QuickBar({
   voiceSupported: boolean
 }) {
   const [open, setOpen] = useState(false)
+  /** 閉じている最中（吸い込まれるアニメーションを見せてから消す） */
+  const [closing, setClosing] = useState(false)
+  const closeTimer = useRef<number | null>(null)
   /** 滑らせている指がいま乗っているアイコン */
   const [hot, setHot] = useState<MakeMode | null>(null)
   const holdRef = useRef<number | null>(null)
@@ -67,15 +72,46 @@ export function QuickBar({
   /** 離した瞬間の値を読むための控え（state は次の描画まで古いことがある） */
   const hotRef = useRef<MakeMode | null>(null)
 
+  /** 閉じる。アニメーションを見せてから外す */
+  const close = useCallback(() => {
+    setClosing((wasClosing) => {
+      if (wasClosing) return true
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
+      closeTimer.current = window.setTimeout(() => {
+        closeTimer.current = null
+        setOpen(false)
+        setClosing(false)
+      }, CLOSE_MS)
+      return true
+    })
+  }, [])
+
+  /** 開く。閉じかけていたら引き戻す */
+  const openFan = useCallback(() => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+    setClosing(false)
+    setOpen(true)
+  }, [])
+
   // 開いている間は Esc で閉じる（PC）
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, close])
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
+    },
+    [],
+  )
 
   const clearHold = () => {
     if (holdRef.current !== null) {
@@ -91,7 +127,7 @@ export function QuickBar({
   }
 
   const pick = (mode: MakeMode) => {
-    setOpen(false)
+    close()
     setHover(null)
     if (mode === 'voice') onStartVoice()
     else onCreate(mode)
@@ -106,14 +142,14 @@ export function QuickBar({
   }
 
   return (
-    <div className={`tp-quick${open ? ' is-open' : ''}`}>
+    <div className={`tp-quick${open && !closing ? ' is-open' : ''}`}>
       {/* 開いている間は、外を押すと閉じる面を敷く */}
       {open && (
         <button
           type="button"
           className="tp-fan-backdrop"
           aria-label="閉じる"
-          onClick={() => setOpen(false)}
+          onClick={close}
         />
       )}
 
@@ -125,7 +161,7 @@ export function QuickBar({
             return (
               <div
                 key={it.mode}
-                className="tp-fan-item"
+                className={`tp-fan-item${closing ? ' is-out' : ''}`}
                 style={
                   {
                     // 半径は CSS が持つ（画面幅で変える）。ここは向きだけを渡す。
@@ -153,10 +189,10 @@ export function QuickBar({
 
         <button
           type="button"
-          className={`tp-quick-btn tp-quick-add${open ? ' is-on' : ''}`}
-          aria-expanded={open}
-          aria-label={open ? '作り方を閉じる' : 'タスクを作る'}
-          title={open ? '閉じる' : 'タスクを作る'}
+          className={`tp-quick-btn tp-quick-add${open && !closing ? ' is-on' : ''}`}
+          aria-expanded={open && !closing}
+          aria-label={open && !closing ? '作り方を閉じる' : 'タスクを作る'}
+          title={open && !closing ? '閉じる' : 'タスクを作る'}
           onPointerDown={(e) => {
             swallowClick.current = false
             setHover(null)
@@ -172,7 +208,7 @@ export function QuickBar({
               holdRef.current = null
               swallowClick.current = true
               draggingRef.current = true
-              setOpen(true)
+              openFan()
             }, HOLD_MS)
           }}
           onPointerMove={(e) => {
@@ -202,7 +238,8 @@ export function QuickBar({
               swallowClick.current = false
               return
             }
-            setOpen((v) => !v)
+            if (open && !closing) close()
+            else openFan()
           }}
         >
           <Icon name="plus" size={28} strokeWidth={2.2} />

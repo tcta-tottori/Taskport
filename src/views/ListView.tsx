@@ -8,7 +8,7 @@ import { filterByTab, LIST_TABS, type ListTab } from '../lib/tasks'
 import { applyFilter, isFilterActive } from '../lib/taskFilter'
 import { diffDays, durationLabel } from '../lib/date'
 import { workloadOf } from '../lib/stats'
-import { isWorkDay, trim, workHoursSummary } from '../lib/workday'
+import { isWorkDay, trim } from '../lib/workday'
 import type { SavedFilter, Settings, Task, TaskFilter } from '../types'
 
 /* =========================================================
@@ -96,7 +96,6 @@ export function ListView({
     () => tasks.filter((t) => t.status === 'open' && !!t.due && diffDays(t.due, today) < 0).length,
     [tasks, today],
   )
-  const wh = workHoursSummary(settings.workHours)
   const pct = Math.round(load.ratio * 100)
 
   return (
@@ -105,21 +104,14 @@ export function ListView({
       <div className="tp-col">
       {/* 今日の稼働。設定した勤務時間に対して、今日締めのタスクがどれだけ積まれているか。 */}
       <section className="tp-today-card">
+        {/* 始業・終業や休憩の時刻はここに出さない（毎日同じで、場所を食うだけ）。
+            必要なときは設定で見られる。ここは「今日どれだけ積んだか」だけ。 */}
         <div className="tp-today-row">
-          <div>
-            <p className="tp-label tp-today-label">TODAY</p>
-            <p className="tp-today-span">{wh.span}</p>
-            {wh.breakSpan && (
-              <p className="tp-today-break">
-                昼休憩 {wh.breakSpan}
-                {wh.shortBreaks.length > 0 && ` ／ 小休憩 ${wh.shortBreaks.join(' ')}`}
-              </p>
-            )}
-          </div>
-          <div className="tp-today-num">
+          <p className="tp-label tp-today-label">TODAY</p>
+          <p className="tp-today-num">
             <b>{durationLabel(load.planned)}</b>
             <span>/ {durationLabel(load.capacity)}</span>
-          </div>
+          </p>
         </div>
         <div className="tp-progress">
           <span

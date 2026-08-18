@@ -1,24 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
-import { TemplateSheet } from './TemplateSheet'
 import { taskToDraft } from '../lib/tasks'
-import { applyTemplate } from '../lib/templates'
-import {
-  SOURCE_LABEL,
-  type CategoryGroup,
-  type Draft,
-  type Task,
-  type TaskTemplate,
-  type WorkHours,
-} from '../types'
+import { SOURCE_LABEL, type CategoryGroup, type Draft, type Task, type WorkHours } from '../types'
 
 /* =========================================================
- * 既存タスクの編集 / 直接入力
+ * 既存タスクの編集 / 手描き（自分で書いて1件作る）
  *
- * AIを経由せず1件を作る経路もここを使う（design.md §6.1.3）。
- * v1.11.0 から、自然文からまとめて作る経路もこの画面の中に入れた
- * （下部の「キーボード」ボタンは廃止。入口が2つに割れていて分かりにくかった）。
+ * ＋の扇の「手描き」から開く。AIを経由せず1件を作る経路（design.md §6.1.3）。
+ *
+ * v1.11.0 では、この画面の中に「記憶から呼び出す」「文章から作る」も
+ * 抱えていたが、**v1.13.0 でそれぞれ独立した画面にした**（利用者の指示）。
+ * 扇で選んだものがそのまま開くほうが手数が少なく、この画面も1つの仕事に戻る。
+ * 記憶から呼び出したときは、中身の入った状態でこの画面が開く。
  *
  * 決める操作は ✓、やめる操作は ✕ の丸ボタンだけにしてある。
  * =======================================================*/
@@ -26,54 +20,26 @@ import {
 export function TaskEditor({
   task,
   initialDraft,
-  initialMode = 'form',
   onSave,
   onDelete,
   onClose,
   workHours,
   categoryGroups,
   onChangeCategoryGroups,
-  templates,
-  onForgetTemplate,
-  onParseText,
-  parsing,
 }: {
   /** 既存タスクの編集なら渡す。新規作成なら undefined */
   task?: Task
+  /** 新規作成の下敷き。記憶から呼び出したときは中身が入っている */
   initialDraft: Draft
-  /**
-   * どの入口から開いたか（＋の扇で選んだもの）。
-   *   form … 空のフォーム ／ memory … 記憶を開いた状態 ／ text … 文章の欄を開いた状態
-   */
-  initialMode?: 'form' | 'memory' | 'text'
   workHours: WorkHours
   categoryGroups: CategoryGroup[]
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
-  /** 記憶したタスク（呼び出して埋める） */
-  templates: TaskTemplate[]
-  onForgetTemplate: (t: TaskTemplate) => void
-  /** 自然文をまとめて候補にする。確認画面へ渡る */
-  onParseText: (text: string) => void
-  /** 解析中 */
-  parsing: boolean
   onSave: (draft: Draft) => void
   onDelete?: (task: Task) => void
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<Draft>(task ? taskToDraft(task) : initialDraft)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  // 開いた入口に合わせて、最初から該当の面を出しておく
-  const [recalling, setRecalling] = useState(!task && initialMode === 'memory')
-  const [freeText, setFreeText] = useState('')
-  const [freeOpen, setFreeOpen] = useState(!task && initialMode === 'text')
-  const freeRef = useRef<HTMLTextAreaElement | null>(null)
-
-  const creating = !task
-
-  // 「文章から作る」で開いたときは、そのまま打ち始められるようにする
-  useEffect(() => {
-    if (creating && initialMode === 'text') freeRef.current?.focus()
-  }, [creating, initialMode])
 
   return (
     <div className="tp-sheet" role="dialog" aria-modal="true" aria-label={task ? 'タスクを編集' : 'タスクを作る'}>
@@ -86,68 +52,6 @@ export function TaskEditor({
         </header>
 
         <div className="tp-sheet-body">
-          {creating && (
-            <div className="tp-make">
-              {/* 一度作ったタスクは控えてある。同じ作業を打ち直さない。 */}
-              <button
-                type="button"
-                className="tp-make-btn"
-                disabled={templates.length === 0}
-                onClick={() => setRecalling(true)}
-              >
-                <Icon name="checklist" size={16} />
-                <span>記憶から呼び出す</span>
-                <b className="tp-mono">{templates.length}</b>
-              </button>
-
-              {/* 自然文の入口。1文＝1タスクで、まとめて何件も作れる。 */}
-              <button
-                type="button"
-                className={`tp-make-btn${freeOpen ? ' is-on' : ''}`}
-                aria-expanded={freeOpen}
-                onClick={() => setFreeOpen((v) => !v)}
-              >
-                <Icon name="sparkle" size={16} />
-                <span>文章から作る</span>
-                <Icon name="chevron" size={15} className={`tp-cat-caret${freeOpen ? ' is-open' : ''}`} />
-              </button>
-            </div>
-          )}
-
-          {creating && freeOpen && (
-            <div className="tp-free">
-              <textarea
-                ref={freeRef}
-                className="tp-free-area"
-                rows={3}
-                value={freeText}
-                placeholder={
-                  '用件をそのまま書く。メールの文面を貼ってもよい。\n例：明日までにサンプル商事へ AB-1234 の納期を確認する'
-                }
-                onChange={(e) => setFreeText(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && freeText.trim()) {
-                    onParseText(freeText.trim())
-                  }
-                }}
-              />
-              <div className="tp-row-end">
-                <button
-                  type="button"
-                  className="tp-btn-ghost"
-                  disabled={!freeText.trim() || parsing}
-                  onClick={() => onParseText(freeText.trim())}
-                >
-                  <Icon name="sparkle" size={15} />
-                  {parsing ? '解析中' : '候補にする'}
-                </button>
-              </div>
-              <p className="tp-hint">
-                端末の中だけで読み取ります。1文が1件になり、確認画面で直してから登録します。
-              </p>
-            </div>
-          )}
-
           <DraftFields
             draft={draft}
             idPrefix="edit"
@@ -210,18 +114,6 @@ export function TaskEditor({
         </footer>
       </div>
 
-      {recalling && (
-        <TemplateSheet
-          templates={templates}
-          groups={categoryGroups}
-          onPick={(t) => {
-            setDraft((d) => applyTemplate(d, t))
-            setRecalling(false)
-          }}
-          onForget={onForgetTemplate}
-          onClose={() => setRecalling(false)}
-        />
-      )}
     </div>
   )
 }

@@ -10,6 +10,8 @@ import { SettingsView } from './views/SettingsView'
 import { ExportSheet } from './views/ExportSheet'
 import { ReviewSheet } from './views/ReviewSheet'
 import { TaskEditor } from './views/TaskEditor'
+import { TemplateSheet } from './views/TemplateSheet'
+import { TextSheet } from './views/TextSheet'
 import { TriageSheet, type TriageAction } from './views/TriageSheet'
 import { WrapUpSheet } from './views/WrapUpSheet'
 import { WorkCalendarSheet } from './views/WorkCalendarSheet'
@@ -38,7 +40,7 @@ import {
   type ForegroundReminders,
 } from './lib/reminder'
 import { ulid } from './lib/ulid'
-import { forget, remember } from './lib/templates'
+import { applyTemplate, forget, remember, touch } from './lib/templates'
 import { cleanCategories } from './lib/workCategories'
 import {
   DEFAULT_SETTINGS,
@@ -114,11 +116,13 @@ export default function App() {
   const [pending, setPending] = useState<Pending | null>(null)
   const [editing, setEditing] = useState<Task | null>(null)
   /**
-   * タスクを作る画面。どの入口から開いたかを持つ（＋の扇で選んだもの）。
-   *   form … 自分で書く ／ memory … 記憶から呼び出す ／ text … 文章から作る
-   * false は閉じている。
+   * いま開いている入口（＋の扇で選んだもの）。false は閉じている。
+   *   form … 手描き（フォーム）／ memory … 記憶の一覧 ／ text … 文章の欄
+   * v1.13.0 でこの3つを独立した画面にした（前はフォームの中に同居していた）。
    */
   const [creating, setCreating] = useState<Exclude<MakeMode, 'voice'> | false>(false)
+  /** 記憶から呼び出したときの下敷き。フォームを開くときに使う */
+  const [seed, setSeed] = useState<Draft | null>(null)
   const [exporting, setExporting] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   /** 記憶したタスク（定型）。登録するたびに控え、直接入力から呼び出す */
@@ -465,6 +469,7 @@ export default function App() {
       await reload()
       setEditing(null)
       setCreating(false)
+      setSeed(null)
     },
     [editing, reload, notify, rememberAll],
   )
@@ -482,6 +487,18 @@ export default function App() {
   const saveSettings = useCallback(async (next: Settings) => {
     setSettings(next)
     await repository.saveSettings(next)
+  }, [])
+
+  /** 記憶したタスクを呼び出してフォームへ流し込む */
+  const useTemplate = useCallback((t: TaskTemplate) => {
+    setSeed(applyTemplate(emptyDraft('form'), t))
+    setCreating('form')
+    const next = touch(templatesRef.current, t.id)
+    templatesRef.current = next
+    setTemplates(next)
+    void repository.saveTemplates(next).catch(() => {
+      /* 使った回数が残らないだけなので、画面は止めない */
+    })
   }, [])
 
   /** 記憶したタスクを1件忘れる */
@@ -972,28 +989,44 @@ export default function App() {
         />
       )}
 
-      {(editing || creating) && (
+      {/* 手描き（と既存タスクの編集） */}
+      {(editing || creating === 'form') && (
         <TaskEditor
           task={editing ?? undefined}
-          initialDraft={emptyDraft('form')}
-          initialMode={creating || 'form'}
+          initialDraft={seed ?? emptyDraft('form')}
           workHours={settings.workHours}
           categoryGroups={settings.categoryGroups}
           onChangeCategoryGroups={saveCategoryGroups}
-          templates={templates}
-          onForgetTemplate={(t) => void guard(() => forgetTemplate(t))}
-          parsing={busy}
-          onParseText={(text) => {
-            // 文章からの候補は確認画面へ渡す。作りかけの1件は閉じる。
-            setCreating(false)
-            runParse(text, 'text')
-          }}
           onSave={(d) => void guard(() => saveEdit(d))}
           onDelete={(t) => void guard(() => removeTask(t))}
           onClose={() => {
             setEditing(null)
             setCreating(false)
+            setSeed(null)
           }}
+        />
+      )}
+
+      {/* 記憶から呼び出す。選ぶと中身の入ったフォームが開く */}
+      {creating === 'memory' && (
+        <TemplateSheet
+          templates={templates}
+          groups={settings.categoryGroups}
+          onPick={useTemplate}
+          onForget={(t) => void guard(() => forgetTemplate(t))}
+          onClose={() => setCreating(false)}
+        />
+      )}
+
+      {/* 文章から作る。候補は確認画面へ渡る */}
+      {creating === 'text' && (
+        <TextSheet
+          busy={busy}
+          onParse={(text) => {
+            setCreating(false)
+            runParse(text, 'text')
+          }}
+          onClose={() => setCreating(false)}
         />
       )}
 

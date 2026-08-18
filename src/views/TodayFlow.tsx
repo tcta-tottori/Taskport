@@ -1,7 +1,7 @@
 import { Icon } from '../components/Icon'
 import { durationLabel, toMinutes } from '../lib/date'
 import { bandLoads, currentBand, nextUp, timeboxLabel, unboxed } from '../lib/timebox'
-import { isWorkDay, taskMinutes, trim } from '../lib/workday'
+import { isWorkDay, taskMinutes } from '../lib/workday'
 import type { Settings, Task } from '../types'
 
 /* =========================================================
@@ -154,9 +154,7 @@ export function TodayFlow({
           {nowMin >= endMin - 60 ? '今日を締める' : '明日の準備'}
         </button>
       </div>
-      <p className="tp-flow-foot">
-        朝は超過を仕分け、終わりに明日を見る。{trim(wh.start)} 始業・{trim(wh.end)} 終業。
-      </p>
+      <p className="tp-flow-foot">朝は超過を仕分け、終わりに明日を見る。</p>
     </section>
   )
 }
