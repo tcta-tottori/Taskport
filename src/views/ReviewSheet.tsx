@@ -2,7 +2,15 @@ import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
 import { dueLabel } from '../lib/date'
-import { PRIORITY_LABEL, SOURCE_LABEL, type Draft, type WorkHours } from '../types'
+import { CategoryChip } from '../components/CategoryChip'
+import { colorOf } from '../lib/workCategories'
+import {
+  PRIORITY_LABEL,
+  SOURCE_LABEL,
+  type CategoryGroup,
+  type Draft,
+  type WorkHours,
+} from '../types'
 
 /* =========================================================
  * 確認画面
@@ -20,6 +28,8 @@ export function ReviewSheet({
   sourceText,
   today,
   workHours,
+  categoryGroups,
+  onChangeCategoryGroups,
   onCommit,
   onCancel,
 }: {
@@ -29,6 +39,8 @@ export function ReviewSheet({
   sourceText: string
   today: string
   workHours: WorkHours
+  categoryGroups: CategoryGroup[]
+  onChangeCategoryGroups: (next: CategoryGroup[]) => void
   onCommit: (drafts: Draft[]) => void
   onCancel: () => void
 }) {
@@ -88,7 +100,9 @@ export function ReviewSheet({
                         <span className={`tp-draft-pri tp-pri-${d.priority}`}>
                           {PRIORITY_LABEL[d.priority]}
                         </span>
-                        {d.category && <span>{d.category}</span>}
+                        {d.categories.map((c) => (
+                          <CategoryChip key={c} label={c} color={colorOf(categoryGroups, c)} />
+                        ))}
                         <span>{SOURCE_LABEL[d.source]}</span>
                       </span>
                     </span>
@@ -108,6 +122,8 @@ export function ReviewSheet({
                     draft={d}
                     idPrefix={`rev-${d.tempId}`}
                     workHours={workHours}
+                    categoryGroups={categoryGroups}
+                    onChangeCategoryGroups={onChangeCategoryGroups}
                     onChange={(p) => patch(d.tempId, p)}
                   />
                 )}
@@ -121,18 +137,27 @@ export function ReviewSheet({
           </details>
         </div>
 
+        {/* 決めるのは ✓、やめるのは ✕ だけ。件数は上の見出しに出ている。 */}
         <footer className="tp-sheet-foot">
-          <button type="button" className="tp-btn-ghost" onClick={onCancel}>
-            やめる
+          <button
+            type="button"
+            className="tp-round-btn tp-round-cancel"
+            onClick={onCancel}
+            aria-label="やめる"
+            title="やめる"
+          >
+            <Icon name="close" size={22} strokeWidth={2.2} />
           </button>
           <button
             type="button"
-            className="tp-btn-primary"
+            className="tp-round-btn tp-round-go"
             disabled={valid.length === 0}
             onClick={() => onCommit(valid)}
+            aria-label={`${valid.length}件を登録する`}
+            title={`${valid.length}件を登録`}
           >
-            <Icon name="check" size={16} />
-            {valid.length}件を登録
+            <Icon name="check" size={22} strokeWidth={2.4} />
+            {valid.length > 1 && <b className="tp-mono tp-round-n">{valid.length}</b>}
           </button>
         </footer>
       </div>

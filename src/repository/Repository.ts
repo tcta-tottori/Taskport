@@ -1,4 +1,4 @@
-import type { Recording, Settings, Task } from '../types'
+import type { Recording, Settings, Task, TaskTemplate } from '../types'
 
 /**
  * 保存層の境界。
@@ -46,6 +46,13 @@ export interface Repository {
    * 必ず利用者に確かめてから呼ぶこと。
    */
   resetLedger(): Promise<void>
+
+  /* --- 記憶したタスク（定型）。端末内にのみ置く --- */
+
+  /** 呼び出せる定型の一覧。並びは呼び出し側で決める。 */
+  listTemplates(): Promise<TaskTemplate[]>
+  /** 丸ごと置き換える（件数が少なく、1件ずつ更新する利点が無い） */
+  saveTemplates(list: TaskTemplate[]): Promise<void>
 
   /* --- 録音。音声は端末内にのみ置く --- */
   listRecordings(): Promise<Recording[]>

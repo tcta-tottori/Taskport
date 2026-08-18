@@ -1,6 +1,7 @@
 import { dayKey, formatMD, formatMDShort, fromMinutes, toMinutes } from '../../lib/date'
 import { sortTasks } from '../../lib/tasks'
 import { trim, workSegments } from '../../lib/workday'
+import { primaryCategory } from '../../lib/workCategories'
 import type { Task, WorkHours } from '../../types'
 
 /* =========================================================
@@ -133,7 +134,8 @@ export function toWorkLogRows(
     if (index < 0 || index >= rows.length || rows[index].detail) return false
     rows[index] = {
       time: rows[index].time,
-      category: task.category,
+      // 日報の1行に入るのは1つだけ。主区分（先頭）を書く
+      category: primaryCategory(task.categories),
       detail: task.note ? `${task.title}（${task.note}）` : task.title,
     }
     return true

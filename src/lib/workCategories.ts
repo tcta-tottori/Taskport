@@ -1,25 +1,30 @@
+import { ulid } from './ulid'
+import {
+  CATEGORY_COLORS,
+  UNCATEGORIZED,
+  UNGROUPED,
+  type CategoryColor,
+  type CategoryGroup,
+} from '../types'
+
 /* =========================================================
- * 業務分類マスタ
+ * 業務分類（区分）のマスタと、その扱い
  *
- * 実際に使っている資材課日報の「作業内容」をそのまま持ってきた。
- * design.md §5.1 は「区分は自由入力とし、マスタ管理はしない。実運用で
- * 頻出する語が固まってから候補化する」としていたが、日報の様式として
- * 既に固まっていたので、その語をそのまま候補にする。
+ * 既定値は実際に使っている資材課日報の「作業内容」をそのまま持ってきた。
+ * ただし v1.11.0 から **マスタは設定（Settings.categoryGroups）が持ち、
+ * 利用者が画面から編集できる**。ここにあるのは「初回に入れる中身」と、
+ * グループを引くための道具だけ。
  *
- * 大分類は日報の集計単位でもある（分析画面の「区分ごとの時間」で使う）。
- * 自由入力は残す。ここに無い区分を書いても「その他」として集計される。
+ * グループは集計の単位（日報の「〜合計」）であり、色分けの単位でもある。
+ * 色は名前（indigo など）だけを持ち、実際の値は tokens.css の `--cat-*`。
  * =======================================================*/
 
-export interface CategoryGroup {
-  /** 集計の単位。日報の「〜合計」に対応する */
-  group: string
-  /** 選択肢。日報の作業内容の行に対応する */
-  items: string[]
-}
-
-export const CATEGORY_MASTER: CategoryGroup[] = [
+/** 既定のマスタ。IDは固定（保存に残るが、名前を変えても追える） */
+const DEFAULT_GROUPS: { id: string; name: string; color: CategoryColor; items: string[] }[] = [
   {
-    group: '手配・納期対応',
+    id: 'g-tehai',
+    name: '手配・納期対応',
+    color: 'indigo',
     items: [
       '客先連絡対応、メール確認',
       '見積依頼',
@@ -31,7 +36,9 @@ export const CATEGORY_MASTER: CategoryGroup[] = [
     ],
   },
   {
-    group: '伝票処理',
+    id: 'g-denpyo',
+    name: '伝票処理',
+    color: 'violet',
     items: [
       '受注処理',
       '売上処理',
@@ -43,27 +50,39 @@ export const CATEGORY_MASTER: CategoryGroup[] = [
     ],
   },
   {
-    group: '在庫管理',
+    id: 'g-zaiko',
+    name: '在庫管理',
+    color: 'teal',
     items: ['在庫確認、処理', '現品票、QR発行・貼付け', '部品取り、収集、移動', '棚卸'],
   },
   {
-    group: '仕入先交渉',
+    id: 'g-shiire',
+    name: '仕入先交渉',
+    color: 'magenta',
     items: ['仕入先面談', '品質交渉確認', '価格交渉確認', '納期交渉確認'],
   },
   {
-    group: '打合せ',
+    id: 'g-uchiawase',
+    name: '打合せ',
+    color: 'blue',
     items: ['打合せ、来客対応', 'ミッション活動'],
   },
   {
-    group: '書類作成',
+    id: 'g-shorui',
+    name: '書類作成',
+    color: 'olive',
     items: ['書類作成、客先システム入力', 'マスタメンテナンス', '資料確認'],
   },
   {
-    group: '物流対応',
+    id: 'g-butsuryu',
+    name: '物流対応',
+    color: 'green',
     items: ['荷下ろし', '資材倉庫整理、レイアウト', '出荷、返品段取り'],
   },
   {
-    group: 'その他',
+    id: 'g-sonota',
+    name: 'その他',
+    color: 'slate',
     items: [
       '品質保証、品質管理対応',
       '応援、試作、修正',
@@ -74,19 +93,82 @@ export const CATEGORY_MASTER: CategoryGroup[] = [
   },
 ]
 
-/** 選択肢をすべて平らに並べたもの（入力補助の datalist 用） */
-export const CATEGORY_ITEMS: string[] = CATEGORY_MASTER.flatMap((g) => g.items)
+/** 初回に入れるマスタ。呼ぶたびに新しい配列を返す（触っても既定が汚れない）。 */
+export function defaultCategoryGroups(): CategoryGroup[] {
+  return DEFAULT_GROUPS.map((g) => ({ ...g, items: [...g.items] }))
+}
 
-/** 小分類 → 大分類 */
-const GROUP_OF = new Map<string, string>(
-  CATEGORY_MASTER.flatMap((g) => g.items.map((i) => [i, g.group] as const)),
-)
+/** 保存から読んだマスタを現行の形へ寄せる。壊れていれば既定に戻す。 */
+export function normalizeGroups(raw: unknown): CategoryGroup[] {
+  if (!Array.isArray(raw)) return defaultCategoryGroups()
+  const groups: CategoryGroup[] = []
+  for (const g of raw) {
+    if (typeof g !== 'object' || g === null) continue
+    const o = g as Record<string, unknown>
+    const name = typeof o.name === 'string' ? o.name.trim() : ''
+    if (!name) continue
+    const items = Array.isArray(o.items)
+      ? [...new Set(o.items.filter((i): i is string => typeof i === 'string' && i.trim() !== ''))]
+      : []
+    groups.push({
+      id: typeof o.id === 'string' && o.id ? o.id : ulid(),
+      name,
+      color: CATEGORY_COLORS.includes(o.color as CategoryColor) ? (o.color as CategoryColor) : 'slate',
+      items,
+    })
+  }
+  return groups.length > 0 ? groups : defaultCategoryGroups()
+}
 
-/** 区分がどの大分類に属するか。マスタに無ければ「その他」。 */
-export function groupOf(category: string): string {
+/** 選択肢をすべて平らに並べたもの */
+export function allCategories(groups: CategoryGroup[]): string[] {
+  return groups.flatMap((g) => g.items)
+}
+
+/** 小分類 → グループ名 */
+function indexOf(groups: CategoryGroup[]): Map<string, CategoryGroup> {
+  const map = new Map<string, CategoryGroup>()
+  for (const g of groups) for (const i of g.items) if (!map.has(i)) map.set(i, g)
+  return map
+}
+
+/** 区分がどのグループに属するか。マスタに無ければ null。 */
+export function findGroup(groups: CategoryGroup[], category: string): CategoryGroup | null {
   const c = category.trim()
-  if (!c) return '未分類'
-  return GROUP_OF.get(c) ?? 'その他'
+  if (!c) return null
+  return indexOf(groups).get(c) ?? null
+}
+
+/** 区分のグループ名。空なら「未分類」、マスタ外なら「その他」。 */
+export function groupOf(groups: CategoryGroup[], category: string): string {
+  const c = category.trim()
+  if (!c) return UNCATEGORIZED
+  return findGroup(groups, c)?.name ?? UNGROUPED
+}
+
+/** グループ名 → 色。無ければ既定色（グラフの取り違えを防ぐため必ず何か返す）。 */
+export function colorOfGroup(groups: CategoryGroup[], groupName: string): CategoryColor {
+  return groups.find((g) => g.name === groupName)?.color ?? 'slate'
+}
+
+/** 区分の色。カードのチップとグラフで同じ色になるようにここを通す。 */
+export function colorOf(groups: CategoryGroup[], category: string): CategoryColor {
+  return findGroup(groups, category)?.color ?? 'slate'
+}
+
+/** タスクの主区分（先頭）。集計と日報はここだけを見る。 */
+export function primaryCategory(categories: string[]): string {
+  return categories.find((c) => c.trim() !== '')?.trim() ?? ''
+}
+
+/** 区分の並びをならす（前後の空白を落とし、重複と空を捨てる） */
+export function cleanCategories(list: string[]): string[] {
+  const out: string[] = []
+  for (const raw of list) {
+    const c = raw.trim()
+    if (c && !out.includes(c)) out.push(c)
+  }
+  return out
 }
 
 /* ---------------------------------------------------------
@@ -94,7 +176,7 @@ export function groupOf(category: string): string {
  * ------------------------------------------------------- */
 
 /**
- * 語 → 小分類。上から順に見て、最初に当たったものを使う。
+ * 語 → 小分類。上から順に見て、当たったものを使う。
  * 迷ったら当てないほうがよい（誤った区分が入ると集計が狂う）ので、
  * 判別しやすい語だけを並べている。
  */
@@ -141,10 +223,54 @@ const RULES: { words: string[]; category: string }[] = [
   { words: ['朝礼', '掃除'], category: 'その他(朝礼、掃除など)' },
 ]
 
-/** 文から区分を推し当てる。当てられなければ空文字（＝未分類のまま人が選ぶ）。 */
-export function detectCategory(sentence: string): string {
-  for (const rule of RULES) {
-    if (rule.words.some((w) => sentence.includes(w))) return rule.category
+/** 何件まで自動で当てるか。多く当てるほど外れも増えるので2件で止める。 */
+const DETECT_MAX = 2
+
+/**
+ * 文から区分を推し当てる。当てられなければ空の配列（＝人が選ぶ）。
+ *
+ * 見る順は (1) マスタに書かれた区分名そのもの (2) 語の表。
+ * (1) を先に見るのは、利用者が足した区分（コードには無い語）を拾うため。
+ */
+export function detectCategories(sentence: string, groups: CategoryGroup[]): string[] {
+  const hit: string[] = []
+  const push = (c: string) => {
+    if (c && !hit.includes(c) && hit.length < DETECT_MAX) hit.push(c)
   }
-  return ''
+
+  for (const c of allCategories(groups)) {
+    // 「在庫確認、処理」のような区分名は、頭の語（在庫確認）で当てる
+    const head = c.split(/[、,（(]/)[0].trim()
+    if (head.length >= 2 && sentence.includes(head)) push(c)
+  }
+  const known = new Set(allCategories(groups))
+  for (const rule of RULES) {
+    if (hit.length >= DETECT_MAX) break
+    // マスタから消された区分は当てない（消したものが戻ってくると混乱する）
+    if (!known.has(rule.category)) continue
+    if (rule.words.some((w) => sentence.includes(w))) push(rule.category)
+  }
+  return hit
+}
+
+/** 1件だけ当てる（確認画面の要約など、1つしか置けない場所で使う） */
+export function detectCategory(sentence: string, groups: CategoryGroup[]): string {
+  return detectCategories(sentence, groups)[0] ?? ''
+}
+
+/**
+ * 新しく足す区分を、どのグループへ入れるか見当づける。
+ * 語の表で当てて、その区分が居るグループへ寄せる。当たらなければ末尾のグループ。
+ */
+export function guessGroupId(name: string, groups: CategoryGroup[]): string {
+  const n = name.trim()
+  if (!n) return groups[groups.length - 1]?.id ?? ''
+  for (const rule of RULES) {
+    if (!rule.words.some((w) => n.includes(w))) continue
+    const g = findGroup(groups, rule.category)
+    if (g) return g.id
+  }
+  // 「その他」があればそこへ、無ければ末尾
+  const other = groups.find((g) => g.name === UNGROUPED)
+  return (other ?? groups[groups.length - 1])?.id ?? ''
 }

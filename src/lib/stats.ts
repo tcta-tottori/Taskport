@@ -1,7 +1,15 @@
 import { addDaysKey, dayKey, lastNDays } from './date'
 import { isWorkDay, taskMinutes, workMinutes } from './workday'
-import { groupOf } from './workCategories'
-import { PRIORITIES, type Priority, type Settings, type Source, type Task } from '../types'
+import { groupOf, primaryCategory } from './workCategories'
+import {
+  PRIORITIES,
+  UNCATEGORIZED,
+  type CategoryGroup,
+  type Priority,
+  type Settings,
+  type Source,
+  type Task,
+} from '../types'
 
 /* =========================================================
  * 分析ビュー用の集計
@@ -65,15 +73,21 @@ export interface CategoryStat {
   rate: number
 }
 
-/** 区分ごとの残・完了。件数の多い順。 */
+/**
+ * 区分ごとの残・完了。件数の多い順。
+ * 区分を複数持つタスクは、**そのすべて**で1件ずつ数える（件数なので重複してよい）。
+ * 時間の集計（categoryMinutes）と数え方が違う点に注意。
+ */
 export function categoryStats(tasks: Task[]): CategoryStat[] {
   const map = new Map<string, { open: number; done: number }>()
   for (const t of tasks) {
-    const key = t.category || '未分類'
-    const cur = map.get(key) ?? { open: 0, done: 0 }
-    if (t.status === 'done') cur.done++
-    else cur.open++
-    map.set(key, cur)
+    const keys = t.categories.length > 0 ? t.categories : [UNCATEGORIZED]
+    for (const key of keys) {
+      const cur = map.get(key) ?? { open: 0, done: 0 }
+      if (t.status === 'done') cur.done++
+      else cur.open++
+      map.set(key, cur)
+    }
   }
   return [...map.entries()]
     .map(([category, v]) => ({
@@ -189,6 +203,8 @@ export const PRIORITY_ORDER = PRIORITIES
  * ただし日報が「実際にかかった時間」なのに対し、こちらは
  * 「完了したタスクの見込み時間」である点が違う。数え方が違うので、
  * 画面でもそのように書く（実績と取り違えると判断を誤る）。
+ *
+ * 区分を複数持つタスクは**先頭（主区分）にだけ**時間を積む。
  * ------------------------------------------------------- */
 
 export interface GroupMinutes {
@@ -210,6 +226,7 @@ export function categoryMinutes(
   from: string,
   to: string,
   defaultEstimateMin: number,
+  master: CategoryGroup[],
 ): { groups: GroupMinutes[]; total: number } {
   const byGroup = new Map<string, Map<string, number>>()
   let total = 0
@@ -219,8 +236,11 @@ export function categoryMinutes(
     const day = t.doneAt.slice(0, 10)
     if (day < from || day > to) continue
     const min = taskMinutes(t, defaultEstimateMin)
-    const g = groupOf(t.category)
-    const key = t.category.trim() || '未分類'
+    // 時間は主区分（先頭）にだけ積む。区分ごとに同じ時間を積むと
+    // 合計が実際の勤務時間を超えて、稼働の判断が狂う。
+    const primary = primaryCategory(t.categories)
+    const g = groupOf(master, primary)
+    const key = primary || UNCATEGORIZED
     const items = byGroup.get(g) ?? new Map<string, number>()
     items.set(key, (items.get(key) ?? 0) + min)
     byGroup.set(g, items)

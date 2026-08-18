@@ -1,5 +1,6 @@
 import { isDayKey, isTimeKey } from './date'
 import { ulid } from './ulid'
+import { cleanCategories, normalizeGroups } from './workCategories'
 import { PRIORITIES, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task, type TimeboxKey } from '../types'
 
 /* =========================================================
@@ -76,7 +77,12 @@ function toTask(raw: unknown): Task | null {
     dueTime: isTimeKey(o.dueTime) ? o.dueTime : null,
     estimateMin: typeof o.estimateMin === 'number' && o.estimateMin > 0 ? Math.round(o.estimateMin) : null,
     priority: PRIORITIES.includes(o.priority as Priority) ? (o.priority as Priority) : 'mid',
-    category: typeof o.category === 'string' ? o.category : '',
+    // v1.10 以前は区分が1つ（category）だった。読めるようにしておく
+    categories: Array.isArray(o.categories)
+      ? cleanCategories(o.categories.filter((c): c is string => typeof c === 'string'))
+      : typeof o.category === 'string' && o.category.trim()
+        ? [o.category.trim()]
+        : [],
     subtasks: toSubtasks(o.subtasks),
     timebox: TIMEBOXES.includes(o.timebox as TimeboxKey) ? (o.timebox as TimeboxKey) : null,
     repeat: isDayKey(o.due) ? toRepeat(o.repeat) : null,
@@ -118,9 +124,13 @@ export function readBackup(json: string): RestoreResult {
     if (t) tasks.push(t)
     else skipped++
   }
-  const settings =
+  const raw =
     typeof data === 'object' && data !== null && typeof (data as BackupFile).settings === 'object'
       ? ((data as BackupFile).settings as Partial<Settings>)
       : null
+  // 区分のマスタは形を確かめてから入れる（壊れていると区分が全部選べなくなる）
+  const settings = raw
+    ? { ...raw, categoryGroups: normalizeGroups(raw.categoryGroups) }
+    : null
   return { tasks, settings, skipped }
 }

@@ -16,6 +16,7 @@ import {
 } from '../lib/stats'
 import { workHoursSummary } from '../lib/workday'
 import { addDaysKey } from '../lib/date'
+import { colorOf, colorOfGroup } from '../lib/workCategories'
 import { PRIORITIES, PRIORITY_LABEL, SOURCE_LABEL, type Settings, type Task } from '../types'
 
 /* =========================================================
@@ -46,8 +47,15 @@ export function DashboardView({
   const allDays = useMemo(() => trimLeadingEmpty(dailyPoints(tasks, 90, today)), [tasks, today])
   // 日報の集計と同じ見方（大分類ごとの時間と構成比）。直近10日ぶん。
   const spent = useMemo(
-    () => categoryMinutes(tasks, addDaysKey(today, -9), today, settings.defaultEstimateMin),
-    [tasks, today, settings.defaultEstimateMin],
+    () =>
+      categoryMinutes(
+        tasks,
+        addDaysKey(today, -9),
+        today,
+        settings.defaultEstimateMin,
+        settings.categoryGroups,
+      ),
+    [tasks, today, settings.defaultEstimateMin, settings.categoryGroups],
   )
   const wh = workHoursSummary(settings.workHours)
 
@@ -143,7 +151,14 @@ export function DashboardView({
               {spent.groups.map((g) => (
                 <div className="tp-bar-item" key={g.group}>
                   <div className="tp-bar-head">
-                    <span>{g.group}</span>
+                    <span className="tp-bar-name">
+                      <span
+                        className="tp-cat-dot"
+                        style={{ '--cat': `var(--cat-${colorOfGroup(settings.categoryGroups, g.group)})` } as CSSProperties}
+                        aria-hidden="true"
+                      />
+                      {g.group}
+                    </span>
                     <span className="tp-muted tp-mono">
                       {durationLabel(g.minutes)}（{Math.round(g.share * 100)}%）
                     </span>
@@ -151,7 +166,10 @@ export function DashboardView({
                   <div className="tp-bar-track">
                     <div
                       className="tp-bar-fill"
-                      style={{ width: `${Math.round(g.share * 100)}%`, background: 'var(--chart-bar)' }}
+                      style={{
+                        width: `${Math.round(g.share * 100)}%`,
+                        background: `var(--cat-${colorOfGroup(settings.categoryGroups, g.group)})`,
+                      }}
                     />
                   </div>
                   <ul className="tp-bar-items">
@@ -167,6 +185,7 @@ export function DashboardView({
               <p className="tp-muted tp-small">
                 合計 {durationLabel(spent.total)}。
                 これは<b>完了したタスクの見込み時間</b>の集計で、実際にかかった時間ではありません。
+                区分を複数付けたタスクは、先頭の区分にだけ積んでいます。
               </p>
             </>
           )}
@@ -182,7 +201,14 @@ export function DashboardView({
             return (
               <div className="tp-bar-item" key={c.category}>
                 <div className="tp-bar-head">
-                  <span>{c.category}</span>
+                  <span className="tp-bar-name">
+                    <span
+                      className="tp-cat-dot"
+                      style={{ '--cat': `var(--cat-${colorOf(settings.categoryGroups, c.category)})` } as CSSProperties}
+                      aria-hidden="true"
+                    />
+                    {c.category}
+                  </span>
                   <span className="tp-muted tp-mono">
                     残{c.open} / 全{c.total}（{p}%完了）
                   </span>

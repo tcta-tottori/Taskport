@@ -15,7 +15,7 @@ const HEADERS: { key: keyof Task; label: string }[] = [
   { key: 'dueTime', label: '時刻' },
   { key: 'estimateMin', label: '見込み分' },
   { key: 'priority', label: '優先度' },
-  { key: 'category', label: '区分' },
+  { key: 'categories', label: '区分' },
   { key: 'status', label: '状態' },
   { key: 'source', label: '入口' },
   { key: 'createdAt', label: '作成日時' },
@@ -25,7 +25,8 @@ const HEADERS: { key: keyof Task; label: string }[] = [
 
 function cell(value: unknown): string {
   if (value === null || value === undefined) return ''
-  const s = String(value)
+  // 区分は複数持てる。カンマだと表計算で列が割れるので中黒でつなぐ
+  const s = Array.isArray(value) ? value.join(' ・ ') : String(value)
   // 先頭が = + - @ のセルは表計算ソフトが数式として解釈するので無害化する。
   // 無害化したセルは必ず引用符で囲み、意図が読める形にしておく。
   const neutralized = /^[=+\-@]/.test(s)

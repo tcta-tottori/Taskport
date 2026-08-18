@@ -1,7 +1,7 @@
 import { addDaysKey, dayKey, isDayKey, parseDayKey, weekdayLabel } from '../../lib/date'
 import { emptyDraft } from '../../lib/tasks'
-import { detectCategory } from '../../lib/workCategories'
-import type { Draft, Priority, Repeat, Source } from '../../types'
+import { detectCategories } from '../../lib/workCategories'
+import type { CategoryGroup, Draft, Priority, Repeat, Source } from '../../types'
 
 /* =========================================================
  * 端末内のかんたん解析（AIプロキシが無い / 届かないときの受け皿）
@@ -193,8 +193,15 @@ function cleanTitle(sentence: string): string {
 /**
  * 自然文 → タスク候補。
  * 1文＝1タスクを基本とし、実行内容が読み取れない断片は捨てる。
+ *
+ * @param groups 区分のマスタ。利用者が足した区分も当てられるように渡す
  */
-export function localParse(text: string, source: Source, today = dayKey()): Draft[] {
+export function localParse(
+  text: string,
+  source: Source,
+  today = dayKey(),
+  groups: CategoryGroup[] = [],
+): Draft[] {
   const sentences = splitSentences(text)
   const drafts: Draft[] = []
   for (const sentence of sentences) {
@@ -214,7 +221,7 @@ export function localParse(text: string, source: Source, today = dayKey()): Draf
       due,
       dueTime,
       priority: detectPriority(sentence, due, today),
-      category: detectCategory(sentence),
+      categories: detectCategories(sentence, groups),
       // 繰り返しは期限が決まっているときだけ付ける（次回の日が出せないため）
       repeat: due ? repeat : null,
     })
@@ -231,7 +238,7 @@ export function localParse(text: string, source: Source, today = dayKey()): Draf
       due,
       dueTime: extractTime(t),
       priority: detectPriority(t, due, today),
-      category: detectCategory(t),
+      categories: detectCategories(t, groups),
       repeat: due ? repeat : null,
     })
   }

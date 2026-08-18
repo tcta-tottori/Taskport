@@ -1,13 +1,17 @@
+import { useRef, useState } from 'react'
 import { Icon } from '../components/Icon'
+import { CategoryChip } from '../components/CategoryChip'
+import { CategorySheet } from './CategorySheet'
 import {
   PRIORITIES,
   PRIORITY_LABEL,
+  type CategoryGroup,
   type Draft,
   type RepeatUnit,
   type Subtask,
   type WorkHours,
 } from '../types'
-import { CATEGORY_MASTER } from '../lib/workCategories'
+import { colorOf, detectCategories } from '../lib/workCategories'
 import { emptyRepeat, REPEAT_UNITS } from '../lib/repeat'
 import { bands } from '../lib/timebox'
 import { weekdayOf } from '../lib/date'
@@ -23,15 +27,47 @@ export function DraftFields({
   onChange,
   idPrefix,
   workHours,
+  categoryGroups,
+  onChangeCategoryGroups,
 }: {
   draft: Draft
   onChange: (patch: Partial<Draft>) => void
   idPrefix: string
   /** 時間枠の並びを勤務時間から作るために使う */
   workHours: WorkHours
+  /** 区分のマスタ（設定が持つ） */
+  categoryGroups: CategoryGroup[]
+  /** 区分の選択画面でマスタを直したとき */
+  onChangeCategoryGroups: (next: CategoryGroup[]) => void
 }) {
   const repeat = draft.repeat
   const WEEK = ['日', '月', '火', '水', '木', '金', '土']
+  const [picking, setPicking] = useState(false)
+
+  /**
+   * 件名から自動で入れた区分。人が自分で選んだら null にして、以後は触らない
+   * （選び直したものを、件名を直した拍子に上書きしないため）。
+   */
+  const autoRef = useRef<string[] | null>(draft.categories.length === 0 ? [] : null)
+
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i])
+
+  /** 件名を変える。区分をまだ人が触っていなければ、名前から当てて入れておく。 */
+  const setTitle = (title: string) => {
+    const auto = autoRef.current
+    if (auto !== null && (draft.categories.length === 0 || same(draft.categories, auto))) {
+      const next = detectCategories(title, categoryGroups)
+      autoRef.current = next
+      onChange({ title, categories: next })
+      return
+    }
+    onChange({ title })
+  }
+
+  const autoFilled =
+    autoRef.current !== null &&
+    autoRef.current.length > 0 &&
+    same(draft.categories, autoRef.current)
 
   const setUnit = (unit: RepeatUnit | null) => {
     if (!unit) return onChange({ repeat: null })
@@ -56,7 +92,7 @@ export function DraftFields({
           type="text"
           value={draft.title}
           placeholder="〜する の形で書く"
-          onChange={(e) => onChange({ title: e.target.value })}
+          onChange={(e) => setTitle(e.target.value)}
         />
       </label>
 
@@ -114,26 +150,42 @@ export function DraftFields({
         </div>
       </div>
 
-      <label className="tp-field">
+      {/* 区分は複数選べる。数が多いので、押すと出る画面で階層から選ぶ。 */}
+      <div className="tp-field">
         <span className="tp-label">区分</span>
-        <input
-          type="text"
-          list={`${idPrefix}-cats`}
-          value={draft.category}
-          placeholder="在庫確認、処理 / 納期確認、日程調整 など"
-          onChange={(e) => onChange({ category: e.target.value })}
-        />
-        {/* 日報の作業内容をそのまま候補にする。大分類ごとにまとめて出す。 */}
-        <datalist id={`${idPrefix}-cats`}>
-          {CATEGORY_MASTER.map((g) => (
-            <optgroup key={g.group} label={g.group}>
-              {g.items.map((c) => (
-                <option key={c} value={c} />
+        <button
+          type="button"
+          className="tp-cat-open"
+          onClick={() => setPicking(true)}
+          aria-label="区分を選ぶ"
+        >
+          {draft.categories.length === 0 ? (
+            <span className="tp-cat-empty">押して選ぶ（いくつでも）</span>
+          ) : (
+            <span className="tp-cat-list">
+              {draft.categories.map((c) => (
+                <CategoryChip key={c} label={c} color={colorOf(categoryGroups, c)} />
               ))}
-            </optgroup>
-          ))}
-        </datalist>
-      </label>
+            </span>
+          )}
+          <Icon name="chevron" size={16} className="tp-cat-open-caret" />
+        </button>
+        {autoFilled && <p className="tp-hint">件名から当てました。違うときは押して選び直してください。</p>}
+      </div>
+
+      {picking && (
+        <CategorySheet
+          groups={categoryGroups}
+          selected={draft.categories}
+          onChangeGroups={onChangeCategoryGroups}
+          onCommit={(categories) => {
+            autoRef.current = null
+            onChange({ categories })
+            setPicking(false)
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
 
       <div className="tp-field">
         <span className="tp-label">

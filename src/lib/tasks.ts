@@ -1,5 +1,6 @@
 import { ulid } from './ulid'
 import { diffDays, isDayKey, isTimeKey } from './date'
+import { cleanCategories } from './workCategories'
 import type { Draft, Priority, Source, Task } from '../types'
 
 /* =========================================================
@@ -17,7 +18,7 @@ export function emptyDraft(source: Source = 'form'): Draft {
     dueTime: null,
     estimateMin: null,
     priority: 'mid',
-    category: '',
+    categories: [],
     subtasks: [],
     timebox: null,
     repeat: null,
@@ -37,7 +38,7 @@ export function draftToTask(draft: Draft): Task {
     estimateMin:
       typeof draft.estimateMin === 'number' && draft.estimateMin > 0 ? draft.estimateMin : null,
     priority: draft.priority,
-    category: draft.category.trim(),
+    categories: cleanCategories(draft.categories),
     subtasks: draft.subtasks.filter((s) => s.title.trim()).map((s) => ({ ...s, title: s.title.trim() })),
     timebox: draft.timebox,
     // 期限が無いと次回の日が決まらないので、繰り返しは落とす
@@ -59,7 +60,7 @@ export function taskToDraft(task: Task): Draft {
     dueTime: task.dueTime,
     estimateMin: task.estimateMin,
     priority: task.priority,
-    category: task.category,
+    categories: [...task.categories],
     subtasks: task.subtasks,
     timebox: task.timebox,
     repeat: task.repeat,

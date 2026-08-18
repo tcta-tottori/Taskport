@@ -116,8 +116,14 @@ export interface Task {
    */
   estimateMin: number | null
   priority: Priority
-  /** 業務分類。候補は lib/workCategories.ts のマスタ。自由入力も可 */
-  category: string
+  /**
+   * 業務分類。複数選べる（1つの作業が発注と納期確認の両方にまたがることがある）。
+   * 候補は Settings.categoryGroups のマスタ。ここに無い語も入れられる。
+   *
+   * **先頭が主区分**。日報の書き出しと「区分ごとの時間」は先頭だけで数える
+   * （全部に同じ時間を積むと合計が実時間を超えて、稼働の判断が狂う）。
+   */
+  categories: string[]
   status: Status
   /** どの入口から入ったか（どの入口を育てるかの判断に使う） */
   source: Source
@@ -160,6 +166,76 @@ export const SOURCE_LABEL: Record<Source, string> = {
   share: '共有',
   calendar: 'カレンダー',
 }
+
+/* ---------------------------------------------------------
+ * 区分（業務分類）のマスタ
+ *
+ * 日報の作業内容から起こした既定値を持つが、**利用者が編集できる**。
+ * 実際の仕事は増えるし、名前も変わる。コードを直さないと足せない形にしない。
+ * ------------------------------------------------------- */
+
+/**
+ * グループの色。値そのものは tokens.css の `--cat-*` で決める。
+ * ここに16進数を書かない（色はトークンからしか取らない）。
+ */
+export const CATEGORY_COLORS = [
+  'indigo',
+  'violet',
+  'magenta',
+  'rose',
+  'amber',
+  'olive',
+  'green',
+  'teal',
+  'blue',
+  'slate',
+] as const
+
+export type CategoryColor = (typeof CATEGORY_COLORS)[number]
+
+/** 区分のまとまり。集計の単位でもあり、色分けの単位でもある。 */
+export interface CategoryGroup {
+  /** ULID か既定グループの固定ID */
+  id: string
+  /** 表示名。集計と絞り込みではこの名前を鍵に使う */
+  name: string
+  color: CategoryColor
+  /** このグループに属する区分 */
+  items: string[]
+}
+
+/** どのグループにも入っていない区分をまとめる名前 */
+export const UNGROUPED = 'その他'
+/** 区分が空のタスクをまとめる名前 */
+export const UNCATEGORIZED = '未分類'
+
+/* ---------------------------------------------------------
+ * 記憶したタスク（定型）
+ *
+ * 同じ作業を毎回打ち直さないための控え。登録した時点で自動的に控え、
+ * 直接入力の画面から呼び出して1タップで埋める。
+ * 端末内にのみ置き、同期にも書き出しにも乗せない。
+ * ------------------------------------------------------- */
+
+export interface TaskTemplate {
+  /** ULID */
+  id: string
+  title: string
+  note: string
+  categories: string[]
+  priority: Priority
+  estimateMin: number | null
+  timebox: TimeboxKey | null
+  /** 手順の見出しだけ。済／未了は引き継がない */
+  steps: string[]
+  /** 同じ件名で何回作ったか。よく使う順に並べるのに使う */
+  useCount: number
+  /** 最後に使った時刻 ISO 8601 */
+  lastUsedAt: string
+}
+
+/** 端末に残す定型の件数。あふれたら「使った回数が少なく・古い」ものから捨てる。 */
+export const TEMPLATE_KEEP = 200
 
 /* ---------------------------------------------------------
  * 勤務時間
@@ -269,6 +345,11 @@ export interface Settings {
   workHours: WorkHours
   /** 会社の休日・出勤日。曜日の設定より優先する */
   workCalendar: WorkCalendar
+  /**
+   * 区分のマスタ。グループ分けと色をここで持ち、設定画面と区分の選択画面から編集する。
+   * 空の配列は「読み込み前」を意味する（保存層が既定値で埋める）。
+   */
+  categoryGroups: CategoryGroup[]
   /** 見積が未入力のタスクを稼働量に積むときの既定値（分） */
   defaultEstimateMin: number
   /** 音声入力を使うか（非対応環境では自動的に false 扱い） */
@@ -298,6 +379,9 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   workHours: DEFAULT_WORK_HOURS,
   workCalendar: EMPTY_WORK_CALENDAR,
+  // 既定のマスタは lib/workCategories.ts が持つ（型の定義がデータを抱えないようにする）。
+  // 保存層が読み込むときに埋める。
+  categoryGroups: [],
   defaultEstimateMin: 30,
   voiceEnabled: true,
   keepAudio: true,

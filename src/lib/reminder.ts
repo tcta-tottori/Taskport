@@ -72,7 +72,8 @@ export function upcoming(tasks: Task[], leadMin: number, now = Date.now()): { ta
 function body(task: Task, leadMin: number): string {
   const when = task.dueTime ? `${task.dueTime} 締め` : '本日締め'
   const lead = leadMin > 0 ? `あと${leadMin}分。` : ''
-  return `${lead}${when}${task.category ? ` ／ ${task.category}` : ''}`
+  const cat = task.categories.join(' / ')
+  return `${lead}${when}${cat ? ` ／ ${cat}` : ''}`
 }
 
 /**

@@ -1,6 +1,6 @@
 import { dayKey } from '../../lib/date'
 import { localParse } from './localParse'
-import type { Draft, Source } from '../../types'
+import type { CategoryGroup, Draft, Source } from '../../types'
 
 /* =========================================================
  * 構造化パイプライン（共通）
@@ -23,13 +23,16 @@ export interface ParseResult {
 /**
  * 自然文をタスク候補に分解する。
  * 1文＝1タスクを基本とし、期限・時刻・優先度・区分を読み取る。
+ * 区分は複数当たることがある（先頭が主区分）。
  */
 export function parseToTasks(
   text: string,
   source: Source,
-  options: { today?: string } = {},
+  options: { today?: string; categoryGroups?: CategoryGroup[] } = {},
 ): ParseResult {
   const body = text.trim()
   if (!body) return { drafts: [] }
-  return { drafts: localParse(body, source, options.today ?? dayKey()) }
+  return {
+    drafts: localParse(body, source, options.today ?? dayKey(), options.categoryGroups ?? []),
+  }
 }

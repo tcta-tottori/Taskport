@@ -135,7 +135,7 @@ export function eventToDraft(ev: CalendarEvent): Draft {
     due: ev.day,
     dueTime: ev.startTime,
     estimateMin: minutes,
-    category: '会議',
+    categories: ['打合せ、来客対応'],
     priority: 'mid',
   }
 }

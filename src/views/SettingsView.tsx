@@ -1,11 +1,19 @@
 import { useRef, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { Reveal } from '../components/Reveal'
+import { catStyle } from '../components/CategoryChip'
+import { CategorySheet } from './CategorySheet'
 import { dayKey, durationLabel, toMinutes } from '../lib/date'
 import { workHoursSummary } from '../lib/workday'
 import { makeBackup, readBackup } from '../lib/backup'
 import { downloadText } from '../ports/out/download'
-import { DEFAULT_WORK_HOURS, type Settings, type Task, type WorkHours } from '../types'
+import {
+  DEFAULT_WORK_HOURS,
+  type CategoryGroup,
+  type Settings,
+  type Task,
+  type WorkHours,
+} from '../types'
 import { APP_VERSION, buildLabel } from '../version'
 import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
 import { askPermission, leadLabel, notificationsUsable, triggersSupported } from '../lib/reminder'
@@ -50,6 +58,7 @@ export function SettingsView({
   onSyncNow,
   onClearRemote,
   onEditCalendar,
+  onChangeCategoryGroups,
 }: {
   settings: Settings
   tasks: Task[]
@@ -63,12 +72,15 @@ export function SettingsView({
   onClearRemote: () => Promise<void>
   /** 会社カレンダーの画面を開く */
   onEditCalendar: () => void
+  /** 区分のマスタを直したとき（その場で保存する） */
+  onChangeCategoryGroups: (next: CategoryGroup[]) => void
 }) {
   const [draft, setDraft] = useState<Settings>(settings)
   const [connected, setConnected] = useState(isConnected())
   const [connecting, setConnecting] = useState(false)
   const [clearingRemote, setClearingRemote] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [editingCats, setEditingCats] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const whError = validateWorkHours(draft.workHours)
   const summary = workHoursSummary(draft.workHours)
@@ -102,6 +114,16 @@ export function SettingsView({
 
   return (
     <div className="tp-view">
+      {editingCats && (
+        <CategorySheet
+          groups={settings.categoryGroups}
+          selected={[]}
+          manageOnly
+          onCommit={() => setEditingCats(false)}
+          onChangeGroups={onChangeCategoryGroups}
+          onClose={() => setEditingCats(false)}
+        />
+      )}
       <Reveal>
         <section className="tp-panel">
           <h2 className="tp-panel-title">勤務時間</h2>
@@ -230,6 +252,31 @@ export function SettingsView({
             <button type="button" className="tp-btn-ghost" onClick={onEditCalendar}>
               <Icon name="calendar" size={15} />
               カレンダーを開く
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">区分とグループ</h2>
+          <p className="tp-note">
+            タスクに付ける区分と、そのまとまり（グループ）です。
+            グループは<b>集計と色分けの単位</b>で、分析の「区分ごとの時間」と一覧のチップに出ます。
+          </p>
+          <div className="tp-cat-sum">
+            {settings.categoryGroups.map((g) => (
+              <span key={g.id} className="tp-cat-sumitem" style={catStyle(g.color)}>
+                <span className="tp-cat-dot" aria-hidden="true" />
+                {g.name}
+                <b className="tp-mono">{g.items.length}</b>
+              </span>
+            ))}
+          </div>
+          <div className="tp-row-end">
+            <button type="button" className="tp-btn-ghost" onClick={() => setEditingCats(true)}>
+              <Icon name="pencil" size={15} />
+              区分を直す
             </button>
           </div>
         </section>

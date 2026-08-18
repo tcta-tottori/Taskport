@@ -5,7 +5,9 @@ import { repeatLabel } from '../lib/repeat'
 import { timeboxLabel } from '../lib/timebox'
 import { durationLabel } from '../lib/date'
 import { Icon } from './Icon'
-import { PRIORITY_LABEL, type Task, type WorkHours } from '../types'
+import { CategoryChip } from './CategoryChip'
+import { colorOf } from '../lib/workCategories'
+import { PRIORITY_LABEL, type CategoryGroup, type Task, type WorkHours } from '../types'
 
 /**
  * 一覧の1件。
@@ -22,11 +24,14 @@ export function TaskCard({
   onEdit,
   onToggleSubtask,
   workHours,
+  categoryGroups,
 }: {
   task: Task
   today: string
   /** 時間枠の名前を出すために使う。省略すると枠は出さない */
   workHours?: WorkHours
+  /** 区分の色を引くためのマスタ */
+  categoryGroups: CategoryGroup[]
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
   /** 手順1つの済／未了を切り替える */
@@ -71,7 +76,9 @@ export function TaskCard({
                 <Icon name="repeat" size={11} /> {repeatLabel(task.repeat)}
               </span>
             )}
-            {task.category && <span className="tp-chip-cat">{task.category}</span>}
+            {task.categories.map((c) => (
+              <CategoryChip key={c} label={c} color={colorOf(categoryGroups, c)} />
+            ))}
             <span className="tp-pri-tag">{PRIORITY_LABEL[task.priority]}</span>
           </span>
         </button>

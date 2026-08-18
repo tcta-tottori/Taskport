@@ -100,7 +100,7 @@ export function WrapUpSheet({
                     <small className="tp-mono">
                       {t.dueTime ? `${t.dueTime} ／ ` : ''}
                       {durationLabel(taskMinutes(t, settings.defaultEstimateMin))}
-                      {t.category ? ` ／ ${t.category}` : ''}
+                      {t.categories.length > 0 ? ` ／ ${t.categories.join('・')}` : ''}
                     </small>
                   </span>
                 </li>

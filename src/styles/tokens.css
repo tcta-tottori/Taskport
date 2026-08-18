@@ -52,6 +52,23 @@
   --amber:       #a15c07;
   --rec:         #d81b52;  /* 録音中 */
 
+  /* --- 区分グループの色 ---
+     グループごとに色を持たせ、一覧のチップ・絞り込み・分析のグラフで
+     同じ色になるようにする。どれも白地の上で文字として読める明度
+     （4.5:1 以上）に落としてある。塗り面として使うときは
+     color-mix で薄めた上に同じ色の文字を載せる。
+     どの色を使うかは設定（CategoryGroup.color）が名前で持つ。 */
+  --cat-indigo:  #3f4fc4;
+  --cat-violet:  #6b3fbe;
+  --cat-magenta: #a3277f;
+  --cat-rose:    #b03a4e;
+  --cat-amber:   #8a5a12;
+  --cat-olive:   #5f6b17;
+  --cat-green:   #1c7346;
+  --cat-teal:    #0f6f73;
+  --cat-blue:    #17608f;
+  --cat-slate:   #4d5666;
+
   /* --- グラフ（StudyDeck の成績画面に合わせた読み取り優先の配色） --- */
   --chart-bar:   #4a5bd0;
   --chart-line:  #576070;

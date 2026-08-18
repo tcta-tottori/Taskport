@@ -1,7 +1,13 @@
 import { diffDays } from './date'
 import { sortDone, sortTasks } from './tasks'
 import { groupOf } from './workCategories'
-import { PRIORITY_LABEL, type DueRange, type Task, type TaskFilter } from '../types'
+import {
+  PRIORITY_LABEL,
+  type CategoryGroup,
+  type DueRange,
+  type Task,
+  type TaskFilter,
+} from '../types'
 
 /* =========================================================
  * 検索と絞り込み
@@ -44,7 +50,9 @@ function matchQuery(task: Task, q: string): boolean {
   const terms = norm(q).split(/\s+/).filter(Boolean)
   if (terms.length === 0) return true
   const hay = norm(
-    `${task.title} ${task.note} ${task.category} ${task.subtasks.map((s) => s.title).join(' ')}`,
+    `${task.title} ${task.note} ${task.categories.join(' ')} ${task.subtasks
+      .map((s) => s.title)
+      .join(' ')}`,
   )
   return terms.every((t) => hay.includes(t))
 }
@@ -82,15 +90,31 @@ export function activeCount(f: TaskFilter): number {
   )
 }
 
+/** タスクが属するグループ名（重複なし）。区分が無いときは「未分類」1つ。 */
+export function groupsOfTask(task: Task, groups: CategoryGroup[]): string[] {
+  if (task.categories.length === 0) return [groupOf(groups, '')]
+  return [...new Set(task.categories.map((c) => groupOf(groups, c)))]
+}
+
 /**
  * 絞り込みを当てる。未完了を先に、完了を後ろに並べる。
  * 完了は includeDone のときだけ混ざる。
  */
-export function applyFilter(tasks: Task[], f: TaskFilter, today: string): Task[] {
+export function applyFilter(
+  tasks: Task[],
+  f: TaskFilter,
+  today: string,
+  groups: CategoryGroup[],
+): Task[] {
   const hit = tasks.filter((t) => {
     if (!f.includeDone && t.status === 'done') return false
     if (!matchQuery(t, f.q)) return false
-    if (f.groups.length > 0 && !f.groups.includes(groupOf(t.category))) return false
+    // 区分は複数あるので、どれか1つでも当たれば残す
+    if (
+      f.groups.length > 0 &&
+      !groupsOfTask(t, groups).some((g) => f.groups.includes(g))
+    )
+      return false
     if (f.priorities.length > 0 && !f.priorities.includes(t.priority)) return false
     if (!matchDue(t, f.due, today)) return false
     return true

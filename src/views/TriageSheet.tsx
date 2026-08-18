@@ -101,7 +101,7 @@ export function TriageSheet({
                   <span className="is-over">{dueLabel(task.due, today)}</span>
                   {' ／ '}
                   {durationLabel(taskMinutes(task, settings.defaultEstimateMin))}
-                  {task.category && ` ／ ${task.category}`}
+                  {task.categories.length > 0 && ` ／ ${task.categories.join('・')}`}
                 </p>
               </article>
 

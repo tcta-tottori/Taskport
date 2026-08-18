@@ -19,7 +19,7 @@ import type { SavedFilter, Settings, Task, TaskFilter } from '../types'
 const EMPTY: Record<ListTab, { head: string; body: string }> = {
   today: {
     head: '今日締めのタスクはありません',
-    body: '下のマイクを押して話すか、キーボードで用件をそのまま書いてください。',
+    body: '左下のマイクで話すか、右下の ＋ から書いてください。',
   },
   week: {
     head: '今週の期限はまだ空いています',
@@ -27,7 +27,7 @@ const EMPTY: Record<ListTab, { head: string; body: string }> = {
   },
   all: {
     head: 'まだタスクがありません',
-    body: '歩きながらなら音声、PCならキーボード。どちらも同じ場所に貯まります。',
+    body: '歩きながらなら左下のマイク、机の前なら右下の ＋。どちらも同じ場所に貯まります。',
   },
   done: {
     head: '完了したタスクはまだありません',
@@ -83,8 +83,8 @@ export function ListView({
   // 絞り込み中はタブを離れ、台帳の全件から探す。
   // 「今日」に立ったまま来月の1件を探して0件、という迷い方を防ぐ。
   const found = useMemo(
-    () => (searching ? applyFilter(tasks, filter, today) : []),
-    [tasks, filter, today, searching],
+    () => (searching ? applyFilter(tasks, filter, today, settings.categoryGroups) : []),
+    [tasks, filter, today, searching, settings.categoryGroups],
   )
   const shown = useMemo(
     () => (searching ? found : filterByTab(tasks, tab, today)),
@@ -107,7 +107,7 @@ export function ListView({
       <section className="tp-today-card">
         <div className="tp-today-row">
           <div>
-            <p className="tp-label">本日の勤務</p>
+            <p className="tp-label tp-today-label">TODAY</p>
             <p className="tp-today-span">{wh.span}</p>
             {wh.breakSpan && (
               <p className="tp-today-break">
@@ -164,6 +164,7 @@ export function ListView({
       <div className="tp-sticky">
         <FilterBar
           filter={filter}
+          categoryGroups={settings.categoryGroups}
           onChange={onFilterChange}
           saved={saved}
           onSave={onSaveFilter}
@@ -208,6 +209,7 @@ export function ListView({
               onEdit={onEdit}
               onToggleSubtask={onToggleSubtask}
               workHours={settings.workHours}
+              categoryGroups={settings.categoryGroups}
             />
           ))}
         </ul>

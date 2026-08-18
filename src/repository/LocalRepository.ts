@@ -1,13 +1,16 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { Repository } from './Repository'
 import { normalizeCalendar } from '../lib/workCalendar'
+import { cleanCategories, defaultCategoryGroups, normalizeGroups } from '../lib/workCategories'
 import {
   DEFAULT_SETTINGS,
   DEFAULT_WORK_HOURS,
   RECORDING_KEEP,
+  TEMPLATE_KEEP,
   type Recording,
   type Settings,
   type Task,
+  type TaskTemplate,
 } from '../types'
 
 /* =========================================================
@@ -28,6 +31,8 @@ import {
 const MAIN_DB = 'taskport'
 /** meta ストアの中で墓標を置くキー。保存先を増やさずに済ませる */
 const TOMBSTONE_KEY = 'tombstones'
+/** meta ストアの中で「記憶したタスク」を置くキー */
+const TEMPLATE_KEY = 'templates'
 const MEDIA_DB = 'taskport-media'
 
 /** 開けなかったときに諦めるまでの回数（端末が寝起きのときは1回目だけ落ちることがある） */
@@ -329,20 +334,31 @@ function media(): Promise<IDBPDatabase<MediaDB>> {
   return mediaPromise
 }
 
+/** 区分。v1.10 以前の1つだけの形（category: string）も読めるようにする。 */
+function normalizeCategories(raw: Task & { category?: unknown }): string[] {
+  if (Array.isArray(raw.categories)) {
+    return cleanCategories(raw.categories.filter((c): c is string => typeof c === 'string'))
+  }
+  return typeof raw.category === 'string' && raw.category.trim() ? [raw.category.trim()] : []
+}
+
 /**
  * 保存済みタスクを現行の型へ寄せる。
  * 古いバックアップの取り込みや、後から増えた項目（estimateMin など）が
  * 欠けているレコードで画面が壊れないようにするための防波堤。
  */
 function normalizeTask(raw: Task): Task {
+  // 古い1つだけの区分（category）は categories へ移し、残骸は持ち回らない
+  const { category: _legacyCategory, ...rest } = raw as Task & { category?: unknown }
   return {
-    ...raw,
+    ...rest,
     note: raw.note ?? '',
     due: raw.due ?? null,
     dueTime: raw.dueTime ?? null,
     estimateMin: typeof raw.estimateMin === 'number' ? raw.estimateMin : null,
     priority: raw.priority ?? 'mid',
-    category: raw.category ?? '',
+    // v1.10 以前は区分が1つ（category: string）だった。読むときにここで寄せる。
+    categories: normalizeCategories(raw),
     subtasks: Array.isArray(raw.subtasks) ? raw.subtasks : [],
     timebox: raw.timebox ?? null,
     repeat: raw.repeat ?? null,
@@ -440,7 +456,7 @@ export class LocalRepository implements Repository {
 
   async loadSettings(): Promise<Settings> {
     const raw = (await (await main()).get('meta', 'settings')) as Partial<Settings> | undefined
-    if (!raw) return DEFAULT_SETTINGS
+    if (!raw) return { ...DEFAULT_SETTINGS, categoryGroups: defaultCategoryGroups() }
     return {
       ...DEFAULT_SETTINGS,
       ...raw,
@@ -448,6 +464,8 @@ export class LocalRepository implements Repository {
       workCalendar: normalizeCalendar(raw.workCalendar),
       // 後から足した項目。古い保存には無いので既定で埋める
       savedFilters: Array.isArray(raw.savedFilters) ? raw.savedFilters : [],
+      // 区分のマスタ。無い（v1.10 以前）なら既定を入れる
+      categoryGroups: normalizeGroups(raw.categoryGroups),
       syncEnabled: raw.syncEnabled === true,
       reminderEnabled: raw.reminderEnabled === true,
       reminderLeadMin: typeof raw.reminderLeadMin === 'number' ? raw.reminderLeadMin : 10,
@@ -456,6 +474,22 @@ export class LocalRepository implements Repository {
 
   async saveSettings(settings: Settings): Promise<void> {
     await (await main()).put('meta', settings, 'settings')
+  }
+
+  /* --- 記憶したタスク（定型）。端末内にのみ置き、同期には乗せない --- */
+
+  async listTemplates(): Promise<TaskTemplate[]> {
+    const raw = (await (await main()).get('meta', TEMPLATE_KEY)) as unknown
+    if (!Array.isArray(raw)) return []
+    return raw.filter((t): t is TaskTemplate => {
+      if (typeof t !== 'object' || t === null) return false
+      const o = t as Record<string, unknown>
+      return typeof o.id === 'string' && typeof o.title === 'string' && o.title.trim() !== ''
+    })
+  }
+
+  async saveTemplates(list: TaskTemplate[]): Promise<void> {
+    await (await main()).put('meta', list.slice(0, TEMPLATE_KEEP), TEMPLATE_KEY)
   }
 
   /* --- 録音。開けなくても台帳の操作は続けられるようにする --- */

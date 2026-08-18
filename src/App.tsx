@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon, type IconName } from './components/Icon'
-import { InputDock } from './components/InputDock'
+import { QuickBar } from './components/QuickBar'
 import { Toast, type ToastMessage } from './components/Toast'
 import { TapWave } from './components/TapWave'
 import { ListView } from './views/ListView'
@@ -38,15 +38,19 @@ import {
   type ForegroundReminders,
 } from './lib/reminder'
 import { ulid } from './lib/ulid'
+import { forget, remember } from './lib/templates'
+import { cleanCategories } from './lib/workCategories'
 import {
   DEFAULT_SETTINGS,
   type CalendarEvent,
+  type CategoryGroup,
   type Draft,
   type Recording,
   type Settings,
   type Source,
   type Task,
   type TaskFilter,
+  type TaskTemplate,
 } from './types'
 
 /* =========================================================
@@ -112,6 +116,13 @@ export default function App() {
   const [creating, setCreating] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
+  /** 記憶したタスク（定型）。登録するたびに控え、直接入力から呼び出す */
+  const [templates, setTemplates] = useState<TaskTemplate[]>([])
+  /** 続けて登録したときに控えを取りこぼさないよう、いまの控えを常に持っておく */
+  const templatesRef = useRef<TaskTemplate[]>([])
+  /** いまの台帳と設定。あとから走る処理（同期・リマインド）が古い値を掴まないようにする */
+  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS })
+  liveRef.current = { tasks, settings }
   const [today, setToday] = useState(dayKey())
   const [checking, setChecking] = useState(false)
 
@@ -139,9 +150,15 @@ export default function App() {
     setLoading(true)
     setLoadError(null)
     try {
-      const [list, s] = await Promise.all([repository.list(), repository.loadSettings()])
+      const [list, s, tpl] = await Promise.all([
+        repository.list(),
+        repository.loadSettings(),
+        repository.listTemplates(),
+      ])
       setTasks(list)
       setSettings(s)
+      setTemplates(tpl)
+      templatesRef.current = tpl
     } catch (err) {
       setTasks([])
       setLoadError({
@@ -202,7 +219,7 @@ export default function App() {
 
   /**
    * PC のキー操作。
-   *   /  … 探す      n … 直接入力    e … 書き出し
+   *   /  … 探す      n … タスクを作る    e … 書き出し
    *   1〜4 … 一覧のタブ              Esc … 開いている面を閉じる
    * 文字を打っている最中は何もしない（入力の邪魔をしない）。
    */
@@ -277,7 +294,10 @@ export default function App() {
     (text: string, source: Source, recordingId?: string) => {
       setBusy(true)
       try {
-        const result = parseToTasks(text, source, { today })
+        const result = parseToTasks(text, source, {
+          today,
+          categoryGroups: settings.categoryGroups,
+        })
         if (result.drafts.length === 0) {
           notify('タスクを取り出せませんでした。用件をもう少しはっきり書いてください。', 'error')
           return
@@ -287,7 +307,7 @@ export default function App() {
         setBusy(false)
       }
     },
-    [today, notify],
+    [today, notify, settings.categoryGroups],
   )
 
   // 他アプリから共有されてきた本文も同じパイプラインへ流す
@@ -354,10 +374,24 @@ export default function App() {
     })
   }, [])
 
+  /** 登録したタスクを控える。次から「記憶から呼び出す」で埋められる。 */
+  const rememberAll = useCallback(async (list: Task[]) => {
+    let next = templatesRef.current
+    for (const t of list) next = remember(next, t)
+    templatesRef.current = next
+    setTemplates(next)
+    try {
+      await repository.saveTemplates(next)
+    } catch {
+      // 控えは補助。保存できなくてもタスクの登録は済んでいるので、画面は止めない
+    }
+  }, [])
+
   const commitDrafts = useCallback(
     async (drafts: Draft[]) => {
       const newTasks = drafts.map(draftToTask)
       await repository.add(newTasks)
+      await rememberAll(newTasks)
       // どの録音から出たタスクかを残す（録音履歴から辿れるようにする）
       if (pending?.recordingId) {
         await repository.updateRecording(pending.recordingId, { taskIds: newTasks.map((t) => t.id) })
@@ -367,7 +401,7 @@ export default function App() {
       notify(`${newTasks.length}件を登録しました`)
       setView('list')
     },
-    [reload, notify, pending],
+    [reload, notify, pending, rememberAll],
   )
 
   const toggleDone = useCallback(
@@ -411,21 +445,23 @@ export default function App() {
           dueTime: draft.dueTime,
           estimateMin: draft.estimateMin,
           priority: draft.priority,
-          category: draft.category.trim(),
+          categories: cleanCategories(draft.categories),
           subtasks: draft.subtasks.filter((t) => t.title.trim()).map((t) => ({ ...t, title: t.title.trim() })),
           timebox: draft.timebox,
           repeat: draft.due ? draft.repeat : null,
         })
         notify('保存しました')
       } else {
-        await repository.add([draftToTask(draft)])
+        const created = draftToTask(draft)
+        await repository.add([created])
+        await rememberAll([created])
         notify('登録しました')
       }
       await reload()
       setEditing(null)
       setCreating(false)
     },
-    [editing, reload, notify],
+    [editing, reload, notify, rememberAll],
   )
 
   const removeTask = useCallback(
@@ -442,6 +478,27 @@ export default function App() {
     setSettings(next)
     await repository.saveSettings(next)
   }, [])
+
+  /** 記憶したタスクを1件忘れる */
+  const forgetTemplate = useCallback(async (t: TaskTemplate) => {
+    const next = forget(templatesRef.current, t.id)
+    templatesRef.current = next
+    setTemplates(next)
+    await repository.saveTemplates(next)
+  }, [])
+
+  /**
+   * 区分のマスタを直す。選択画面からも設定画面からも同じここを通る。
+   * 直したその場で保存する（「足したのに閉じたら消えた」を起こさないため）。
+   */
+  const saveCategoryGroups = useCallback(
+    (groups: CategoryGroup[]) => {
+      const next: Settings = { ...liveRef.current.settings, categoryGroups: groups }
+      setSettings(next)
+      void repository.saveSettings(next).catch(() => notify('区分を保存できませんでした', 'error'))
+    },
+    [notify],
+  )
 
   /* --- 絞り込みの保存。設定と同じ場所に置く（端末内にのみ残る） --- */
 
@@ -493,8 +550,6 @@ export default function App() {
     void rescheduleReminders(tasks, settings)
   }, [tasks, settings, loading])
 
-  const liveRef = useRef({ tasks, settings })
-  liveRef.current = { tasks, settings }
   const fgRef = useRef<ForegroundReminders | null>(null)
   useEffect(() => {
     const fg = startForegroundReminders(
@@ -747,7 +802,7 @@ export default function App() {
           )}
           {desktop && (
             <p className="tp-keys">
-              <kbd>/</kbd> 探す <kbd>n</kbd> 直接入力 <kbd>e</kbd> 書き出し{' '}
+              <kbd>/</kbd> 探す <kbd>n</kbd> タスクを作る <kbd>e</kbd> 書き出し{' '}
               <kbd>1</kbd>〜<kbd>4</kbd> タブ <kbd>Esc</kbd> 閉じる
             </p>
           )}
@@ -869,6 +924,7 @@ export default function App() {
             settings={settings}
             tasks={tasks}
             onSave={(s) => void guard(() => saveSettings(s))}
+            onChangeCategoryGroups={saveCategoryGroups}
             sync={sync}
             onSyncNow={() => void runSync(true)}
             onClearRemote={() => guard(() => clearSyncStore())}
@@ -879,14 +935,13 @@ export default function App() {
         )}
       </main>
 
+      {/* 左下＝録音、右下＝＋（タスクを作る）。統合バーは v1.11.0 で廃止した。 */}
       {view !== 'settings' && !session.recording && (
-        <InputDock
+        <QuickBar
           busy={busy}
           voiceSupported={voiceSupported()}
-          onSubmitText={(text, source) => runParse(text, source)}
           onStartVoice={() => void session.start()}
           onOpenForm={() => setCreating(true)}
-          keyboardFirst={desktop}
         />
       )}
 
@@ -905,6 +960,8 @@ export default function App() {
           sourceText={pending.sourceText}
           today={today}
           workHours={settings.workHours}
+          categoryGroups={settings.categoryGroups}
+          onChangeCategoryGroups={saveCategoryGroups}
           onCommit={(d) => void guard(() => commitDrafts(d))}
           onCancel={() => setPending(null)}
         />
@@ -915,6 +972,16 @@ export default function App() {
           task={editing ?? undefined}
           initialDraft={emptyDraft('form')}
           workHours={settings.workHours}
+          categoryGroups={settings.categoryGroups}
+          onChangeCategoryGroups={saveCategoryGroups}
+          templates={templates}
+          onForgetTemplate={(t) => void guard(() => forgetTemplate(t))}
+          parsing={busy}
+          onParseText={(text) => {
+            // 文章からの候補は確認画面へ渡す。作りかけの1件は閉じる。
+            setCreating(false)
+            runParse(text, 'text')
+          }}
           onSave={(d) => void guard(() => saveEdit(d))}
           onDelete={(t) => void guard(() => removeTask(t))}
           onClose={() => {

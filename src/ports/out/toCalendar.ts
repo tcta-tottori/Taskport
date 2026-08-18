@@ -49,7 +49,7 @@ function spanOf(task: Task, defaultEstimateMin: number): Span | null {
 
 function detailOf(task: Task): string {
   const lines = [task.note]
-  if (task.category) lines.push(`区分: ${task.category}`)
+  if (task.categories.length > 0) lines.push(`区分: ${task.categories.join(' / ')}`)
   lines.push(`優先度: ${task.priority}`)
   lines.push('Taskport から書き出し')
   return lines.filter(Boolean).join('\n')

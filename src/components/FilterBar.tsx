@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Icon } from './Icon'
 import {
   activeCount,
@@ -8,8 +8,14 @@ import {
   isFilterActive,
   sameFilter,
 } from '../lib/taskFilter'
-import { CATEGORY_MASTER } from '../lib/workCategories'
-import { PRIORITIES, PRIORITY_LABEL, type SavedFilter, type TaskFilter } from '../types'
+import {
+  PRIORITIES,
+  PRIORITY_LABEL,
+  UNCATEGORIZED,
+  type CategoryGroup,
+  type SavedFilter,
+  type TaskFilter,
+} from '../types'
 
 /* =========================================================
  * 検索と絞り込みの操作部
@@ -22,13 +28,22 @@ function Chip({
   on,
   label,
   onClick,
+  color,
 }: {
   on: boolean
   label: string
   onClick: () => void
+  /** 区分のグループ色（グラフとカードの色に合わせる） */
+  color?: string
 }) {
   return (
-    <button type="button" className={`tp-fchip${on ? ' is-on' : ''}`} aria-pressed={on} onClick={onClick}>
+    <button
+      type="button"
+      className={`tp-fchip${on ? ' is-on' : ''}${color ? ' tp-fchip-cat' : ''}`}
+      style={color ? ({ '--cat': color } as CSSProperties) : undefined}
+      aria-pressed={on}
+      onClick={onClick}
+    >
       {label}
     </button>
   )
@@ -41,8 +56,11 @@ export function FilterBar({
   onSave,
   onRemoveSaved,
   hits,
+  categoryGroups,
 }: {
   filter: TaskFilter
+  /** 絞り込みに出すグループ（設定のマスタ） */
+  categoryGroups: CategoryGroup[]
   onChange: (next: TaskFilter) => void
   saved: SavedFilter[]
   /** 名前を付けていまの条件を残す */
@@ -122,20 +140,21 @@ export function FilterBar({
 
       {open && (
         <div className="tp-filter-panel">
-          <p className="tp-filter-head">区分（大分類）</p>
+          <p className="tp-filter-head">区分（グループ）</p>
           <div className="tp-chips">
-            {CATEGORY_MASTER.map((g) => (
+            {categoryGroups.map((g) => (
               <Chip
-                key={g.group}
-                label={g.group}
-                on={filter.groups.includes(g.group)}
-                onClick={() => onChange({ ...filter, groups: toggleIn(filter.groups, g.group) })}
+                key={g.id}
+                label={g.name}
+                color={`var(--cat-${g.color})`}
+                on={filter.groups.includes(g.name)}
+                onClick={() => onChange({ ...filter, groups: toggleIn(filter.groups, g.name) })}
               />
             ))}
             <Chip
-              label="未分類"
-              on={filter.groups.includes('未分類')}
-              onClick={() => onChange({ ...filter, groups: toggleIn(filter.groups, '未分類') })}
+              label={UNCATEGORIZED}
+              on={filter.groups.includes(UNCATEGORIZED)}
+              onClick={() => onChange({ ...filter, groups: toggleIn(filter.groups, UNCATEGORIZED) })}
             />
           </div>
 
