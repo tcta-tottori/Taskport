@@ -136,6 +136,33 @@ export interface Recording {
 /** 端末に残す録音の本数。古いものから消す。 */
 export const RECORDING_KEEP = 20
 
+/* ---------------------------------------------------------
+ * 検索と絞り込み
+ * ------------------------------------------------------- */
+
+/** 期限での絞り込みの範囲 */
+export type DueRange = 'any' | 'overdue' | 'today' | 'week' | 'later' | 'none'
+
+export interface TaskFilter {
+  /** 空白区切りで AND。件名・メモ・区分を見る */
+  q: string
+  /** 大分類（workCategories の group）。空なら絞らない */
+  groups: string[]
+  /** 空なら絞らない */
+  priorities: Priority[]
+  due: DueRange
+  /** 完了したタスクも対象にするか */
+  includeDone: boolean
+}
+
+/** 保存した絞り込み。端末内にのみ置く。 */
+export interface SavedFilter {
+  /** ULID */
+  id: string
+  name: string
+  filter: TaskFilter
+}
+
 export interface Settings {
   workHours: WorkHours
   /** 見積が未入力のタスクを稼働量に積むときの既定値（分） */
@@ -150,6 +177,8 @@ export interface Settings {
   googleClientId: string
   /** 読み込むカレンダーID。既定は primary */
   googleCalendarId: string
+  /** 保存した絞り込み。一覧の検索欄からチップで呼び出す */
+  savedFilters: SavedFilter[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -160,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
   keepAwake: false,
   googleClientId: '',
   googleCalendarId: 'primary',
+  savedFilters: [],
 }
 
 /* ---------------------------------------------------------

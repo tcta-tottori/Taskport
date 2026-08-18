@@ -23,6 +23,7 @@ import { voiceSupported } from './ports/in/useVoiceInput'
 import { dayKey } from './lib/date'
 import { draftToTask, emptyDraft, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
+import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { ulid } from './lib/ulid'
 import {
   DEFAULT_SETTINGS,
@@ -32,6 +33,7 @@ import {
   type Settings,
   type Source,
   type Task,
+  type TaskFilter,
 } from './types'
 
 /* =========================================================
@@ -68,6 +70,7 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [view, setView] = useState<ViewKey>('list')
   const [tab, setTab] = useState<ListTab>('today')
+  const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER)
   const [drawer, setDrawer] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<Pending | null>(null)
@@ -293,6 +296,34 @@ export default function App() {
     await repository.saveSettings(next)
   }, [])
 
+  /* --- 絞り込みの保存。設定と同じ場所に置く（端末内にのみ残る） --- */
+
+  const saveFilter = useCallback(
+    (name: string) => {
+      if (settings.savedFilters.some((f) => sameFilter(f.filter, filter))) return
+      const next: Settings = {
+        ...settings,
+        savedFilters: [...settings.savedFilters, { id: ulid(), name, filter }],
+      }
+      setSettings(next)
+      void repository.saveSettings(next)
+      notify('この条件を残しました')
+    },
+    [settings, filter, notify],
+  )
+
+  const removeSavedFilter = useCallback(
+    (id: string) => {
+      const next: Settings = {
+        ...settings,
+        savedFilters: settings.savedFilters.filter((f) => f.id !== id),
+      }
+      setSettings(next)
+      void repository.saveSettings(next)
+    },
+    [settings],
+  )
+
   const restore = useCallback(
     async (next: Task[], nextSettings: Partial<Settings> | null) => {
       await repository.replaceAll(next)
@@ -427,6 +458,11 @@ export default function App() {
             onTabChange={setTab}
             onToggle={(t) => void toggleDone(t)}
             onEdit={setEditing}
+            filter={filter}
+            onFilterChange={setFilter}
+            saved={settings.savedFilters}
+            onSaveFilter={saveFilter}
+            onRemoveSavedFilter={removeSavedFilter}
           />
         ) : view === 'schedule' ? (
           <ScheduleView

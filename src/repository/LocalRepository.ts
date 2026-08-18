@@ -267,6 +267,8 @@ export class LocalRepository implements Repository {
       ...DEFAULT_SETTINGS,
       ...raw,
       workHours: { ...DEFAULT_WORK_HOURS, ...(raw.workHours ?? {}) },
+      // 後から足した項目。古い保存には無いので既定で埋める
+      savedFilters: Array.isArray(raw.savedFilters) ? raw.savedFilters : [],
     }
   }
 

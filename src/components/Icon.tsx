@@ -29,6 +29,11 @@ export type IconName =
   | 'sparkle'
   | 'alert'
   | 'sun'
+  | 'search'
+  | 'filter'
+  | 'repeat'
+  | 'bell'
+  | 'checklist'
 
 const PATHS: Record<IconName, ReactElement> = {
   list: (
@@ -138,6 +143,34 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <circle cx="12" cy="12" r="4" />
       <path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8l1.8-1.8M18 6l1.8-1.8" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4.5 4.5" />
+    </>
+  ),
+  filter: <path d="M3.5 5.5h17l-6.5 7.5v6l-4 2v-8z" />,
+  repeat: (
+    <>
+      <path d="M4 9a5 5 0 0 1 5-5h11" />
+      <path d="M17 1.5 20.5 4 17 6.5" />
+      <path d="M20 15a5 5 0 0 1-5 5H4" />
+      <path d="M7 17.5 3.5 20 7 22.5" />
+    </>
+  ),
+  bell: (
+    <>
+      <path d="M18 8.5a6 6 0 0 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 14.5 18 8.5z" />
+      <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+    </>
+  ),
+  checklist: (
+    <>
+      <path d="M3.5 6.5 5 8l2.5-3" />
+      <path d="M3.5 16.5 5 18l2.5-3" />
+      <path d="M11 7h9.5M11 17h9.5" />
     </>
   ),
 }

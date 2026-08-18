@@ -2,11 +2,13 @@ import { useMemo } from 'react'
 import { Segmented } from '../components/Segmented'
 import { TaskCard } from '../components/TaskCard'
 import { Icon } from '../components/Icon'
+import { FilterBar } from '../components/FilterBar'
 import { filterByTab, LIST_TABS, type ListTab } from '../lib/tasks'
+import { applyFilter, isFilterActive } from '../lib/taskFilter'
 import { durationLabel } from '../lib/date'
 import { workloadOf } from '../lib/stats'
 import { trim, workHoursSummary } from '../lib/workday'
-import type { Settings, Task } from '../types'
+import type { SavedFilter, Settings, Task, TaskFilter } from '../types'
 
 /* =========================================================
  * 一覧ビュー（起動時の既定画面）
@@ -40,6 +42,11 @@ export function ListView({
   onTabChange,
   onToggle,
   onEdit,
+  filter,
+  onFilterChange,
+  saved,
+  onSaveFilter,
+  onRemoveSavedFilter,
 }: {
   tasks: Task[]
   today: string
@@ -48,6 +55,11 @@ export function ListView({
   onTabChange: (tab: ListTab) => void
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
+  filter: TaskFilter
+  onFilterChange: (next: TaskFilter) => void
+  saved: SavedFilter[]
+  onSaveFilter: (name: string) => void
+  onRemoveSavedFilter: (id: string) => void
 }) {
   const counts = useMemo(
     () =>
@@ -57,7 +69,17 @@ export function ListView({
       }, {}),
     [tasks, today],
   )
-  const shown = useMemo(() => filterByTab(tasks, tab, today), [tasks, tab, today])
+  const searching = isFilterActive(filter)
+  // 絞り込み中はタブを離れ、台帳の全件から探す。
+  // 「今日」に立ったまま来月の1件を探して0件、という迷い方を防ぐ。
+  const found = useMemo(
+    () => (searching ? applyFilter(tasks, filter, today) : []),
+    [tasks, filter, today, searching],
+  )
+  const shown = useMemo(
+    () => (searching ? found : filterByTab(tasks, tab, today)),
+    [searching, found, tasks, tab, today],
+  )
   const load = useMemo(() => workloadOf(tasks, today, settings), [tasks, today, settings])
   const wh = workHoursSummary(settings.workHours)
   const pct = Math.round(load.ratio * 100)
@@ -97,19 +119,40 @@ export function ListView({
         </p>
       </section>
 
-      <Segmented
-        items={LIST_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))}
-        value={tab}
-        onChange={onTabChange}
-        ariaLabel="表示するタスクの範囲"
+      <FilterBar
+        filter={filter}
+        onChange={onFilterChange}
+        saved={saved}
+        onSave={onSaveFilter}
+        onRemoveSaved={onRemoveSavedFilter}
+        hits={found.length}
       />
 
+      {!searching && (
+        <Segmented
+          items={LIST_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))}
+          value={tab}
+          onChange={onTabChange}
+          ariaLabel="表示するタスクの範囲"
+        />
+      )}
+
       {shown.length === 0 ? (
-        <div className="tp-empty">
-          <Icon name="sparkle" size={26} />
-          <p className="tp-empty-head">{EMPTY[tab].head}</p>
-          <p className="tp-empty-body">{EMPTY[tab].body}</p>
-        </div>
+        searching ? (
+          <div className="tp-empty">
+            <Icon name="search" size={26} />
+            <p className="tp-empty-head">当てはまるタスクはありません</p>
+            <p className="tp-empty-body">
+              語を短くするか、区分・優先度・期限の条件を外してみてください。
+            </p>
+          </div>
+        ) : (
+          <div className="tp-empty">
+            <Icon name="sparkle" size={26} />
+            <p className="tp-empty-head">{EMPTY[tab].head}</p>
+            <p className="tp-empty-body">{EMPTY[tab].body}</p>
+          </div>
+        )
       ) : (
         <ul className="tp-list">
           {shown.map((task) => (
@@ -118,7 +161,7 @@ export function ListView({
         </ul>
       )}
 
-      {tab !== 'done' && (
+      {!searching && tab !== 'done' && (
         <p className="tp-list-foot">
           勤務時間の既定は {trim(settings.workHours.start)} 始業・{trim(settings.workHours.end)} 終業。設定から変えられます。
         </p>
