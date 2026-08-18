@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { startMicLevel, type MicLevel } from '../../lib/micLevel'
 import { SegmentRecorder, shortfallWarning, type RecorderReport } from '../../lib/recorder'
 import {
   acquireWakeLock,
@@ -115,6 +116,12 @@ export function useRecordingSession(options: { keepAudio: boolean; keepAwake: bo
   const pausedMsRef = useRef(0)
   const pausedAtRef = useRef(0)
   const levelRef = useRef(0)
+  /** マイクの音量計。使えない環境では null（認識の合図で動かす） */
+  const meterRef = useRef<MicLevel | null>(null)
+  /** 音量計を張っている流れ。見張りが取り直したら張り替える */
+  const meterStreamRef = useRef<MediaStream | null>(null)
+  /** 音量計だけのために取った流れ（録音を残さない設定のとき） */
+  const meterOnlyStreamRef = useRef<MediaStream | null>(null)
   const optionsRef = useRef(options)
   optionsRef.current = options
 
@@ -147,8 +154,11 @@ export function useRecordingSession(options: { keepAudio: boolean; keepAwake: bo
         }
         currentRef.current = finalText
         setTranscript(compose(segmentsRef.current, finalText, interim))
-        levelRef.current = 0.85
-        setLevel(0.85)
+        // 音量計が使えないときの受け皿。使えるときは実測を優先する。
+        if (!meterRef.current) {
+          levelRef.current = 0.85
+          setLevel(0.85)
+        }
       }
       sr.onerror = (e) => {
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -225,6 +235,21 @@ export function useRecordingSession(options: { keepAudio: boolean; keepAwake: bo
       else recorderRef.current = null
     }
 
+    // ゲージ用にマイクの音量を測る。録音を残さない設定でも動かしたいので、
+    // 録音用の流れが無いときはここだけのために取る（音は残さない）。
+    try {
+      let stream = recorderRef.current?.getStream() ?? null
+      if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        meterOnlyStreamRef.current = stream
+      }
+      meterRef.current = startMicLevel(stream)
+      meterStreamRef.current = stream
+    } catch {
+      // マイクが取れなくても録音と認識は続ける（ゲージだけが動かない）
+      meterRef.current = null
+    }
+
     runningRef.current = true
     startedAtRef.current = Date.now()
     setSeconds(0)
@@ -255,8 +280,17 @@ export function useRecordingSession(options: { keepAudio: boolean; keepAwake: bo
     const durationSec = elapsedSec()
 
     stopRecognition()
+
+    // 音量計とその流れを片づける（マイクの表示を消すため、必ず止める）
+    meterRef.current?.stop()
+    meterRef.current = null
+    meterStreamRef.current = null
+    meterOnlyStreamRef.current?.getTracks().forEach((t) => t.stop())
+    meterOnlyStreamRef.current = null
+
     const text = compose(segmentsRef.current, '', '')
     setTranscript(text)
+    levelRef.current = 0
     setLevel(0)
 
     let audio: Blob | null = null
@@ -311,13 +345,35 @@ export function useRecordingSession(options: { keepAudio: boolean; keepAwake: bo
     return () => window.clearInterval(id)
   }, [recording, elapsedSec])
 
-  // 発話で跳ねた level を、話が止まったらゆっくり戻す
+  /**
+   * ゲージに出す音量。
+   *   音量計があるとき … マイクの実際の大きさをそのまま出す
+   *   無いとき         … 認識が返ってきた合図で跳ねさせ、あとは減衰させる
+   * 一時停止中は 0（ゲージは点に戻る）。
+   */
   useEffect(() => {
     if (!recording) return
     const id = window.setInterval(() => {
-      levelRef.current = levelRef.current > 0.02 ? levelRef.current * 0.86 : 0
+      if (pausedRef.current) {
+        levelRef.current = 0
+        setLevel(0)
+        return
+      }
+      const meter = meterRef.current
+      if (meter) {
+        // 見張りがマイクを取り直したら、音量計も張り替える
+        const now = recorderRef.current?.getStream() ?? meterOnlyStreamRef.current
+        if (now && now !== meterStreamRef.current) {
+          meter.stop()
+          meterRef.current = startMicLevel(now)
+          meterStreamRef.current = now
+        }
+        levelRef.current = meterRef.current?.value() ?? 0
+      } else {
+        levelRef.current = levelRef.current > 0.02 ? levelRef.current * 0.86 : 0
+      }
       setLevel(levelRef.current)
-    }, 90)
+    }, 60)
     return () => window.clearInterval(id)
   }, [recording])
 
