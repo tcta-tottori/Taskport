@@ -13,6 +13,9 @@ import {
   type CalendarDay,
   type DayKind,
 } from '../lib/workCalendar'
+import { monthCounts, PRESETS } from '../lib/calendarPresets'
+import { PhotoCalendarSheet } from './PhotoCalendarSheet'
+import { isWorkDay } from '../lib/workday'
 import type { Settings, WorkCalendar } from '../types'
 
 /* =========================================================
@@ -55,8 +58,15 @@ export function WorkCalendarSheet({
   const [importing, setImporting] = useState(false)
   const [found, setFound] = useState<CalendarDay[] | null>(null)
   const [sourceId, setSourceId] = useState(settings.workCalendar.sourceCalendarId)
+  const [photo, setPhoto] = useState(false)
 
   const cells = useMemo(() => monthGrid(year, month1), [year, month1])
+  /** 月ごとの内訳。紙のカレンダーと1行ずつ突き合わせるために出す。 */
+  const breakdown = useMemo(
+    () =>
+      monthCounts(`${year}-01`, `${year}-12`, (d) => isWorkDay(d, settings.workHours, cal)),
+    [year, settings.workHours, cal],
+  )
   const count = useMemo(() => yearCount(year, settings.workHours, cal), [year, settings.workHours, cal])
   const dirty = JSON.stringify(cal) !== JSON.stringify(settings.workCalendar)
 
@@ -168,6 +178,62 @@ export function WorkCalendarSheet({
             <b className="tp-mono">{count.off}</b> 日休み（会社カレンダーの紙と見比べてください）
           </p>
 
+          {/* --- 月ごとの内訳。紙と突き合わせるための表 --- */}
+          <details className="tp-cal-break">
+            <summary>月ごとの内訳を見る（紙と突き合わせる）</summary>
+            <ul>
+              {breakdown.map((m) => (
+                <li key={m.month1}>
+                  <b className="tp-mono">{m.month1}月</b>
+                  <span className="tp-mono">稼働 {m.work}日</span>
+                  <span className="tp-mono">休 {m.off}日</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+
+          {/* --- 配ってあるカレンダーの写し --- */}
+          <h3 className="tp-cal-h">配られたカレンダーを入れる</h3>
+          <p className="tp-note">
+            紙のカレンダーを写し取ってあります。押すとその範囲の休みと出勤日がまとめて入ります。
+            入れたあと、上の「月ごとの内訳」を紙の数字と見比べて確かめてください。
+          </p>
+          {PRESETS.map((p) => (
+            <div key={p.id} className="tp-row-end">
+              <button
+                type="button"
+                className="tp-btn-ghost"
+                onClick={() => {
+                  const now = new Date().toISOString()
+                  setCal((c) => {
+                    let next = setDays(c, p.holidays, 'holiday', now)
+                    next = setDays(next, p.workdays, 'workday', now)
+                    return next
+                  })
+                  const [y] = p.range.split('-')
+                  setMonth({ year: Number(y), month1: 7 })
+                  onNotify(`${p.label} を入れました（休み ${p.holidays.length}日・出勤 ${p.workdays.length}日）`)
+                }}
+              >
+                <Icon name="calendar" size={15} />
+                {p.label} を入れる
+              </button>
+            </div>
+          ))}
+
+          {/* --- 写真から --- */}
+          <h3 className="tp-cal-h">写真から読み取る</h3>
+          <p className="tp-note">
+            紙のカレンダーを撮って範囲を囲むと、<b>赤い日を休みとして拾います</b>。
+            数字は読まず色だけを見るので、端末の中だけで済みます。読んだ結果は押して直せます。
+          </p>
+          <div className="tp-row-end">
+            <button type="button" className="tp-btn-ghost" onClick={() => setPhoto(true)}>
+              <Icon name="sparkle" size={15} />
+              写真から読み取る
+            </button>
+          </div>
+
           {/* --- Googleカレンダーからの取り込み --- */}
           <h3 className="tp-cal-h">Googleカレンダーから取り込む</h3>
           <p className="tp-note">
@@ -258,6 +324,22 @@ export function WorkCalendarSheet({
           </button>
         </footer>
       </div>
+
+      {photo && (
+        <PhotoCalendarSheet
+          today={today}
+          onNotify={onNotify}
+          onApply={(entries) => {
+            const now = new Date().toISOString()
+            setCal((c) => {
+              let next = setDays(c, entries.filter((e) => e.kind === 'holiday').map((e) => e.day), 'holiday', now)
+              next = setDays(next, entries.filter((e) => e.kind === 'workday').map((e) => e.day), 'workday', now)
+              return next
+            })
+          }}
+          onClose={() => setPhoto(false)}
+        />
+      )}
     </div>
   )
 }

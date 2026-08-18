@@ -1698,3 +1698,59 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   border: 1px solid rgba(255, 255, 255, .28);
   color: var(--on-chrome);
 }
+
+/* ---------- 月ごとの内訳（紙と突き合わせる） ---------- */
+.tp-cal-break { margin-top: 12px; }
+.tp-cal-break > summary {
+  cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--brand1);
+  min-height: 38px; display: flex; align-items: center;
+}
+.tp-cal-break ul {
+  list-style: none; margin: 6px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px;
+}
+.tp-cal-break li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 8px; background: var(--surface-2);
+  font-size: 11.5px; color: var(--muted);
+}
+.tp-cal-break li b { color: var(--ink); min-width: 34px; }
+
+/* ---------- 写真から読み取る ---------- */
+.tp-photo-pick {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 26px 18px; margin-top: 12px; text-align: center;
+  border: 2px dashed var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface-2); cursor: pointer; transition: .16s;
+}
+.tp-photo-pick:hover { border-color: var(--brand1); }
+.tp-photo-pick > svg { color: var(--brand1); }
+.tp-photo-pick b { font-size: 13.5px; color: var(--ink); }
+.tp-photo-pick small { font-size: 11.5px; color: var(--muted); }
+.tp-photo-pick input { display: none; }
+
+.tp-photo {
+  position: relative; margin-top: 10px; border-radius: var(--radius-sm);
+  overflow: hidden; background: var(--surface-3); touch-action: none;
+}
+.tp-photo img { display: block; width: 100%; height: auto; }
+.tp-photo-rect {
+  position: absolute; border: 2px solid var(--brand1);
+  background: color-mix(in srgb, var(--brand1) 8%, transparent);
+}
+.tp-photo-cell {
+  position: absolute; box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--brand1) 30%, transparent);
+}
+.tp-photo-cell.is-blank { background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.tp-photo-cell.is-red { background: color-mix(in srgb, var(--pri-high) 34%, transparent); }
+/* 角のつまみ。指で持てる大きさにする。 */
+.tp-photo-h {
+  position: absolute; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--brand1); border: 3px solid var(--surface);
+  box-shadow: var(--shadow-md); touch-action: none;
+}
+.tp-photo-h.is-tl { left: -17px; top: -17px; }
+.tp-photo-h.is-br { right: -17px; bottom: -17px; }
+.tp-photo-re { position: relative; overflow: hidden; }
+.tp-photo-re input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
