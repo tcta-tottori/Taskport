@@ -22,7 +22,7 @@ import { repository } from './repository'
 import { DbOpenError, onDbStatus, type DbStatus } from './repository/LocalRepository'
 import { APP_VERSION, buildLabel } from './version'
 import { checkForUpdate } from './lib/updater'
-import { parseToTasks } from './ports/in/parseToTasks'
+import { parseToTasks, type ParseEngine } from './ports/in/parseToTasks'
 import { useShareTarget } from './ports/in/useShareTarget'
 import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
@@ -44,6 +44,7 @@ import {
 import { ulid } from './lib/ulid'
 import { applyTemplate, forget, remember, touch } from './lib/templates'
 import { cleanCategories } from './lib/workCategories'
+import { hasKey as hasGeminiKey, transcribeAudio } from './lib/gemini'
 import {
   cancelTranscribe,
   modelOf,
@@ -83,6 +84,9 @@ const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   { key: 'settings', label: '設定', icon: 'gear' },
 ]
 
+/** 録音を取り直すときの相手。端末内で聞き直すか、Gemini へ送るか。 */
+export type RefineEngine = 'local' | 'gemini'
+
 interface Pending {
   drafts: Draft[]
   sourceText: string
@@ -90,8 +94,10 @@ interface Pending {
   hint?: string
   /** 音声から来た場合、確定後にタスクIDを紐づける録音 */
   recordingId?: string
-  /** すでに端末内Whisperで取り直したか（二度押しの案内を変える） */
+  /** すでに取り直したか（二度押しの案内を変える） */
   refined?: boolean
+  /** どの読み手が出した候補か */
+  engine?: ParseEngine
 }
 
 export default function App() {
@@ -139,6 +145,8 @@ export default function App() {
   const [exporting, setExporting] = useState(false)
   /** 録音から高精度で取り直している最中の進み具合。null なら走っていない */
   const [refining, setRefining] = useState<WhisperProgress | null>(null)
+  /** 外へ問い合わせている最中の一行（Gemini）。空なら出さない */
+  const [stage, setStage] = useState('')
   const [toast, setToast] = useState<ToastMessage | null>(null)
   /** 記憶したタスク（定型）。登録するたびに控え、直接入力から呼び出す */
   const [templates, setTemplates] = useState<TaskTemplate[]>([])
@@ -313,25 +321,41 @@ export default function App() {
     return () => window.clearInterval(id)
   }, [])
 
-  /** 自然文 → 候補（必ず確認画面へ）。ここ以外に登録の経路を作らない。 */
+  /**
+   * 自然文 → 候補（必ず確認画面へ）。ここ以外に登録の経路を作らない。
+   *
+   * 読み手は端末内か Gemini。Gemini を通るのは、キーが入っていて
+   * 設定で入れてあるときだけで、どちらで読んだかは確認画面に出す。
+   */
   const runParse = useCallback(
-    (text: string, source: Source, recordingId?: string) => {
+    async (text: string, source: Source, recordingId?: string) => {
       setBusy(true)
       try {
-        const result = parseToTasks(text, source, {
+        const s = liveRef.current.settings
+        const result = await parseToTasks(text, source, {
           today,
-          categoryGroups: settings.categoryGroups,
+          categoryGroups: s.categoryGroups,
+          useGemini: s.geminiEnabled,
+          geminiModel: s.geminiModel,
+          onStage: (m) => setStage(m),
         })
+        if (result.warning) notify(result.warning, 'error')
         if (result.drafts.length === 0) {
           notify('タスクを取り出せませんでした。用件をもう少しはっきり書いてください。', 'error')
           return
         }
-        setPending({ drafts: result.drafts, sourceText: text, recordingId })
+        setPending({
+          drafts: result.drafts,
+          sourceText: text,
+          recordingId,
+          engine: result.engine,
+        })
       } finally {
+        setStage('')
         setBusy(false)
       }
     },
-    [today, notify, settings.categoryGroups],
+    [today, notify],
   )
 
   /**
@@ -345,7 +369,7 @@ export default function App() {
    * 時間がかかるので、押されたときだけ走らせる（自動にしない）。
    */
   const refineFromRecording = useCallback(
-    async (recordingId: string) => {
+    async (recordingId: string, engine: RefineEngine = 'local') => {
       if (refining) return
       setRefining({ stage: 'decode', percent: null, message: '録音を読み込んでいます…' })
       try {
@@ -354,16 +378,27 @@ export default function App() {
           notify('この録音の音声が残っていません。設定で「音声を残す」を入れると次から使えます。', 'error')
           return
         }
-        const text = (await transcribe(audio, liveRef.current.settings.whisperModel, setRefining)).trim()
+        const s = liveRef.current.settings
+        // 端末内で聞き直すか、Gemini へ音声を送るか。押した側が決める。
+        const text = (
+          engine === 'gemini'
+            ? await transcribeAudio(audio, s.geminiModel, (m) =>
+                setRefining({ stage: 'run', percent: null, message: m }),
+              )
+            : await transcribe(audio, s.whisperModel, setRefining)
+        ).trim()
         if (!text) {
           notify('音声から文字を取れませんでした。もう少し近くではっきり話してみてください。', 'error')
           return
         }
         // 取り直した文字を録音の履歴にも残す（次からはこちらが正）
         await repository.updateRecording(recordingId, { transcript: text })
-        const result = parseToTasks(text, 'voice', {
+        const result = await parseToTasks(text, 'voice', {
           today,
-          categoryGroups: liveRef.current.settings.categoryGroups,
+          categoryGroups: s.categoryGroups,
+          useGemini: s.geminiEnabled,
+          geminiModel: s.geminiModel,
+          onStage: (m) => setRefining({ stage: 'run', percent: null, message: m }),
         })
         if (result.drafts.length === 0) {
           notify('取り直しましたが、タスクを取り出せませんでした。', 'error')
@@ -374,7 +409,11 @@ export default function App() {
           sourceText: text,
           recordingId,
           refined: true,
-          hint: '録音から端末内で取り直しました。件名を確認してください。',
+          engine: result.engine,
+          hint:
+            engine === 'gemini'
+              ? '録音を Gemini に送って取り直しました。件名を確認してください。'
+              : '録音から端末内で取り直しました。件名を確認してください。',
         })
       } catch (err) {
         if (err instanceof WhisperCancelled) return
@@ -397,7 +436,7 @@ export default function App() {
     if (!share.sharedText || loading) return
     const body = share.sharedText
     share.consume()
-    runParse(body, 'share')
+    void runParse(body, 'share')
   }, [share, loading, runParse])
 
   /**
@@ -435,7 +474,7 @@ export default function App() {
       notify('音声を聞き取れませんでした。もう一度話すか、キーボード入力をお使いください。', 'error')
       return
     }
-    runParse(text, 'voice', recordingId)
+    void runParse(text, 'voice', recordingId)
   }, [session, settings.keepAudio, runParse, notify])
 
   /** 録音を捨ててやめる。音声も残さない。 */
@@ -1083,8 +1122,10 @@ export default function App() {
             onNotify={notify}
             refining={refining}
             canRefine={whisperSupported()}
+            canGemini={hasGeminiKey()}
             modelLabel={modelOf(settings.whisperModel).size}
             onRefine={(id) => void refineFromRecording(id)}
+            onRefineGemini={(id) => void refineFromRecording(id, 'gemini')}
             onStopRefine={stopRefine}
           />
         ) : (
@@ -1133,9 +1174,14 @@ export default function App() {
           onCommit={(d) => void guard(() => commitDrafts(d))}
           onCancel={() => setPending(null)}
           canRefine={!!pending.recordingId && whisperSupported()}
+          canGemini={!!pending.recordingId && hasGeminiKey()}
+          engine={pending.engine}
           refined={pending.refined === true}
           refining={refining}
           onRefine={() => pending.recordingId && void refineFromRecording(pending.recordingId)}
+          onRefineGemini={() =>
+            pending.recordingId && void refineFromRecording(pending.recordingId, 'gemini')
+          }
           onStopRefine={stopRefine}
           modelLabel={modelOf(settings.whisperModel).size}
         />
@@ -1176,7 +1222,7 @@ export default function App() {
           busy={busy}
           onParse={(text) => {
             setCreating(false)
-            runParse(text, 'text')
+            void runParse(text, 'text')
           }}
           onClose={() => setCreating(false)}
         />
@@ -1221,6 +1267,14 @@ export default function App() {
           onClose={() => setExporting(false)}
           onNotify={notify}
         />
+      )}
+
+      {/* 外へ問い合わせている最中は、何をしているかを出す（黙って固まらせない） */}
+      {stage && (
+        <p className="tp-stage" role="status">
+          <span className="tp-spin" aria-hidden="true" />
+          {stage}
+        </p>
       )}
 
       <Toast message={toast} onDone={() => setToast(null)} />

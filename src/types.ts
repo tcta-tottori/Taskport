@@ -377,6 +377,15 @@ export interface Settings {
   whisperModel: string
   /** 録音中に画面を点けたままにするか */
   keepAwake: boolean
+  /**
+   * 文章の解析に Gemini を使うか。
+   * **入れると、解析にかける文章が Google のサーバへ出る。**
+   * 既定は切。APIキー（端末内の localStorage にのみ置く）が無ければ、
+   * 入れてあっても端末内の解析を使う。
+   */
+  geminiEnabled: boolean
+  /** Gemini のモデル（`lib/gemini.ts` の一覧から選ぶ） */
+  geminiModel: string
   /** Googleカレンダー連携のクライアントID（利用者が自分の Google Cloud で作る） */
   googleClientId: string
   /** 読み込むカレンダーID。既定は primary */
@@ -406,6 +415,9 @@ export const DEFAULT_SETTINGS: Settings = {
   keepAudio: true,
   whisperModel: 'base',
   keepAwake: false,
+  // Gemini は既定で使わない。キーを入れて、ここを入れたときだけ文章が外へ出る
+  geminiEnabled: false,
+  geminiModel: 'gemini-3.5-flash',
   googleClientId: '',
   googleCalendarId: 'primary',
   savedFilters: [],

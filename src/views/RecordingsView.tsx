@@ -30,20 +30,26 @@ function sizeLabel(bytes: number): string {
 export function RecordingsView({
   onNotify,
   canRefine,
+  canGemini,
   refining,
   modelLabel,
   onRefine,
+  onRefineGemini,
   onStopRefine,
 }: {
   onNotify: (text: string, tone?: 'ok' | 'error') => void
   /** 端末内Whisperを動かせるか */
   canRefine?: boolean
+  /** GeminiのAPIキーが入っているか */
+  canGemini?: boolean
   /** 取り直しの進み具合。null なら走っていない */
   refining?: WhisperProgress | null
   /** 初回に取り込む量の目安（「約80MB」） */
   modelLabel?: string
-  /** この録音から高精度で取り直し、確認画面へ渡す */
+  /** この録音から端末内で取り直し、確認画面へ渡す */
   onRefine?: (recordingId: string) => void
+  /** この録音を Gemini へ送って取り直す */
+  onRefineGemini?: (recordingId: string) => void
   onStopRefine?: () => void
 }) {
   const [items, setItems] = useState<Recording[]>([])
@@ -200,7 +206,7 @@ export function RecordingsView({
                 <Icon name="download" size={14} />
                 音声を保存
               </button>
-              {/* 音声が残っていれば、あとから端末内で聞き直して文字を作り直せる */}
+              {/* 音声が残っていれば、あとから聞き直して文字を作り直せる */}
               {canRefine && (
                 <button
                   type="button"
@@ -209,7 +215,19 @@ export function RecordingsView({
                   onClick={() => onRefine?.(rec.id)}
                 >
                   <Icon name="sparkle" size={14} />
-                  高精度で取り直す
+                  端末内で取り直す
+                </button>
+              )}
+              {canGemini && (
+                <button
+                  type="button"
+                  className="tp-chip-btn"
+                  disabled={rec.bytes === 0 || !!refining}
+                  onClick={() => onRefineGemini?.(rec.id)}
+                  title="録音した音声そのものを Google へ送ります"
+                >
+                  <Icon name="share" size={14} />
+                  Geminiで取り直す
                 </button>
               )}
               {confirmId === rec.id ? (
@@ -236,7 +254,8 @@ export function RecordingsView({
       <p className="tp-list-foot">
         録音は新しい方から {RECORDING_KEEP} 本まで端末内に残します。古いものは自動で消えます。
         {canRefine &&
-          `「高精度で取り直す」は、保存してある音声を端末の中だけで聞き直します。音声は外へ出ません。初回だけモデル（${modelLabel ?? ''}）を取り込みます。`}
+          `「端末内で取り直す」は、保存してある音声を端末の中だけで聞き直します。音声は外へ出ません。初回だけモデル（${modelLabel ?? ''}）を取り込みます。`}
+        {canGemini && '「Geminiで取り直す」は、録音した音声そのものを Google へ送ります。'}
       </p>
     </div>
   )

@@ -18,6 +18,7 @@ import { APP_VERSION, buildLabel } from '../version'
 import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
 import { askPermission, leadLabel, notificationsUsable, triggersSupported } from '../lib/reminder'
 import { WHISPER_MODELS, whisperSupported } from '../lib/whisper'
+import { GEMINI_MODELS, isLikelyKey, keyShape, loadKey, saveKey } from '../lib/gemini'
 
 /* =========================================================
  * 設定
@@ -81,6 +82,9 @@ export function SettingsView({
   const [connecting, setConnecting] = useState(false)
   const [clearingRemote, setClearingRemote] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  /** GeminiのAPIキー。設定（同期に乗る）ではなく端末内にだけ置く */
+  const [geminiKey, setGeminiKey] = useState(() => loadKey())
+  const [keySaved, setKeySaved] = useState(false)
   const [editingCats, setEditingCats] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const whError = validateWorkHours(draft.workHours)
@@ -349,6 +353,127 @@ export function SettingsView({
                 onNotify('設定を保存しました')
               }}
             >
+              <Icon name="check" size={16} />
+              保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">Gemini（文字起こし・タスク化）</h2>
+          <p className="tp-note">
+            自分の Gemini APIキーを入れると、<b>録音した音声</b>と<b>解析にかける文章</b>を
+            Google へ送って、精度の高い文字起こしとタスク化ができます。
+            <b>入れなければ何も送りません。</b>端末内だけで済ませたいときは、
+            録音は「端末内で取り直す」、文章はそのままで使えます。
+          </p>
+          <p className="tp-note tp-note-warn">
+            <Icon name="alert" size={14} />
+            {/* 文字は1つの塊にして渡す。分けると flex の子が増えて段組みに割れる */}
+            <span>
+              送る中身には取引先名・品番・数量が入ります。社内で扱ってよいか確かめてから使ってください。
+              キーは<b>この端末内にだけ</b>保存し、同期にも書き出しにも乗せません。
+            </span>
+          </p>
+
+          <label className="tp-field">
+            <span className="tp-label">APIキー</span>
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={geminiKey}
+              placeholder="AIza… または AQ.…"
+              onChange={(e) => {
+                setGeminiKey(e.target.value)
+                setKeySaved(false)
+              }}
+            />
+          </label>
+          <p className="tp-hint">
+            {geminiKey && !isLikelyKey(geminiKey.trim())
+              ? 'キーの形が違うようです。AI Studio の画面から、省略されていない全体をそのまま貼ってください。'
+              : keySaved
+                ? `保存しました（${keyShape()}）。`
+                : loadKey()
+                  ? `いま保存されているキー: ${keyShape()}`
+                  : 'Google AI Studio（aistudio.google.com/apikey）で無料のキーを作れます。'}
+          </p>
+          <div className="tp-row-end">
+            {loadKey() && (
+              <button
+                type="button"
+                className="tp-btn-ghost"
+                onClick={() => {
+                  saveKey('')
+                  setGeminiKey('')
+                  setKeySaved(false)
+                  onSave({ ...draft, geminiEnabled: false })
+                  onNotify('キーを消し、Geminiを使わない設定に戻しました')
+                }}
+              >
+                <Icon name="trash" size={15} />
+                キーを消す
+              </button>
+            )}
+            <button
+              type="button"
+              className="tp-btn-primary"
+              disabled={!geminiKey.trim()}
+              onClick={() => {
+                saveKey(geminiKey)
+                setKeySaved(true)
+                onNotify('キーを保存しました')
+              }}
+            >
+              <Icon name="check" size={16} />
+              キーを保存
+            </button>
+          </div>
+
+          <label className="tp-switch">
+            <span>
+              <b>文章の解析にGeminiを使う</b>
+              <small>
+                音声・文章・共有された本文をタスクにするとき、Gemini に読ませます。
+                <b>文章が Google へ出ます。</b>切ってあるあいだは端末内だけで読みます。
+                録音の「Geminiで取り直す」は、この切り替えとは関係なく押したときだけ動きます。
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.geminiEnabled}
+              disabled={!loadKey()}
+              onChange={(e) => setDraft({ ...draft, geminiEnabled: e.target.checked })}
+            />
+          </label>
+
+          <div className="tp-field">
+            <span className="tp-label">モデル</span>
+            <div className="tp-chips" role="group" aria-label="Geminiのモデル">
+              {GEMINI_MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`tp-fchip${draft.geminiModel === m.id ? ' is-on' : ''}`}
+                  aria-pressed={draft.geminiModel === m.id}
+                  onClick={() => setDraft({ ...draft, geminiModel: m.id })}
+                >
+                  {m.label}
+                  <small className="tp-fchip-sub">{m.note}</small>
+                </button>
+              ))}
+            </div>
+            <p className="tp-hint">
+              使えないモデルを選んでいたときは、自動でもう一方に切り替えて試します。
+              無料枠を使い切ると断られるので、そのときは時間をおいてください。
+            </p>
+          </div>
+
+          <div className="tp-row-end">
+            <button type="button" className="tp-btn-primary" onClick={() => onSave(draft)}>
               <Icon name="check" size={16} />
               保存
             </button>

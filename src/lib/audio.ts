@@ -48,3 +48,36 @@ export async function toMono16k(blob: Blob): Promise<Float32Array> {
 export function secondsOf(audio: Float32Array): number {
   return audio.length / WHISPER_RATE
 }
+
+/**
+ * 16kHz モノラルの波形を WAV（16bit PCM）にする。
+ *
+ * 外へ送るときの形式をここに揃える。録音そのものは端末によって
+ * m4a だったり webm だったりして、受け取る側が扱えないことがあるため。
+ */
+export function toWav16k(audio: Float32Array): Blob {
+  const frames = audio.length
+  const buf = new ArrayBuffer(44 + frames * 2)
+  const view = new DataView(buf)
+  const ws = (off: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i))
+  }
+  ws(0, 'RIFF')
+  view.setUint32(4, 36 + frames * 2, true)
+  ws(8, 'WAVE')
+  ws(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, WHISPER_RATE, true)
+  view.setUint32(28, WHISPER_RATE * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  ws(36, 'data')
+  view.setUint32(40, frames * 2, true)
+  for (let i = 0; i < frames; i++) {
+    const v = Math.max(-1, Math.min(1, audio[i]))
+    view.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true)
+  }
+  return new Blob([buf], { type: 'audio/wav' })
+}

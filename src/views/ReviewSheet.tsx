@@ -5,6 +5,7 @@ import { dueLabel } from '../lib/date'
 import { CategoryChip } from '../components/CategoryChip'
 import { colorOf } from '../lib/workCategories'
 import type { WhisperProgress } from '../lib/whisper'
+import type { ParseEngine } from '../ports/in/parseToTasks'
 import {
   PRIORITY_LABEL,
   SOURCE_LABEL,
@@ -34,9 +35,12 @@ export function ReviewSheet({
   onCommit,
   onCancel,
   canRefine,
+  canGemini,
+  engine,
   refined,
   refining,
   onRefine,
+  onRefineGemini,
   onStopRefine,
   modelLabel,
 }: {
@@ -52,11 +56,17 @@ export function ReviewSheet({
   onCancel: () => void
   /** 録音が残っていて、端末内で取り直せるか */
   canRefine?: boolean
+  /** GeminiのAPIキーが入っているか（入っていなければ出さない） */
+  canGemini?: boolean
+  /** どの読み手が出した候補か */
+  engine?: ParseEngine
   /** すでに取り直したあとか */
   refined?: boolean
   /** 取り直しの進み具合。null なら走っていない */
   refining?: WhisperProgress | null
   onRefine?: () => void
+  /** 録音を Gemini へ送って取り直す */
+  onRefineGemini?: () => void
   onStopRefine?: () => void
   /** 初回に取り込む量の目安（「約80MB」） */
   modelLabel?: string
@@ -83,9 +93,11 @@ export function ReviewSheet({
           </button>
         </header>
 
-        <p className="tp-engine tp-engine-local">
+        <p className={`tp-engine${engine === 'gemini' ? ' tp-engine-remote' : ' tp-engine-local'}`}>
           <Icon name="alert" size={14} />
-          端末内で解析しました。期限の取り違えが起きやすいので必ず確認してください。
+          {engine === 'gemini'
+            ? 'Geminiで解析しました（文章をGoogleへ送っています）。期限の取り違えが起きやすいので必ず確認してください。'
+            : '端末内で解析しました。期限の取り違えが起きやすいので必ず確認してください。'}
         </p>
         {hint && <p className="tp-engine-note">{hint}</p>}
 
@@ -110,14 +122,30 @@ export function ReviewSheet({
               </>
             ) : (
               <>
-                <button type="button" className="tp-refine-btn" onClick={onRefine}>
-                  <Icon name="sparkle" size={15} />
-                  {refined ? 'もう一度 録音から取り直す' : '録音から高精度で取り直す'}
-                </button>
+                <div className="tp-refine-row">
+                  <button type="button" className="tp-refine-btn" onClick={onRefine}>
+                    <Icon name="sparkle" size={15} />
+                    端末内で取り直す
+                  </button>
+                  {canGemini && (
+                    <button type="button" className="tp-refine-btn is-remote" onClick={onRefineGemini}>
+                      <Icon name="share" size={15} />
+                      Geminiで取り直す
+                    </button>
+                  )}
+                </div>
                 <p className="tp-refine-note">
                   {refined
-                    ? '端末内で取り直したものです。'
-                    : `いま出ているのは録音中に拾った文字です。取りこぼしがあれば、保存してある音声を端末内で聞き直して作り直せます。処理は端末の中だけで、音声は外へ出ません。初回だけモデル（${modelLabel ?? ''}）を取り込みます。`}
+                    ? '取り直したあとの文字です。もう一度押せばやり直せます。'
+                    : 'いま出ているのは録音中に拾った文字です。取りこぼしがあれば、保存してある音声から作り直せます。'}
+                  <br />
+                  <b>端末内</b>＝音声は外へ出ません（初回だけモデル {modelLabel ?? ''} を取り込みます）。
+                  {canGemini && (
+                    <>
+                      {' '}
+                      <b>Gemini</b>＝<b>録音した音声そのものがGoogleへ送られます。</b>速くて精度は高めです。
+                    </>
+                  )}
                 </p>
               </>
             )}

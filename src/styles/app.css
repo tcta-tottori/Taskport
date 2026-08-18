@@ -2207,3 +2207,39 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 
 /* その日ぜんぶの積み上がり。数字の下に細い帯で出す。 */
 .tp-day-progress { margin: -2px 0 10px; }
+
+/* =========================================================
+ * Gemini（外へ出す経路）
+ *
+ * 端末内で済む道と見分けが付くようにする。外へ出るほうのボタンと
+ * 注意書きは、色を変えて「ここから出ていく」ことを見せる。
+ * =======================================================*/
+
+/* 外へ送ったことを確認画面に出す（端末内のときは従来どおり琥珀） */
+.tp-engine-remote {
+  color: var(--brand2);
+  background: color-mix(in srgb, var(--brand2) 12%, transparent);
+}
+
+/* 断り書きの見た目は既存の .tp-note-warn をそのまま使う */
+.tp-note-warn b { color: var(--amber); }
+
+/* 取り直しの相手が2つ並ぶ */
+.tp-refine-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.tp-refine-btn.is-remote {
+  color: var(--brand2);
+  border-color: color-mix(in srgb, var(--brand2) 45%, transparent);
+}
+.tp-refine-btn.is-remote:hover { background: color-mix(in srgb, var(--brand2) 10%, var(--surface)); }
+
+/* 外へ問い合わせている最中の一行。下部の丸ボタンに重ならない高さに置く。 */
+.tp-stage {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--safe-b) + 96px); z-index: 60;
+  display: flex; align-items: center; gap: 8px;
+  margin: 0; padding: 9px 14px; max-width: calc(100vw - 32px);
+  border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg);
+  font-size: 12.5px; font-weight: 700; color: var(--ink);
+}
