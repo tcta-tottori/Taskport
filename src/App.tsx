@@ -15,7 +15,7 @@ import { RecordingsView } from './views/RecordingsView'
 import { repository } from './repository'
 import { APP_VERSION, buildLabel } from './version'
 import { checkForUpdate } from './lib/updater'
-import { parseToTasks, type ParseEngine } from './ports/in/parseToTasks'
+import { parseToTasks } from './ports/in/parseToTasks'
 import { useShareTarget } from './ports/in/useShareTarget'
 import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
@@ -53,9 +53,9 @@ const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
 
 interface Pending {
   drafts: Draft[]
-  engine: ParseEngine
-  fallbackReason?: string
   sourceText: string
+  /** 確認画面の上に出す補足（予定からの取り込みなど） */
+  hint?: string
   /** 音声から来た場合、確定後にタスクIDを紐づける録音 */
   recordingId?: string
 }
@@ -146,29 +146,20 @@ export default function App() {
 
   /** 自然文 → 候補（必ず確認画面へ）。ここ以外に登録の経路を作らない。 */
   const runParse = useCallback(
-    async (text: string, source: Source, recordingId?: string) => {
+    (text: string, source: Source, recordingId?: string) => {
       setBusy(true)
       try {
-        const result = await parseToTasks(text, source, {
-          endpoint: settings.parseEndpoint,
-          today,
-        })
+        const result = parseToTasks(text, source, { today })
         if (result.drafts.length === 0) {
           notify('タスクを取り出せませんでした。用件をもう少しはっきり書いてください。', 'error')
           return
         }
-        setPending({
-          drafts: result.drafts,
-          engine: result.engine,
-          fallbackReason: result.fallbackReason,
-          sourceText: text,
-          recordingId,
-        })
+        setPending({ drafts: result.drafts, sourceText: text, recordingId })
       } finally {
         setBusy(false)
       }
     },
-    [settings.parseEndpoint, today, notify],
+    [today, notify],
   )
 
   // 他アプリから共有されてきた本文も同じパイプラインへ流す
@@ -176,7 +167,7 @@ export default function App() {
     if (!share.sharedText || loading) return
     const body = share.sharedText
     share.consume()
-    void runParse(body, 'share')
+    runParse(body, 'share')
   }, [share, loading, runParse])
 
   /**
@@ -214,7 +205,7 @@ export default function App() {
       notify('音声を聞き取れませんでした。もう一度話すか、キーボード入力をお使いください。', 'error')
       return
     }
-    await runParse(text, 'voice', recordingId)
+    runParse(text, 'voice', recordingId)
   }, [session, settings.keepAudio, runParse, notify])
 
   /** 録音を捨ててやめる。音声も残さない。 */
@@ -230,9 +221,8 @@ export default function App() {
   const importEvent = useCallback((ev: CalendarEvent) => {
     setPending({
       drafts: [eventToDraft(ev)],
-      engine: 'local',
       sourceText: `${ev.day} ${ev.startTime ?? '終日'} ${ev.title}`,
-      fallbackReason: 'Googleカレンダーの予定から作りました。期限と見込み時間を確認してください。',
+      hint: 'Googleカレンダーの予定から作りました。期限と見込み時間を確認してください。',
     })
   }, [])
 
@@ -466,7 +456,7 @@ export default function App() {
         <InputDock
           busy={busy}
           voiceSupported={voiceSupported()}
-          onSubmitText={(text, source) => void runParse(text, source)}
+          onSubmitText={(text, source) => runParse(text, source)}
           onStartVoice={() => void session.start()}
           onOpenForm={() => setCreating(true)}
         />
@@ -483,8 +473,7 @@ export default function App() {
       {pending && (
         <ReviewSheet
           drafts={pending.drafts}
-          engine={pending.engine}
-          fallbackReason={pending.fallbackReason}
+          hint={pending.hint}
           sourceText={pending.sourceText}
           today={today}
           onCommit={(d) => void commitDrafts(d)}

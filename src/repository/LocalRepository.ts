@@ -10,14 +10,27 @@ import {
 } from '../types'
 
 /* =========================================================
- * Phase 1 の保存先。端末内 IndexedDB のみ。サーバには置かない。
+ * 保存先。端末内 IndexedDB のみ。サーバには置かない。
+ *
+ * 【バージョンを上げない】
+ * 以前は台帳と録音を1つのDBに入れ、録音を足すときに版を1→2へ上げた。
+ * その結果、別のタブが古い版を掴んでいるとアップグレードが永久に待たされ、
+ * 「読み込んでいます…」から先へ進めなくなった（v1.2.0 の不具合）。
+ *
+ * そこで版を固定するのをやめ、
+ *   - 台帳（tasks / meta）… 版を指定せずに開く。既にある版のまま使う
+ *   - 録音（recordings / audio）… 別のDBに分ける
+ * にした。版が上がらないので、以後アップグレード待ちで固まることがない。
+ * 保存する先が増えても、新しいDBを足せば台帳には触らずに済む。
  * =======================================================*/
 
-const DB_NAME = 'taskport'
-// v2: 録音（recordings）と音声（audio）のストアを追加
-const DB_VERSION = 2
+const MAIN_DB = 'taskport'
+const MEDIA_DB = 'taskport-media'
 
-interface TaskportDB extends DBSchema {
+/** 開けないまま待たせない。ここを過ぎたら理由を付けて失敗させる。 */
+const OPEN_TIMEOUT_MS = 8000
+
+interface MainDB extends DBSchema {
   tasks: {
     key: string
     value: Task
@@ -27,6 +40,9 @@ interface TaskportDB extends DBSchema {
     key: string
     value: unknown
   }
+}
+
+interface MediaDB extends DBSchema {
   recordings: {
     key: string
     value: Recording
@@ -38,28 +54,111 @@ interface TaskportDB extends DBSchema {
   }
 }
 
-let dbPromise: Promise<IDBPDatabase<TaskportDB>> | null = null
-let dbInstance: IDBPDatabase<TaskportDB> | null = null
-
-/** 別のタブが古い版を掴んでいて開けないときに投げる。画面で案内を出すために区別する。 */
+/** 別のタブが掴んでいて開けないときに投げる。画面で案内を分けるために区別する。 */
 export class DbBlockedError extends Error {
   constructor() {
     super(
-      'ほかのタブで開いている Taskport が、データの更新をさえぎっています。' +
+      'ほかのタブで開いている Taskport が、データをさえぎっています。' +
         '他のタブをすべて閉じてから、この画面を読み込み直してください。',
     )
     this.name = 'DbBlockedError'
   }
 }
 
-/** いつまでも待たせない。開けなければ理由を付けて失敗させる。 */
-const OPEN_TIMEOUT_MS = 8000
+/**
+ * DBを1つ開く。開けない状態が続いても、必ず時間内に決着させる。
+ * @param version 省略すると「いまある版」で開く（＝アップグレードを起こさない）
+ */
+function open<T>(
+  name: string,
+  version: number | undefined,
+  upgrade: (d: IDBPDatabase<T>) => void,
+  onLost: () => void,
+): Promise<IDBPDatabase<T>> {
+  let blocked = false
+  let settled = false
+  let instance: IDBPDatabase<T> | null = null
 
-function db(): Promise<IDBPDatabase<TaskportDB>> {
-  if (!dbPromise) {
-    let blocked = false
-    const open = openDB<TaskportDB>(DB_NAME, DB_VERSION, {
-      upgrade(d) {
+  const opening = openDB<T>(name, version, {
+    upgrade(d) {
+      upgrade(d)
+    },
+    /** ほかの接続にさえぎられている */
+    blocked() {
+      blocked = true
+    },
+    /** こちらが相手をさえぎっている。すぐ手放して相手を進ませる。 */
+    blocking() {
+      try {
+        instance?.close()
+      } catch {
+        /* 既に閉じている */
+      }
+      onLost()
+    },
+    /** ブラウザに接続を切られた。次のアクセスで開き直す。 */
+    terminated() {
+      onLost()
+    },
+  } as Parameters<typeof openDB<T>>[2])
+
+  return new Promise<IDBPDatabase<T>>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      onLost()
+      // 遅れて開いた接続は置き去りにせず閉じる（残すと次の版上げをさえぎる）
+      void opening.then((d) => {
+        try {
+          d.close()
+        } catch {
+          /* noop */
+        }
+      })
+      reject(
+        blocked
+          ? new DbBlockedError()
+          : new Error('保存データを開けませんでした。ブラウザを開き直してみてください。'),
+      )
+    }, OPEN_TIMEOUT_MS)
+
+    opening.then(
+      (d) => {
+        clearTimeout(timer)
+        instance = d
+        if (settled) {
+          try {
+            d.close()
+          } catch {
+            /* noop */
+          }
+          return
+        }
+        settled = true
+        resolve(d)
+      },
+      (err) => {
+        clearTimeout(timer)
+        if (settled) return
+        settled = true
+        onLost()
+        reject(err)
+      },
+    )
+  })
+}
+
+let mainPromise: Promise<IDBPDatabase<MainDB>> | null = null
+let mediaPromise: Promise<IDBPDatabase<MediaDB>> | null = null
+
+/** 台帳。版は指定しない（＝アップグレードを起こさない）。 */
+function main(): Promise<IDBPDatabase<MainDB>> {
+  if (!mainPromise) {
+    mainPromise = open<MainDB>(
+      MAIN_DB,
+      undefined,
+      (d) => {
+        // DBが無いときだけ呼ばれる（版1で作られる）
         if (!d.objectStoreNames.contains('tasks')) {
           const store = d.createObjectStore('tasks', { keyPath: 'id' })
           store.createIndex('by_due', 'due')
@@ -68,6 +167,25 @@ function db(): Promise<IDBPDatabase<TaskportDB>> {
         if (!d.objectStoreNames.contains('meta')) {
           d.createObjectStore('meta')
         }
+      },
+      () => {
+        mainPromise = null
+      },
+    ).catch((err) => {
+      mainPromise = null
+      throw err
+    })
+  }
+  return mainPromise
+}
+
+/** 録音。台帳とは別のDBなので、ここが開けなくても台帳は読める。 */
+function media(): Promise<IDBPDatabase<MediaDB>> {
+  if (!mediaPromise) {
+    mediaPromise = open<MediaDB>(
+      MEDIA_DB,
+      1,
+      (d) => {
         if (!d.objectStoreNames.contains('recordings')) {
           d.createObjectStore('recordings', { keyPath: 'id' })
         }
@@ -75,54 +193,15 @@ function db(): Promise<IDBPDatabase<TaskportDB>> {
           d.createObjectStore('audio')
         }
       },
-      /** 別のタブが古い版を掴んでいて、こちらが上げられない */
-      blocked() {
-        blocked = true
+      () => {
+        mediaPromise = null
       },
-      /**
-       * こちらの接続が、別のタブの版上げをさえぎっている。
-       * すぐ手放して相手を進ませる（これがないとタブを開くたびに固まる）。
-       */
-      blocking() {
-        try {
-          dbInstance?.close()
-        } catch {
-          /* 既に閉じている */
-        }
-        dbInstance = null
-        dbPromise = null
-      },
-      /** ブラウザに接続を切られたら、次のアクセスで開き直す */
-      terminated() {
-        dbInstance = null
-        dbPromise = null
-      },
-    })
-
-    dbPromise = new Promise<IDBPDatabase<TaskportDB>>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        dbPromise = null
-        reject(
-          blocked
-            ? new DbBlockedError()
-            : new Error('保存データを開けませんでした。ブラウザを開き直してみてください。'),
-        )
-      }, OPEN_TIMEOUT_MS)
-      open.then(
-        (d) => {
-          clearTimeout(timer)
-          dbInstance = d
-          resolve(d)
-        },
-        (err) => {
-          clearTimeout(timer)
-          dbPromise = null
-          reject(err)
-        },
-      )
+    ).catch((err) => {
+      mediaPromise = null
+      throw err
     })
   }
-  return dbPromise
+  return mediaPromise
 }
 
 /**
@@ -147,20 +226,20 @@ function normalizeTask(raw: Task): Task {
 
 export class LocalRepository implements Repository {
   async list(): Promise<Task[]> {
-    const all = await (await db()).getAll('tasks')
+    const all = await (await main()).getAll('tasks')
     return all.map(normalizeTask)
   }
 
   async add(tasks: Task[]): Promise<void> {
     if (tasks.length === 0) return
-    const d = await db()
+    const d = await main()
     const tx = d.transaction('tasks', 'readwrite')
     await Promise.all(tasks.map((t) => tx.store.put(t)))
     await tx.done
   }
 
   async update(id: string, patch: Partial<Task>): Promise<void> {
-    const d = await db()
+    const d = await main()
     const tx = d.transaction('tasks', 'readwrite')
     const current = await tx.store.get(id)
     if (current) {
@@ -170,11 +249,11 @@ export class LocalRepository implements Repository {
   }
 
   async remove(id: string): Promise<void> {
-    await (await db()).delete('tasks', id)
+    await (await main()).delete('tasks', id)
   }
 
   async replaceAll(tasks: Task[]): Promise<void> {
-    const d = await db()
+    const d = await main()
     const tx = d.transaction('tasks', 'readwrite')
     await tx.store.clear()
     await Promise.all(tasks.map((t) => tx.store.put(normalizeTask(t))))
@@ -182,7 +261,7 @@ export class LocalRepository implements Repository {
   }
 
   async loadSettings(): Promise<Settings> {
-    const raw = (await (await db()).get('meta', 'settings')) as Partial<Settings> | undefined
+    const raw = (await (await main()).get('meta', 'settings')) as Partial<Settings> | undefined
     if (!raw) return DEFAULT_SETTINGS
     return {
       ...DEFAULT_SETTINGS,
@@ -192,19 +271,19 @@ export class LocalRepository implements Repository {
   }
 
   async saveSettings(settings: Settings): Promise<void> {
-    await (await db()).put('meta', settings, 'settings')
+    await (await main()).put('meta', settings, 'settings')
   }
 
-  /* --- 録音 --- */
+  /* --- 録音。開けなくても台帳の操作は続けられるようにする --- */
 
   async listRecordings(): Promise<Recording[]> {
-    const all = await (await db()).getAll('recordings')
+    const all = await (await media()).getAll('recordings')
     // ULID は時系列に並ぶので、新しい順にするだけでよい
     return all.sort((a, b) => (a.id < b.id ? 1 : -1))
   }
 
   async addRecording(rec: Recording, audio: Blob | null): Promise<void> {
-    const d = await db()
+    const d = await media()
     const tx = d.transaction(['recordings', 'audio'], 'readwrite')
     await tx.objectStore('recordings').put(rec)
     if (audio) await tx.objectStore('audio').put(audio, rec.id)
@@ -213,11 +292,11 @@ export class LocalRepository implements Repository {
   }
 
   async getRecordingAudio(id: string): Promise<Blob | null> {
-    return (await (await db()).get('audio', id)) ?? null
+    return (await (await media()).get('audio', id)) ?? null
   }
 
   async removeRecording(id: string): Promise<void> {
-    const d = await db()
+    const d = await media()
     const tx = d.transaction(['recordings', 'audio'], 'readwrite')
     await tx.objectStore('recordings').delete(id)
     await tx.objectStore('audio').delete(id)
@@ -225,7 +304,7 @@ export class LocalRepository implements Repository {
   }
 
   async updateRecording(id: string, patch: Partial<Recording>): Promise<void> {
-    const d = await db()
+    const d = await media()
     const tx = d.transaction('recordings', 'readwrite')
     const cur = await tx.store.get(id)
     if (cur) await tx.store.put({ ...cur, ...patch, id })

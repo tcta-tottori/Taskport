@@ -106,6 +106,14 @@ export function extractDue(sentence: string, today: string): string | null {
   return null
 }
 
+/** 「午後3時」のように12時間制で言われた時刻を24時間制に直す */
+function to24h(hour: number, meridiem: string | undefined): number {
+  if (!meridiem) return hour
+  if (meridiem === '午前') return hour === 12 ? 0 : hour
+  // 午後・夕方・夜
+  return hour >= 12 ? hour : hour + 12
+}
+
 /** 文の中から時刻を1つ拾う */
 export function extractTime(sentence: string): string | null {
   const colon = sentence.match(/(?:^|[^\d:])([0-2]?\d):([0-5]\d)/)
@@ -113,15 +121,20 @@ export function extractTime(sentence: string): string | null {
     const h = Number(colon[1])
     if (h <= 23) return `${String(h).padStart(2, '0')}:${colon[2]}`
   }
-  const half = sentence.match(/([0-2]?\d)\s*時\s*半/)
+  // 「午後3時半」「夕方5時」など、時刻の前に付く語をまとめて拾う
+  const AMPM = '(午前|午後|夕方|夜|朝)?'
+  const norm = (m: string | undefined): string | undefined =>
+    m === '朝' ? '午前' : m === '夕方' || m === '夜' ? '午後' : m
+
+  const half = sentence.match(new RegExp(`${AMPM}\\s*([0-2]?\\d)\\s*時\\s*半`))
   if (half) {
-    const h = Number(half[1])
+    const h = to24h(Number(half[2]), norm(half[1]))
     if (h <= 23) return `${String(h).padStart(2, '0')}:30`
   }
-  const jp = sentence.match(/([0-2]?\d)\s*時\s*(?:(\d{1,2})\s*分)?/)
+  const jp = sentence.match(new RegExp(`${AMPM}\\s*([0-2]?\\d)\\s*時\\s*(?:(\\d{1,2})\\s*分)?`))
   if (jp) {
-    const h = Number(jp[1])
-    const m = jp[2] ? Number(jp[2]) : 0
+    const h = to24h(Number(jp[2]), norm(jp[1]))
+    const m = jp[3] ? Number(jp[3]) : 0
     if (h <= 23 && m <= 59) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
   return null
@@ -152,7 +165,10 @@ function cleanTitle(sentence: string): string {
     .replace(/((再来週|来週|今週)?\s*[日月火水木金土]曜日?)(までに|まで|に)?/g, '')
     .replace(/(再来週|来週)(までに|まで|に)?/g, '')
     .replace(/(\d{1,2}\s*日後)(までに|まで|に)?/g, '')
-    .replace(/([0-2]?\d\s*時\s*半|[0-2]?\d\s*時\s*\d{1,2}\s*分|[0-2]?\d\s*時|[0-2]?\d:[0-5]\d)(から|に|より)?/g, '')
+    .replace(
+      /(午前|午後|夕方|夜|朝)?\s*([0-2]?\d\s*時\s*半|[0-2]?\d\s*時\s*\d{1,2}\s*分|[0-2]?\d\s*時|[0-2]?\d:[0-5]\d)(から|まで|に|より)?/g,
+      '',
+    )
     .replace(/^[\s、。,.･・]+|[\s、。,.･・]+$/g, '')
     .trim()
 }

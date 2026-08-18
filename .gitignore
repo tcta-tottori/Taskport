@@ -8,6 +8,4 @@ dist-ssr
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
-worker/node_modules
-worker/.wrangler
 *.tsbuildinfo

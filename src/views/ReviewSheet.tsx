@@ -3,27 +3,28 @@ import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
 import { dueLabel } from '../lib/date'
 import { PRIORITY_LABEL, SOURCE_LABEL, type Draft } from '../types'
-import type { ParseEngine } from '../ports/in/parseToTasks'
 
 /* =========================================================
  * 確認画面
  *
- * AI（またはかんたん解析）が出した候補は必ずここを通る。
+ * 解析が出した候補は必ずここを通る。
  * 無確認で保存する経路を作らない。これは仕様であり、簡略化しない。
+ *
+ * 解析は端末内で完結しており、外部のAIには送っていない。
+ * そのぶん期限や優先度の読み取りは素朴なので、ここでの確認が要になる。
  * =======================================================*/
 
 export function ReviewSheet({
   drafts,
-  engine,
-  fallbackReason,
+  hint,
   sourceText,
   today,
   onCommit,
   onCancel,
 }: {
   drafts: Draft[]
-  engine: ParseEngine
-  fallbackReason?: string
+  /** 予定からの取り込みなど、経路ごとの補足 */
+  hint?: string
   sourceText: string
   today: string
   onCommit: (drafts: Draft[]) => void
@@ -51,13 +52,11 @@ export function ReviewSheet({
           </button>
         </header>
 
-        <p className={`tp-engine tp-engine-${engine}`}>
-          <Icon name={engine === 'ai' ? 'sparkle' : 'alert'} size={14} />
-          {engine === 'ai'
-            ? 'AIが分解しました。期限と優先度を確認してから登録してください。'
-            : '端末内のかんたん解析で作りました。期限の取り違えが起きやすいので必ず確認してください。'}
+        <p className="tp-engine tp-engine-local">
+          <Icon name="alert" size={14} />
+          端末内で解析しました。期限の取り違えが起きやすいので必ず確認してください。
         </p>
-        {fallbackReason && <p className="tp-engine-note">{fallbackReason}</p>}
+        {hint && <p className="tp-engine-note">{hint}</p>}
 
         <div className="tp-sheet-body">
           {items.length === 0 && (

@@ -25,10 +25,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-        env:
-          # 設定画面からも入れられるので必須ではない。
-          # リポジトリの Variables に登録しておくと初回から AI 解析が効く。
-          VITE_PARSE_ENDPOINT: ${{ vars.VITE_PARSE_ENDPOINT }}
       # Jekyll 処理を無効化（_ 始まりのファイルが無視されるのを防ぐ）
       - run: touch dist/.nojekyll
       - name: Publish dist to gh-pages branch

@@ -135,8 +135,6 @@ export interface Settings {
   workHours: WorkHours
   /** 見積が未入力のタスクを稼働量に積むときの既定値（分） */
   defaultEstimateMin: number
-  /** AI構造化プロキシのURL。空なら端末内のかんたん解析にフォールバックする */
-  parseEndpoint: string
   /** 音声入力を使うか（非対応環境では自動的に false 扱い） */
   voiceEnabled: boolean
   /** 録音した音声を端末内に残すか */
@@ -152,7 +150,6 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   workHours: DEFAULT_WORK_HOURS,
   defaultEstimateMin: 30,
-  parseEndpoint: '',
   voiceEnabled: true,
   keepAudio: true,
   keepAwake: false,

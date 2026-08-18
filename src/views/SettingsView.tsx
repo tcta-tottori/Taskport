@@ -13,7 +13,6 @@ import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
  * 設定
  *   - 勤務時間（既定は 8:20 始業 / 12:25〜13:05 昼休憩 / 17:10 終業）
  *   - 録音（音声を残すか・画面を点けたままにするか）
- *   - AI構造化プロキシのURL
  *   - Googleカレンダー連携
  *   - JSON バックアップの書き出し／取り込み
  * =======================================================*/
@@ -326,41 +325,6 @@ export function SettingsView({
 
       <Reveal>
         <section className="tp-panel">
-          <h2 className="tp-panel-title">AI構造化プロキシ</h2>
-          <p className="tp-note">
-            自然文をタスクに分解する Cloudflare Workers のURLです。未設定でも動きますが、
-            そのときは端末内のかんたん解析になり、期限の読み取り精度が落ちます。
-            <b>APIキーはこの画面に入れないでください。</b>キーは Workers 側に置きます。
-          </p>
-          <label className="tp-field">
-            <span className="tp-label">エンドポイント</span>
-            <input
-              type="url"
-              inputMode="url"
-              placeholder="https://taskport-parse.example.workers.dev/parse"
-              value={draft.parseEndpoint}
-              onChange={(e) => setDraft({ ...draft, parseEndpoint: e.target.value })}
-            />
-          </label>
-          <div className="tp-row-end">
-            <button
-              type="button"
-              className="tp-btn-primary"
-              disabled={!dirty}
-              onClick={() => {
-                onSave(draft)
-                onNotify('設定を保存しました')
-              }}
-            >
-              <Icon name="check" size={16} />
-              保存
-            </button>
-          </div>
-        </section>
-      </Reveal>
-
-      <Reveal>
-        <section className="tp-panel">
           <h2 className="tp-panel-title">バックアップ</h2>
           <p className="tp-note">
             タスクは端末の中だけに保存されます。端末の故障やブラウザのデータ削除に備えて、
@@ -412,9 +376,11 @@ export function SettingsView({
             <dt>データの置き場所</dt>
             <dd>端末内（IndexedDB）のみ。サーバには置きません。</dd>
             <dt>音声</dt>
-            <dd>端末内で文字に変換します。音声データそのものは外部に送信しません。</dd>
-            <dt>AIに渡すもの</dt>
-            <dd>変換後のテキストだけ。APIキーは Workers 側にあります。</dd>
+            <dd>端末内で文字に変換し、録音も端末内にだけ残します。外部には送信しません。</dd>
+            <dt>解析</dt>
+            <dd>端末内で完結します。外部のAIサービスには送りません。</dd>
+            <dt>外部へ出るもの</dt>
+            <dd>Googleカレンダーへ追加したタスクの件名とメモだけ。押したときに選んだ分のみです。</dd>
             <dt>版</dt>
             <dd className="tp-mono">Ver. {APP_VERSION}</dd>
             <dt>ビルド</dt>
