@@ -356,6 +356,9 @@ function normalizeTask(raw: Task): Task {
     due: raw.due ?? null,
     dueTime: raw.dueTime ?? null,
     estimateMin: typeof raw.estimateMin === 'number' ? raw.estimateMin : null,
+    // v1.13 以前には無かった項目。欠けていても画面が壊れないようにする
+    startedAt: raw.startedAt ?? null,
+    actualMin: typeof raw.actualMin === 'number' ? raw.actualMin : null,
     priority: raw.priority ?? 'mid',
     // v1.10 以前は区分が1つ（category: string）だった。読むときにここで寄せる。
     categories: normalizeCategories(raw),

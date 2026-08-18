@@ -2,6 +2,7 @@ import { Icon } from '../components/Icon'
 import { durationLabel, toMinutes } from '../lib/date'
 import { bandLoads, currentBand, nextUp, timeboxLabel, unboxed } from '../lib/timebox'
 import { isWorkDay, taskMinutes } from '../lib/workday'
+import { isRunning, runningMin } from '../lib/worklog'
 import type { Settings, Task } from '../types'
 
 /* =========================================================
@@ -17,17 +18,24 @@ import type { Settings, Task } from '../types'
 
 export function TodayFlow({
   tasks,
+  live,
   today,
   settings,
   nowMin,
   overdue,
   onToggle,
   onEdit,
+  onToggleRunning,
   onTriage,
   onWrapUp,
 }: {
   /** 今日やる未完了タスク（超過ぶんを含む） */
   tasks: Task[]
+  /**
+   * いま手を付けているもの。無ければ null。
+   * 期限が今日でないものに手を付けることもあるので、台帳の全件から探して渡す。
+   */
+  live: Task | null
   today: string
   settings: Settings
   /** いまの時刻（0時からの分） */
@@ -36,12 +44,15 @@ export function TodayFlow({
   overdue: number
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
+  /** いま手を付ける／手を止める */
+  onToggleRunning: (task: Task) => void
   onTriage: () => void
   onWrapUp: () => void
 }) {
   const wh = settings.workHours
   const now = currentBand(wh, nowMin)
-  const next = nextUp(tasks, wh, nowMin)
+  // 手を付けているものがあれば、それが「いま」。無ければ次の1件を出す。
+  const next = live ?? nextUp(tasks, wh, nowMin)
   const loads = bandLoads(tasks, wh, settings.defaultEstimateMin)
   const free = unboxed(tasks, wh)
   const endMin = toMinutes(wh.end) ?? 0
@@ -66,8 +77,8 @@ export function TodayFlow({
 
       {/* --- いま やる1件 --- */}
       {next ? (
-        <div className="tp-now">
-          <p className="tp-now-label">いま やる1件</p>
+        <div className={`tp-now${live ? ' is-live' : ''}`}>
+          <p className="tp-now-label">{live ? 'いま やっている1件' : 'いま やる1件'}</p>
           <div className="tp-now-row">
             <button
               type="button"
@@ -78,14 +89,31 @@ export function TodayFlow({
             <button type="button" className="tp-now-body" onClick={() => onEdit(next)}>
               <span className="tp-now-title">{next.title}</span>
               <span className="tp-now-meta tp-mono">
-                {next.timebox || next.dueTime ? timeboxLabel(next.timebox, wh) || '枠なし' : '枠なし'}
+                {live
+                  ? `${durationLabel(runningMin(next))} 経過`
+                  : next.timebox || next.dueTime
+                    ? timeboxLabel(next.timebox, wh) || '枠なし'
+                    : '枠なし'}
                 {' ／ '}
                 {durationLabel(taskMinutes(next, settings.defaultEstimateMin))}
                 {next.dueTime && ` ／ ${next.dueTime} 締め`}
               </span>
             </button>
+            <button
+              type="button"
+              className={`tp-run${isRunning(next) ? ' is-on' : ''}`}
+              aria-pressed={isRunning(next)}
+              aria-label={isRunning(next) ? `${next.title} の手を止める` : `${next.title} を始める`}
+              onClick={() => onToggleRunning(next)}
+            >
+              {isRunning(next) ? '止める' : '始める'}
+            </button>
           </div>
-          <p className="tp-now-hint">これだけ見て手を動かす。終わったら次の1件に入れ替わる。</p>
+          <p className="tp-now-hint">
+            {live
+              ? '押した時刻から数えています。完了にすると、かかった時間が実績に残ります。'
+              : 'これだけ見て手を動かす。終わったら次の1件に入れ替わる。'}
+          </p>
         </div>
       ) : (
         <p className="tp-now-empty">

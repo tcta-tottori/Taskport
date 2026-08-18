@@ -96,7 +96,7 @@ export function DraftFields({
         />
       </label>
 
-      <div className="tp-field-row">
+      <div className="tp-field-row tp-field-row-4">
         <label className="tp-field">
           <span className="tp-label">期限</span>
           <input
@@ -131,7 +131,30 @@ export function DraftFields({
             <span>分</span>
           </div>
         </label>
+        {/* 実績。見込みと同じ欄に入れない（片方を直すともう片方の意味が変わる） */}
+        <label className="tp-field tp-field-narrow">
+          <span className="tp-label">実績</span>
+          <div className="tp-suffix">
+            <input
+              type="number"
+              min={0}
+              step={5}
+              inputMode="numeric"
+              value={draft.actualMin ?? ''}
+              placeholder="—"
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                onChange({ actualMin: e.target.value === '' || v <= 0 ? null : Math.round(v) })
+              }}
+            />
+            <span>分</span>
+          </div>
+        </label>
       </div>
+      <p className="tp-hint">
+        「見込み」は積み上げの計算に、「実績」は日報と区分ごとの時間に使います。
+        実績は完了にしたときにも入ります（始めてから完了までを数えます）。
+      </p>
 
       <div className="tp-field">
         <span className="tp-label">優先度</span>
@@ -297,7 +320,6 @@ export function DraftFields({
               type="button"
               className={`tp-fchip${repeat?.unit === u.key ? ' is-on' : ''}`}
               aria-pressed={repeat?.unit === u.key}
-              disabled={!draft.due}
               onClick={() => setUnit(u.key)}
             >
               {u.label}
@@ -352,11 +374,11 @@ export function DraftFields({
         )}
 
         <p className="tp-hint">
-          {!draft.due
-            ? '期限を入れると繰り返しを設定できます。'
-            : repeat
+          {!repeat
+            ? '日報・週次会議・棚卸のような定例に使います。期限は無くてもかまいません。'
+            : draft.due
               ? '完了にしたとき、次の1件だけを作ります。手順のチェックは外した状態で引き継ぎます。'
-              : '日報・週次会議・棚卸のような定例に使います。'}
+              : '期限を入れていないので、完了にした日を起点に次回の期限を決めます。次の1件だけを作ります。'}
         </p>
       </div>
 

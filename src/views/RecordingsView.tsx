@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { Reveal } from '../components/Reveal'
-import { durationLabel } from '../lib/date'
+import { dayOfIso, durationLabel } from '../lib/date'
 import { repository } from '../repository'
 import { RECORDING_KEEP, type Recording } from '../types'
 
@@ -77,7 +77,7 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
     const a = document.createElement('a')
     const u = URL.createObjectURL(blob)
     a.href = u
-    a.download = `taskport-${rec.createdAt.slice(0, 10)}-${rec.id.slice(-6)}.${ext}`
+    a.download = `taskport-${dayOfIso(rec.createdAt)}-${rec.id.slice(-6)}.${ext}`
     document.body.appendChild(a)
     a.click()
     a.remove()

@@ -366,7 +366,7 @@ body::before {
   font-size: 11.5px; font-weight: 700; color: var(--muted);
 }
 .tp-due.is-over { color: var(--pri-high); }
-.tp-chip-time, .tp-chip-est, .tp-chip-cat, .tp-chip-rep, .tp-pri-tag {
+.tp-chip-time, .tp-chip-est, .tp-chip-cat, .tp-chip-rep, .tp-chip-live, .tp-chip-act, .tp-pri-tag {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px;
 }
@@ -2030,4 +2030,174 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 
 @media (max-width: 380px) {
   .tp-round-btn { width: 48px; height: 48px; }
+}
+
+/* =========================================================
+ * 実績（実行中の業務・やった業務）
+ *
+ * 一覧が「これから」の面なのに対し、こちらは「手が動いた記録」の面。
+ * 実行中は録音と同じ赤（--rec）で示す。ブランド色にしないのは、
+ * 「いま動いている」ことが一覧の中でひと目で分かるようにするため。
+ * =======================================================*/
+
+/* 期限・時刻・見込み・実績の4つ。実績を見込みと並べて置く */
+.tp-field-row-4 { grid-template-columns: 1.15fr 1fr 1fr 1fr; }
+.tp-field-row-2 { grid-template-columns: 1fr 1fr; }
+
+/* --- 一覧のカードに出す印 --- */
+.tp-chip-live {
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--rec) 12%, transparent); color: var(--rec);
+}
+.tp-chip-act {
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--go) 12%, transparent); color: var(--go);
+}
+.tp-card.is-live { border-color: color-mix(in srgb, var(--rec) 45%, transparent); }
+
+/* 始める／止める。タップ領域は 44px を確保する */
+.tp-run {
+  flex: none; align-self: center;
+  min-height: 44px; padding: 0 13px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; white-space: nowrap;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line-strong);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.tp-run:hover { border-color: var(--brand1); color: var(--brand1); }
+.tp-run.is-on {
+  background: color-mix(in srgb, var(--rec) 12%, transparent);
+  border-color: color-mix(in srgb, var(--rec) 55%, transparent); color: var(--rec);
+}
+
+/* 「いま やっている1件」は赤寄りにして、予定の1件と見分ける */
+.tp-now.is-live {
+  background: color-mix(in srgb, var(--rec) 6%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--rec) 28%, transparent);
+}
+.tp-now.is-live .tp-now-label { color: var(--rec); }
+
+/* --- 日付を送る --- */
+.tp-log-nav {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.tp-log-day {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+}
+.tp-log-day b { font-size: 15px; font-weight: 800; color: var(--ink); }
+.tp-log-day span { font-size: 11px; color: var(--faint); }
+.tp-caret-prev { transform: rotate(180deg); }
+.tp-log-today { flex: none; }
+
+/* --- いま動いているもの --- */
+.tp-live {
+  padding: 12px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.tp-live-empty { margin: 6px 0 0; font-size: 12px; color: var(--faint); line-height: 1.7; }
+.tp-live-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tp-live-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 9px 11px; border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--rec) 6%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--rec) 26%, transparent);
+}
+.tp-live-dot {
+  flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--rec);
+  animation: tpLivePulse 2s ease-in-out infinite;
+}
+.tp-live-body {
+  flex: 1; min-width: 0; text-align: left;
+  display: flex; flex-direction: column; gap: 2px; min-height: 44px; justify-content: center;
+}
+.tp-live-title { font-size: 14px; font-weight: 800; color: var(--ink); word-break: break-word; }
+.tp-live-meta { font-size: 11.5px; color: var(--rec); font-weight: 700; }
+
+@keyframes tpLivePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+/* --- やったことを足す --- */
+.tp-log-add {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; min-height: 56px; padding: 11px 14px;
+  border-radius: var(--radius); border: 1px dashed var(--line-strong);
+  background: var(--surface); color: var(--ink);
+  font-size: 13.5px; font-weight: 800; text-align: left;
+  transition: border-color .15s, color .15s;
+}
+.tp-log-add:hover { border-color: var(--brand1); color: var(--brand1); }
+.tp-log-add small { font-size: 11px; font-weight: 600; color: var(--faint); }
+.tp-log-add > svg { flex: none; }
+
+.tp-log-form {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 13px 14px 14px; background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+.tp-log-form-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tp-log-form-head h2 { margin: 0; font-size: 14px; font-weight: 800; color: var(--ink); }
+.tp-log-form-head span { font-size: 12px; color: var(--muted); }
+.tp-log-recent { max-height: 92px; overflow-y: auto; }
+.tp-log-form .tp-row-end { margin-top: 2px; }
+
+/* --- その日の記録 --- */
+.tp-log-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.tp-log-row {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 5px solid var(--line-strong); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm); padding: 10px 12px 10px 9px;
+}
+.tp-log-row.tp-pri-high { border-left-color: var(--pri-high); }
+.tp-log-row.tp-pri-mid  { border-left-color: var(--pri-mid); }
+.tp-log-row.tp-pri-low  { border-left-color: var(--pri-low); }
+.tp-log-row.is-live { border-color: color-mix(in srgb, var(--rec) 45%, transparent); }
+.tp-log-row.is-done .tp-log-title { text-decoration: line-through; }
+.tp-log-main { display: flex; align-items: stretch; gap: 10px; }
+.tp-log-body {
+  flex: 1; min-width: 0; text-align: left;
+  display: flex; flex-direction: column; gap: 3px; min-height: 44px; justify-content: center;
+}
+.tp-log-title { font-size: 14px; font-weight: 700; line-height: 1.45; color: var(--ink); word-break: break-word; }
+.tp-log-cats { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tp-log-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 8px; }
+.tp-log-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 120px; }
+.tp-log-field-narrow { flex: 1 1 96px; }
+.tp-log-field input {
+  width: 100%; min-height: 44px; font: inherit; font-size: 13.5px; color: var(--ink);
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); padding: 9px 11px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.tp-log-field input:hover { border-color: var(--brand1); }
+.tp-log-field input:focus {
+  outline: none; border-color: var(--brand1);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--brand1) 16%, transparent);
+}
+.tp-log-fields .tp-suffix { display: flex; align-items: center; gap: 6px; }
+.tp-log-fields .tp-suffix > span { font-size: 12px; color: var(--faint); flex: none; }
+.tp-log-fields .tp-btn-ghost, .tp-log-fields .tp-btn-primary { flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-live-dot { animation: none; }
+}
+
+/* 4つ並べると、スマホでは日付の欄が読めない幅まで潰れる。
+   期限・時刻／見込み・実績 の2段に折る。 */
+@media (max-width: 520px) {
+  .tp-field-row-4 { grid-template-columns: 1fr 1fr; }
+  .tp-field-row-4 .tp-field-narrow { grid-column: auto; }
+}
+
+@media (max-width: 380px) {
+  .tp-field-row-2 { grid-template-columns: 1fr 1fr; }
+  .tp-live-row { align-items: flex-start; }
 }

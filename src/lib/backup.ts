@@ -76,6 +76,8 @@ function toTask(raw: unknown): Task | null {
     due: isDayKey(o.due) ? o.due : null,
     dueTime: isTimeKey(o.dueTime) ? o.dueTime : null,
     estimateMin: typeof o.estimateMin === 'number' && o.estimateMin > 0 ? Math.round(o.estimateMin) : null,
+    startedAt: typeof o.startedAt === 'string' ? o.startedAt : null,
+    actualMin: typeof o.actualMin === 'number' && o.actualMin > 0 ? Math.round(o.actualMin) : null,
     priority: PRIORITIES.includes(o.priority as Priority) ? (o.priority as Priority) : 'mid',
     // v1.10 以前は区分が1つ（category）だった。読めるようにしておく
     categories: Array.isArray(o.categories)
@@ -85,7 +87,8 @@ function toTask(raw: unknown): Task | null {
         : [],
     subtasks: toSubtasks(o.subtasks),
     timebox: TIMEBOXES.includes(o.timebox as TimeboxKey) ? (o.timebox as TimeboxKey) : null,
-    repeat: isDayKey(o.due) ? toRepeat(o.repeat) : null,
+    // 期限が無くても繰り返しは持てる（v1.14.0）
+    repeat: toRepeat(o.repeat),
     status: o.status === 'done' ? 'done' : 'open',
     source: SOURCES.includes(o.source as Source) ? (o.source as Source) : 'form',
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : now,

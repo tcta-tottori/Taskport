@@ -14,6 +14,7 @@ import { TemplateSheet } from './views/TemplateSheet'
 import { TextSheet } from './views/TextSheet'
 import { TriageSheet, type TriageAction } from './views/TriageSheet'
 import { WrapUpSheet } from './views/WrapUpSheet'
+import { WorkLogView, type LogEntry } from './views/WorkLogView'
 import { WorkCalendarSheet } from './views/WorkCalendarSheet'
 import { RecordingOverlay } from './views/RecordingOverlay'
 import { RecordingsView } from './views/RecordingsView'
@@ -26,9 +27,10 @@ import { useShareTarget } from './ports/in/useShareTarget'
 import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
 import { voiceSupported } from './ports/in/useVoiceInput'
-import { addDaysKey, dayKey, diffDays, formatMD, timeKey, toMinutes } from './lib/date'
+import { addDaysKey, dayKey, diffDays, durationLabel, formatMD, timeKey, toMinutes } from './lib/date'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
+import { isRunning, logToTask, runningMin } from './lib/worklog'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { clearRemote, syncOnce } from './lib/driveSync'
 import { isConnected } from './lib/googleAuth'
@@ -62,11 +64,12 @@ import {
  * 自然文はどの入口から来ても parseToTasks を通り、必ず確認画面に出る。
  * =======================================================*/
 
-type ViewKey = 'list' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
+type ViewKey = 'list' | 'schedule' | 'worklog' | 'dashboard' | 'recordings' | 'settings'
 
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   { key: 'list', label: '一覧', icon: 'list' },
   { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
+  { key: 'worklog', label: '実績', icon: 'clock' },
   { key: 'dashboard', label: '分析', icon: 'chart' },
   { key: 'recordings', label: '録音', icon: 'mic' },
   { key: 'settings', label: '設定', icon: 'gear' },
@@ -416,9 +419,14 @@ export default function App() {
   const toggleDone = useCallback(
     async (task: Task) => {
       const done = task.status === 'done'
+      // 実行中のまま完了にしたら、着手からの経過を実績として残す。
+      // すでに実績が入っているときは触らない（人が入れた値を上書きしない）。
+      const measured =
+        !done && isRunning(task) && task.actualMin === null ? runningMin(task) : null
       await repository.update(task.id, {
         status: done ? 'open' : 'done',
         doneAt: done ? null : new Date().toISOString(),
+        ...(measured !== null && measured > 0 ? { actualMin: measured } : {}),
       })
       // 繰り返しのタスクを完了にしたら、次の1件だけをここで作る。
       // 完了したほうは履歴として残し、触らない。
@@ -431,6 +439,50 @@ export default function App() {
       if (next) notify(`完了。次は ${formatMD(next.due ?? '')}（${repeatLabel(task.repeat)}）`)
     },
     [reload, today, settings.workHours, settings.workCalendar, notify],
+  )
+
+  /**
+   * いま手を付ける／手を止める。
+   * 押した時刻を残すだけで、タイマーは持たない（画面を閉じても続く）。
+   */
+  const toggleRunning = useCallback(
+    async (task: Task) => {
+      if (isRunning(task)) {
+        // 止めるときは、測れた経過を実績に足す。始めたのが無かったことにはしない。
+        const spent = runningMin(task)
+        await repository.update(task.id, {
+          startedAt: null,
+          actualMin: spent > 0 ? (task.actualMin ?? 0) + spent : task.actualMin,
+        })
+        notify(spent > 0 ? `手を止めました（${durationLabel(spent)}を記録）` : '手を止めました')
+      } else {
+        await repository.update(task.id, { startedAt: new Date().toISOString() })
+        notify('始めました')
+      }
+      await reload()
+    },
+    [reload, notify],
+  )
+
+  /** 実績を直す（かかった時間・開始時刻）。実績の画面からその場で使う。 */
+  const patchTask = useCallback(
+    async (task: Task, patch: Partial<Task>) => {
+      await repository.update(task.id, patch)
+      await reload()
+    },
+    [reload],
+  )
+
+  /** やった業務を1件、完了済みとして足す。確認画面は通さない（人が自分で書いた1件） */
+  const addLog = useCallback(
+    async (entry: LogEntry) => {
+      const created = logToTask(entry.draft, entry.day, entry.start, entry.minutes)
+      await repository.add([created])
+      await rememberAll([created])
+      await reload()
+      notify('記録しました')
+    },
+    [reload, notify, rememberAll],
   )
 
   /** 手順1つの済／未了。カードから直接切り替えられるようにする。 */
@@ -457,7 +509,7 @@ export default function App() {
           categories: cleanCategories(draft.categories),
           subtasks: draft.subtasks.filter((t) => t.title.trim()).map((t) => ({ ...t, title: t.title.trim() })),
           timebox: draft.timebox,
-          repeat: draft.due ? draft.repeat : null,
+          repeat: draft.repeat,
         })
         notify('保存しました')
       } else {
@@ -725,7 +777,8 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const v = params.get('view')
-    if (v === 'schedule' || v === 'dashboard' || v === 'recordings' || v === 'settings') setView(v)
+    if (v === 'schedule' || v === 'worklog' || v === 'dashboard' || v === 'recordings' || v === 'settings')
+      setView(v)
     // ?dock=voice で開いたときはそのまま録音を始める
     if (params.get('dock') === 'voice' && voiceSupported()) void session.start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -919,6 +972,7 @@ export default function App() {
             onToggle={(t) => void guard(() => toggleDone(t))}
             onEdit={setEditing}
             onToggleSubtask={(t, id) => void guard(() => toggleSubtask(t, id))}
+            onToggleRunning={(t) => void guard(() => toggleRunning(t))}
             filter={filter}
             onFilterChange={setFilter}
             saved={settings.savedFilters}
@@ -935,6 +989,20 @@ export default function App() {
             settings={settings}
             onEdit={setEditing}
             onImportEvent={importEvent}
+            onNotify={notify}
+          />
+        ) : view === 'worklog' ? (
+          <WorkLogView
+            tasks={tasks}
+            today={today}
+            settings={settings}
+            templates={templates}
+            onEdit={setEditing}
+            onToggle={(t) => void guard(() => toggleDone(t))}
+            onToggleRunning={(t) => void guard(() => toggleRunning(t))}
+            onPatch={(t, p) => void guard(() => patchTask(t, p))}
+            onAddLog={(e) => void guard(() => addLog(e))}
+            onChangeCategoryGroups={saveCategoryGroups}
             onNotify={notify}
           />
         ) : view === 'dashboard' ? (

@@ -1,7 +1,8 @@
-import { dayKey, formatMD, formatMDShort, fromMinutes, toMinutes } from '../../lib/date'
+import { dayKey, dayOfIso, formatMD, formatMDShort, fromMinutes, toMinutes } from '../../lib/date'
 import { sortTasks } from '../../lib/tasks'
 import { trim, workSegments } from '../../lib/workday'
 import { primaryCategory } from '../../lib/workCategories'
+import { loggedMinutes, logStartTime, ofDay } from '../../lib/worklog'
 import type { Task, WorkHours } from '../../types'
 
 /* =========================================================
@@ -21,7 +22,7 @@ import type { Task, WorkHours } from '../../types'
  *   ・8/20 サンプル物流へ納期回答
  */
 export function toDailyReport(tasks: Task[], today = dayKey()): string {
-  const doneToday = tasks.filter((t) => t.status === 'done' && (t.doneAt ?? '').slice(0, 10) === today)
+  const doneToday = tasks.filter((t) => t.status === 'done' && dayOfIso(t.doneAt) === today)
   const openToday = sortTasks(tasks.filter((t) => t.status === 'open' && t.due === today))
   const ahead = sortTasks(tasks.filter((t) => t.status === 'open' && !!t.due && t.due > today))
   const overdue = sortTasks(tasks.filter((t) => t.status === 'open' && !!t.due && t.due < today))
@@ -84,6 +85,10 @@ export function toBulletList(tasks: Task[]): string {
  * 枠は勤務時間の設定から作る（小休憩と昼休憩は枠を作らない）。
  * 時刻の入っているタスクをその枠に置き、時刻なしのタスクは空き枠へ
  * 上から詰める。埋まらなかった枠は空欄のままにする（勝手に埋めない）。
+ *
+ * 拾うのは**その日の記録**（`worklog.ofDay`）。完了した日で見るので、
+ * 昨日ぶんを今朝片づけた1件も今日の日報に出る。長さは実績があれば実績、
+ * 無ければ見込みを使う。
  * =======================================================*/
 
 /** 30分枠を作る。休憩は挟まない。 */
@@ -126,9 +131,9 @@ export function toWorkLogRows(
     detail: '',
   }))
 
-  const ofDay = tasks.filter((t) => t.due === day)
-  const timed = ofDay.filter((t) => t.dueTime !== null)
-  const untimed = sortTasks(ofDay.filter((t) => t.dueTime === null))
+  const mine = ofDay(tasks, day)
+  const timed = mine.filter((t) => logStartTime(t) !== null)
+  const untimed = sortTasks(mine.filter((t) => logStartTime(t) === null))
 
   const fill = (index: number, task: Task) => {
     if (index < 0 || index >= rows.length || rows[index].detail) return false
@@ -143,11 +148,11 @@ export function toWorkLogRows(
 
   // 時刻のあるものを先に置く。長いタスクは続く枠も埋める。
   for (const t of timed) {
-    const from = toMinutes(t.dueTime as string)
+    const from = toMinutes(logStartTime(t) as string)
     if (from === null) continue
     const start = slots.findIndex((s) => from >= s.from && from < s.to)
     if (start < 0) continue
-    const span = Math.max(1, Math.ceil((t.estimateMin && t.estimateMin > 0 ? t.estimateMin : defaultEstimateMin) / 30))
+    const span = Math.max(1, Math.ceil(loggedMinutes(t, defaultEstimateMin) / 30))
     for (let i = 0; i < span; i++) fill(start + i, t)
   }
   // 時刻なしは空いている枠へ上から詰める

@@ -14,6 +14,8 @@ const HEADERS: { key: keyof Task; label: string }[] = [
   { key: 'due', label: '期限' },
   { key: 'dueTime', label: '時刻' },
   { key: 'estimateMin', label: '見込み分' },
+  { key: 'actualMin', label: '実績分' },
+  { key: 'startedAt', label: '着手日時' },
   { key: 'priority', label: '優先度' },
   { key: 'categories', label: '区分' },
   { key: 'status', label: '状態' },

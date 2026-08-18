@@ -13,6 +13,10 @@ import type { Repeat, RepeatUnit, Task, WorkCalendar, WorkHours } from '../types
  *   - 一覧が未来のタスクで埋まると、いま何をやるかが見えなくなる
  *   - 予定が変わったとき、作り置いた分を全部直すことになる
  * ため。1件ずつなら、やめたければその1件を消せば終わる。
+ *
+ * **期限を入れなくても繰り返しは設定できる**（v1.14.0）。定常業務には
+ * 締切という感じのものが無く、期限欄を埋めるためだけに今日の日付を入れる
+ * のは嘘になる。期限が無いときは「済ませた日」から次回を数える。
  * =======================================================*/
 
 const WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土']
@@ -111,6 +115,9 @@ function step(from: string, repeat: Repeat, rule: WorkRule): string {
  *   - 期限を過ぎて終えた   … 過ぎた分は飛ばして、次に来る回
  *   - 期限より早く終えた   … 前倒しした回は消費したものとして、その次の回
  * until を越えたら null（もう作らない）。
+ *
+ * 期限を入れていないタスクでは、呼び出し側が `due` の代わりに
+ * **済ませた日**を渡す（＝そこから数え直す）。`nextOccurrence` を参照。
  */
 export function nextDue(
   due: string,
@@ -135,8 +142,12 @@ export function nextDue(
  * 完了したほうには手を触れない（履歴として残す）。
  */
 export function nextOccurrence(task: Task, today: string, rule: WorkRule): Task | null {
-  if (!task.repeat || !task.due) return null
-  const due = nextDue(task.due, task.repeat, today, rule)
+  if (!task.repeat) return null
+  // 期限があればそこから数える。**無ければ済ませた日（＝今日）から数える。**
+  // 期限を入れずに繰り返しだけ設定できるようにしたので、起点が無い場合がある。
+  // 起点が無いまま次回も期限なしで作ると、完了した端から同じものが戻ってきて、
+  // しかも「毎日」と「毎週」の区別が付かなくなる。だから次回には日を入れる。
+  const due = nextDue(task.due ?? today, task.repeat, today, rule)
   if (!due) return null
   const now = new Date().toISOString()
   return {
@@ -145,6 +156,9 @@ export function nextOccurrence(task: Task, today: string, rule: WorkRule): Task 
     due,
     status: 'open',
     doneAt: null,
+    // 実績は前回のもの。持ち越すと次回が「やった扱い」で始まってしまう
+    startedAt: null,
+    actualMin: null,
     // 手順は毎回やり直すものなので、チェックを外して持ち越す
     subtasks: task.subtasks.map((s) => ({ ...s, id: ulid(), done: false })),
     createdAt: now,
