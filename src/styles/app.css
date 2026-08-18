@@ -1165,12 +1165,28 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 /* ---------- 保存データを開けなかったとき ----------
    「読み込んでいます…」のまま止めず、何が起きたかと次の一手を出す。 */
 .tp-fatal {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 40px 22px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 18px 16px; margin-bottom: 12px; text-align: center;
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: var(--radius-sm);
 }
 .tp-fatal > svg { color: var(--danger); }
-.tp-fatal-head { margin: 4px 0 0; font-size: 15px; font-weight: 800; color: var(--ink); }
-.tp-fatal-body { margin: 0 0 6px; font-size: 13px; line-height: 1.8; color: var(--muted); max-width: 34em; }
+.tp-fatal-head { margin: 2px 0 0; font-size: 15px; font-weight: 800; color: var(--ink); }
+.tp-fatal-body { margin: 0; font-size: 13px; line-height: 1.8; color: var(--muted); max-width: 34em; }
+/* ブラウザが返した素の理由。切り分けに使うので、小さくても消さない。 */
+.tp-fatal-detail {
+  margin: 2px 0 0; padding: 6px 10px; max-width: 100%; overflow-wrap: anywhere;
+  font-size: 11px; line-height: 1.6; color: var(--faint);
+  background: var(--surface-2); border-radius: 8px;
+}
+.tp-fatal-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.tp-fatal-acts > button { min-height: 44px; }
+.tp-fatal-reset {
+  width: 100%; margin-top: 4px; padding: 12px;
+  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.tp-fatal-reset p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.7; color: var(--muted); text-align: left; }
 
 /* 小休憩。昼休憩より控えめに、細い帯だけで示す。 */
 .tp-tl-break.is-short {
@@ -1358,3 +1374,13 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   font-size: 12.5px; font-weight: 700; color: var(--muted);
 }
 .tp-sub-add:hover { color: var(--brand1); border-color: var(--brand1); }
+
+/* 開くのに手間取っているとき。失敗ではないので赤くしない。 */
+.tp-slow {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 0 12px; padding: 10px 14px;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px; line-height: 1.6; color: var(--muted); text-align: center;
+}
+.tp-slow > svg { flex: none; color: var(--amber); }

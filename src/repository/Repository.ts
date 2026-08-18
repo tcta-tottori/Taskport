@@ -20,6 +20,13 @@ export interface Repository {
   /** バックアップ用の全置換（JSON取り込み） */
   replaceAll(tasks: Task[]): Promise<void>
 
+  /**
+   * 保存データそのものを作り直す。**中身は消える。**
+   * 保存領域が壊れて開けなくなったときの最後の手段。
+   * 必ず利用者に確かめてから呼ぶこと。
+   */
+  resetLedger(): Promise<void>
+
   /* --- 録音。音声は端末内にのみ置く --- */
   listRecordings(): Promise<Recording[]>
   addRecording(rec: Recording, audio: Blob | null): Promise<void>

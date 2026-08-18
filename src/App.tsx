@@ -13,6 +13,7 @@ import { TaskEditor } from './views/TaskEditor'
 import { RecordingOverlay } from './views/RecordingOverlay'
 import { RecordingsView } from './views/RecordingsView'
 import { repository } from './repository'
+import { DbOpenError, onDbStatus, type DbStatus } from './repository/LocalRepository'
 import { APP_VERSION, buildLabel } from './version'
 import { checkForUpdate } from './lib/updater'
 import { parseToTasks } from './ports/in/parseToTasks'
@@ -74,7 +75,11 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
   /** 保存データを開けなかったときの案内。null なら正常。 */
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<{ message: string; detail: string } | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
+  /** 保存データの開き具合。時間がかかっていることを画面に出すために見張る。 */
+  const [dbStatus, setDbStatus] = useState<DbStatus>('idle')
   const [view, setView] = useState<ViewKey>('list')
   const [tab, setTab] = useState<ListTab>('today')
   const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER)
@@ -116,15 +121,53 @@ export default function App() {
       setTasks(list)
       setSettings(s)
     } catch (err) {
-      setLoadError(
-        err instanceof Error
-          ? err.message
-          : '保存データを読めませんでした。ブラウザのプライベートモードでは保存できません。',
-      )
+      setTasks([])
+      setLoadError({
+        message:
+          err instanceof Error
+            ? err.message
+            : '保存データを読めませんでした。ブラウザを開き直してみてください。',
+        detail: err instanceof DbOpenError ? err.detail : '',
+      })
     } finally {
       setLoading(false)
     }
   }, [])
+
+  /**
+   * 保存データが開けないときの最後の手段。**台帳の中身は消える。**
+   * 開けない以上いまある分は取り出せないので、その旨も画面に書いてある。
+   */
+  const resetLedger = useCallback(async () => {
+    setResetting(true)
+    try {
+      await repository.resetLedger()
+      setConfirmReset(false)
+      await load()
+      notify('保存データを作り直しました')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : '作り直せませんでした', 'error')
+    } finally {
+      setResetting(false)
+    }
+  }, [load, notify])
+
+  /** 保存に失敗したときは黙って落とさず、必ず画面に出す */
+  const guard = useCallback(
+    async (run: () => Promise<void>) => {
+      try {
+        await run()
+      } catch (err) {
+        notify(
+          err instanceof Error ? err.message : '保存できませんでした。もう一度試してください。',
+          'error',
+        )
+      }
+    },
+    [notify],
+  )
+
+  useEffect(() => onDbStatus((st) => setDbStatus(st)), [])
 
   useEffect(() => {
     void load()
@@ -495,17 +538,69 @@ export default function App() {
       </nav>
 
       <main className="tp-main">
-        {loading ? (
-          <p className="tp-loading">読み込んでいます…</p>
-        ) : loadError ? (
+        {/* 保存データが開けなくても、画面そのものは動かす。
+            1つ開けないだけで全部の画面が使えなくなると、書き出しにも設定にも
+            手が届かなくなる（v1.6.0 で実機がこの状態になった）。
+            台帳は空で出し、いま何が起きていて何ができないかを上に出す。 */}
+        {loadError && (
           <div className="tp-fatal" role="alert">
-            <Icon name="alert" size={28} />
+            <Icon name="alert" size={26} />
             <p className="tp-fatal-head">保存データを開けませんでした</p>
-            <p className="tp-fatal-body">{loadError}</p>
-            <button type="button" className="tp-btn-primary" onClick={() => void load()}>
-              もう一度試す
-            </button>
+            <p className="tp-fatal-body">{loadError.message}</p>
+            <p className="tp-fatal-body">
+              画面は使えますが、<b>いまタスクは読めておらず、新しい登録も保存できません。</b>
+            </p>
+            {loadError.detail && (
+              <p className="tp-fatal-detail tp-mono">理由: {loadError.detail}</p>
+            )}
+            <div className="tp-fatal-acts">
+              <button type="button" className="tp-btn-primary" onClick={() => void load()}>
+                もう一度開く
+              </button>
+              {!confirmReset && (
+                <button type="button" className="tp-btn-ghost" onClick={() => setConfirmReset(true)}>
+                  保存データを作り直す
+                </button>
+              )}
+            </div>
+            {confirmReset && (
+              <div className="tp-fatal-reset">
+                <p>
+                  台帳を空にして作り直します。<b>いま入っているタスクは戻りません。</b>
+                  開けていないので、先に書き出して救うこともできません。
+                </p>
+                <div className="tp-row-end">
+                  <button type="button" className="tp-btn-ghost" onClick={() => setConfirmReset(false)}>
+                    やめる
+                  </button>
+                  <button
+                    type="button"
+                    className="tp-btn-danger"
+                    disabled={resetting}
+                    onClick={() => void resetLedger()}
+                  >
+                    <Icon name="trash" size={15} />
+                    {resetting ? '作り直しています…' : '消して作り直す'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+        )}
+
+        {/* 開くのに手間取っているだけのときは、待たせずに画面を出す。
+            開けた時点で中身が入る。 */}
+        {loading && (dbStatus === 'slow' || dbStatus === 'blocked') && (
+          <p className="tp-slow" role="status">
+            <Icon name="alert" size={15} />
+            {dbStatus === 'blocked'
+              ? '保存データがほかのタブにさえぎられています。ほかのタブを閉じると続きます。'
+              : '保存データを開いています。少し時間がかかっています…'}
+          </p>
+        )}
+
+        {loading && dbStatus !== 'slow' && dbStatus !== 'blocked' ? (
+          <p className="tp-loading">読み込んでいます…</p>
         ) : view === 'list' ? (
           <ListView
             tasks={tasks}
@@ -513,9 +608,9 @@ export default function App() {
             settings={settings}
             tab={tab}
             onTabChange={setTab}
-            onToggle={(t) => void toggleDone(t)}
+            onToggle={(t) => void guard(() => toggleDone(t))}
             onEdit={setEditing}
-            onToggleSubtask={(t, id) => void toggleSubtask(t, id)}
+            onToggleSubtask={(t, id) => void guard(() => toggleSubtask(t, id))}
             filter={filter}
             onFilterChange={setFilter}
             saved={settings.savedFilters}
@@ -539,7 +634,7 @@ export default function App() {
           <SettingsView
             settings={settings}
             tasks={tasks}
-            onSave={(s) => void saveSettings(s)}
+            onSave={(s) => void guard(() => saveSettings(s))}
             onRestore={restore}
             onNotify={notify}
           />
@@ -570,7 +665,7 @@ export default function App() {
           hint={pending.hint}
           sourceText={pending.sourceText}
           today={today}
-          onCommit={(d) => void commitDrafts(d)}
+          onCommit={(d) => void guard(() => commitDrafts(d))}
           onCancel={() => setPending(null)}
         />
       )}
@@ -579,8 +674,8 @@ export default function App() {
         <TaskEditor
           task={editing ?? undefined}
           initialDraft={emptyDraft('form')}
-          onSave={(d) => void saveEdit(d)}
-          onDelete={(t) => void removeTask(t)}
+          onSave={(d) => void guard(() => saveEdit(d))}
+          onDelete={(t) => void guard(() => removeTask(t))}
           onClose={() => {
             setEditing(null)
             setCreating(false)
