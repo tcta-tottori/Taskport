@@ -11,6 +11,8 @@ import { ExportSheet } from './views/ExportSheet'
 import { ReviewSheet } from './views/ReviewSheet'
 import { TaskEditor } from './views/TaskEditor'
 import { repository } from './repository'
+import { APP_VERSION, buildLabel } from './version'
+import { checkForUpdate } from './lib/updater'
 import { parseToTasks, type ParseEngine } from './ports/in/parseToTasks'
 import { useShareTarget } from './ports/in/useShareTarget'
 import { dayKey } from './lib/date'
@@ -55,6 +57,7 @@ export default function App() {
   const [exporting, setExporting] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [today, setToday] = useState(dayKey())
+  const [checking, setChecking] = useState(false)
 
   const share = useShareTarget()
 
@@ -217,6 +220,17 @@ export default function App() {
     setDrawer(false)
   }
 
+  /** 手で更新を確認する。新しい版があれば自動で再読み込みされる。 */
+  const onCheckUpdate = async () => {
+    setChecking(true)
+    try {
+      const found = await checkForUpdate()
+      notify(found ? '新しい版があります。読み込み直します。' : `最新です（Ver. ${APP_VERSION}）`)
+    } finally {
+      setChecking(false)
+    }
+  }
+
   return (
     <div className="tp-app">
       <TapWave />
@@ -272,9 +286,20 @@ export default function App() {
           <span>書き出し</span>
         </button>
         <div className="tp-drawer-foot">
-          <p className="tp-mono">
+          <p className="tp-mono tp-drawer-count">
             未完了 {ov.open} ／ 超過 {ov.overdue}
           </p>
+          {/* 端末に届いているのがどの版かを見えるようにする。
+              更新が反映されないときは、ここを見れば切り分けられる。 */}
+          <div className="tp-drawer-ver">
+            <span>
+              <b className="tp-mono">Ver. {APP_VERSION}</b>
+              <span className="tp-mono">{buildLabel()}</span>
+            </span>
+            <button type="button" className="tp-ver-btn" disabled={checking} onClick={onCheckUpdate}>
+              {checking ? '確認中' : '更新を確認'}
+            </button>
+          </div>
         </div>
       </nav>
 

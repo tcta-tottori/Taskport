@@ -6,6 +6,7 @@ import { workHoursSummary } from '../lib/workday'
 import { makeBackup, readBackup } from '../lib/backup'
 import { downloadText } from '../ports/out/download'
 import { DEFAULT_WORK_HOURS, type Settings, type Task, type WorkHours } from '../types'
+import { APP_VERSION, buildLabel } from '../version'
 
 /* =========================================================
  * 設定
@@ -15,8 +16,6 @@ import { DEFAULT_WORK_HOURS, type Settings, type Task, type WorkHours } from '..
  * =======================================================*/
 
 const WEEKDAY = ['日', '月', '火', '水', '木', '金', '土']
-
-declare const __BUILD_TIME__: string
 
 /** 始業 < 昼休憩開始 < 昼休憩終了 < 終業 の順になっているか */
 function validateWorkHours(wh: WorkHours): string | null {
@@ -274,8 +273,10 @@ export function SettingsView({
             <dd>端末内で文字に変換します。音声データそのものは外部に送信しません。</dd>
             <dt>AIに渡すもの</dt>
             <dd>変換後のテキストだけ。APIキーは Workers 側にあります。</dd>
-            <dt>最終更新</dt>
-            <dd className="tp-mono">{typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__.slice(0, 16).replace('T', ' ') : '—'}</dd>
+            <dt>版</dt>
+            <dd className="tp-mono">Ver. {APP_VERSION}</dd>
+            <dt>ビルド</dt>
+            <dd className="tp-mono">{buildLabel()}</dd>
           </dl>
         </section>
       </Reveal>

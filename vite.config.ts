@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import pkg from './package.json'
 
 // GitHub Pages のサブパス。リポジトリ名（Taskport）と完全に一致させる。
 // https://tcta-tottori.github.io/Taskport/
@@ -8,15 +9,20 @@ const BASE = '/Taskport/'
 
 export default defineConfig({
   base: BASE,
-  // ビルド時刻を埋め込む（設定画面で「最終更新」として表示し、デプロイ確認に使う）
+  // 版とビルド時刻を埋め込む。メニュー下部と設定画面に出して、
+  // 端末に届いているのがどの版かを目で確認できるようにする。
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   plugins: [
     react(),
     VitePWA({
       // 直したその日に反映させたいので自動更新（skipWaiting + clientsClaim）。
       registerType: 'autoUpdate',
+      // 登録は main.tsx で自前に行う。プラグインが差し込む1行版は
+      // 更新確認も再読み込みもしないため、新しい版が端末に届かない。
+      injectRegister: null,
       includeAssets: ['icons/favicon-32.png', 'icons/favicon-48.png', 'icons/apple-touch-icon.png'],
       manifest: {
         name: 'Taskport — タスク・スケジュール管理',

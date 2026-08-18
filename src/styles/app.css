@@ -195,6 +195,22 @@ body::before {
   font-size: 11.5px; color: rgba(255, 255, 255, .84);
 }
 .tp-drawer-foot p { margin: 0; }
+.tp-drawer-count { margin-bottom: 8px !important; }
+/* 版とビルド時刻。更新が反映されないときの切り分けに使うので常に出す。 */
+.tp-drawer-ver {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.tp-drawer-ver > span { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+.tp-drawer-ver b { font-size: 12px; font-weight: 800; letter-spacing: .04em; color: #fff; }
+.tp-drawer-ver > span > span { font-size: 10.5px; color: rgba(255, 255, 255, .62); }
+.tp-ver-btn {
+  flex: none; min-height: 32px; padding: 5px 11px;
+  border-radius: 999px; font-size: 11px; font-weight: 700;
+  color: #fff; background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .24); transition: .16s;
+}
+.tp-ver-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .26); }
+.tp-ver-btn:disabled { opacity: .5; cursor: default; }
 
 /* ---------- パネル（ガラス面） ---------- */
 .tp-panel {
