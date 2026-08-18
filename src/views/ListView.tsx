@@ -70,7 +70,12 @@ export function ListView({
           <div>
             <p className="tp-label">本日の勤務</p>
             <p className="tp-today-span">{wh.span}</p>
-            {wh.breakSpan && <p className="tp-today-break">昼休憩 {wh.breakSpan}</p>}
+            {wh.breakSpan && (
+              <p className="tp-today-break">
+                昼休憩 {wh.breakSpan}
+                {wh.shortBreaks.length > 0 && ` ／ 小休憩 ${wh.shortBreaks.join(' ')}`}
+              </p>
+            )}
           </div>
           <div className="tp-today-num">
             <b>{durationLabel(load.planned)}</b>

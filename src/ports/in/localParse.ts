@@ -1,5 +1,6 @@
 import { addDaysKey, dayKey, isDayKey, parseDayKey, weekdayLabel } from '../../lib/date'
 import { emptyDraft } from '../../lib/tasks'
+import { detectCategory } from '../../lib/workCategories'
 import type { Draft, Priority, Source } from '../../types'
 
 /* =========================================================
@@ -13,15 +14,6 @@ import type { Draft, Priority, Source } from '../../types'
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
 const HIGH_WORDS = ['至急', '大至急', '今日中', '本日中', '最優先', '急ぎ', 'すぐに', '即']
-const CATEGORY_RULES: { key: string; words: string[] }[] = [
-  { key: '発注', words: ['発注', '注文', '手配', '購買'] },
-  { key: '納期確認', words: ['納期', '注残', '前倒し', '遅延', '出荷'] },
-  { key: '在庫', words: ['在庫', '棚卸', '欠品', '引当'] },
-  { key: '会議', words: ['会議', '打合せ', '打ち合わせ', 'ミーティング', '朝会', '面談'] },
-  { key: '社内資料', words: ['資料', '稟議', '報告書', '議事録', '日報', '作成'] },
-  { key: '通関', words: ['通関', 'インボイス', '船積', 'B/L', '輸出', '輸入'] },
-  { key: '連絡', words: ['連絡', '電話', 'メール', '返信', '回答', '確認'] },
-]
 
 /** 文の切れ目で分ける。箇条書きの行頭記号も切れ目として扱う。 */
 function splitSentences(text: string): string[] {
@@ -146,13 +138,6 @@ function detectPriority(sentence: string, due: string | null, today: string): Pr
   const diff = (parseDayKey(due).getTime() - parseDayKey(today).getTime()) / 86_400_000
   if (diff <= 3) return 'mid'
   return 'low'
-}
-
-function detectCategory(sentence: string): string {
-  for (const rule of CATEGORY_RULES) {
-    if (rule.words.some((w) => sentence.includes(w))) return rule.key
-  }
-  return ''
 }
 
 /** 期限や優先度を表す語を件名から落として、実行内容だけを残す */

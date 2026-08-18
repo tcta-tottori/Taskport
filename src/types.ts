@@ -27,7 +27,7 @@ export interface Task {
    */
   estimateMin: number | null
   priority: Priority
-  /** 発注 / 納期確認 / 在庫 / 社内資料 / 会議 / 通関 など自由入力 */
+  /** 業務分類。候補は lib/workCategories.ts のマスタ。自由入力も可 */
   category: string
   status: Status
   /** どの入口から入ったか（どの入口を育てるかの判断に使う） */
@@ -59,21 +59,16 @@ export const SOURCE_LABEL: Record<Source, string> = {
   calendar: 'カレンダー',
 }
 
-/** 実運用で頻出しやすい区分。マスタ管理はせず、入力補助にとどめる。 */
-export const CATEGORY_SUGGESTIONS = [
-  '発注',
-  '納期確認',
-  '在庫',
-  '社内資料',
-  '会議',
-  '通関',
-  '連絡',
-  'その他',
-]
-
 /* ---------------------------------------------------------
  * 勤務時間
  * ------------------------------------------------------- */
+
+/** 昼休憩以外の短い休憩（午前・午後の小休止） */
+export interface ShortBreak {
+  /** "HH:mm" */
+  start: string
+  end: string
+}
 
 export interface WorkHours {
   /** 始業 "HH:mm" */
@@ -86,13 +81,19 @@ export interface WorkHours {
   end: string
   /** 稼働曜日。0=日 〜 6=土 */
   workDays: number[]
+  /** 小休憩。実働から差し引き、タイムラインにも出す */
+  shortBreaks: ShortBreak[]
 }
 
 /**
  * 勤務時間の既定値。
- * 利用者の実際の勤務に合わせた値で、設定画面から変更できる。
- *   始業 8:20 / 昼休憩 12:25〜13:05 / 終業 17:10
- *   → 実働 4時間05分 + 4時間05分 = 8時間10分（490分）
+ * 実際に使っている資材課日報の時間枠に合わせてある。設定画面から変更できる。
+ *
+ *   8:20〜10:20（120分）／ 小休憩 10:20〜10:25
+ *   10:25〜12:25（120分）／ 昼休憩 12:25〜13:05
+ *   13:05〜15:05（120分）／ 小休憩 15:05〜15:10
+ *   15:10〜17:10（120分）
+ *   → 実働 480分（8時間ちょうど）
  */
 export const DEFAULT_WORK_HOURS: WorkHours = {
   start: '08:20',
@@ -100,6 +101,10 @@ export const DEFAULT_WORK_HOURS: WorkHours = {
   breakEnd: '13:05',
   end: '17:10',
   workDays: [1, 2, 3, 4, 5],
+  shortBreaks: [
+    { start: '10:20', end: '10:25' },
+    { start: '15:05', end: '15:10' },
+  ],
 }
 
 /* ---------------------------------------------------------

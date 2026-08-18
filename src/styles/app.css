@@ -1167,3 +1167,26 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-fatal > svg { color: var(--danger); }
 .tp-fatal-head { margin: 4px 0 0; font-size: 15px; font-weight: 800; color: var(--ink); }
 .tp-fatal-body { margin: 0 0 6px; font-size: 13px; line-height: 1.8; color: var(--muted); max-width: 34em; }
+
+/* 小休憩。昼休憩より控えめに、細い帯だけで示す。 */
+.tp-tl-break.is-short {
+  background: repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--muted) 14%, transparent) 0 4px,
+    transparent 4px 8px);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+/* 区分ごとの時間の内訳（大分類の下にぶら下げる小分類） */
+.tp-bar-items {
+  list-style: none; margin: 6px 0 0; padding: 0 0 0 10px;
+  display: flex; flex-direction: column; gap: 3px;
+  border-left: 2px solid var(--line);
+}
+.tp-bar-items li {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 11.5px; color: var(--muted);
+}
+.tp-bar-items li > span:first-child {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

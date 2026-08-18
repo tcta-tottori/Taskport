@@ -1,5 +1,6 @@
 import { addDaysKey, dayKey, lastNDays } from './date'
 import { taskMinutes, workMinutes } from './workday'
+import { groupOf } from './workCategories'
 import { PRIORITIES, type Priority, type Settings, type Source, type Task } from '../types'
 
 /* =========================================================
@@ -174,3 +175,68 @@ export function overview(tasks: Task[], today = dayKey()): Overview {
 }
 
 export const PRIORITY_ORDER = PRIORITIES
+
+
+/* ---------------------------------------------------------
+ * 区分ごとの時間（資材課日報の集計に相当）
+ *
+ * 日報は 0.25H 刻みで作業内容ごとに時間を積み、大分類ごとの合計と
+ * 全体に占める割合を出している。同じ見方を Taskport でも作る。
+ *
+ * ただし日報が「実際にかかった時間」なのに対し、こちらは
+ * 「完了したタスクの見込み時間」である点が違う。数え方が違うので、
+ * 画面でもそのように書く（実績と取り違えると判断を誤る）。
+ * ------------------------------------------------------- */
+
+export interface GroupMinutes {
+  group: string
+  minutes: number
+  /** 全体に占める割合 0〜1 */
+  share: number
+  /** 内訳（小分類ごと） */
+  items: { category: string; minutes: number }[]
+}
+
+/**
+ * 期間内に完了したタスクの見込み時間を、大分類ごとに合計する。
+ * @param from "YYYY-MM-DD"（この日を含む）
+ * @param to   "YYYY-MM-DD"（この日を含む）
+ */
+export function categoryMinutes(
+  tasks: Task[],
+  from: string,
+  to: string,
+  defaultEstimateMin: number,
+): { groups: GroupMinutes[]; total: number } {
+  const byGroup = new Map<string, Map<string, number>>()
+  let total = 0
+
+  for (const t of tasks) {
+    if (t.status !== 'done' || !t.doneAt) continue
+    const day = t.doneAt.slice(0, 10)
+    if (day < from || day > to) continue
+    const min = taskMinutes(t, defaultEstimateMin)
+    const g = groupOf(t.category)
+    const key = t.category.trim() || '未分類'
+    const items = byGroup.get(g) ?? new Map<string, number>()
+    items.set(key, (items.get(key) ?? 0) + min)
+    byGroup.set(g, items)
+    total += min
+  }
+
+  const groups: GroupMinutes[] = [...byGroup.entries()]
+    .map(([group, items]) => {
+      const minutes = [...items.values()].reduce((a, b) => a + b, 0)
+      return {
+        group,
+        minutes,
+        share: total > 0 ? minutes / total : 0,
+        items: [...items.entries()]
+          .map(([category, m]) => ({ category, minutes: m }))
+          .sort((a, b) => b.minutes - a.minutes),
+      }
+    })
+    .sort((a, b) => b.minutes - a.minutes)
+
+  return { groups, total }
+}

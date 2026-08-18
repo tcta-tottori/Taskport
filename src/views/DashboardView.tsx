@@ -3,6 +3,7 @@ import { Icon } from '../components/Icon'
 import { Reveal } from '../components/Reveal'
 import { durationLabel, formatMDShort } from '../lib/date'
 import {
+  categoryMinutes,
   categoryStats,
   computeStreak,
   dailyPoints,
@@ -14,6 +15,7 @@ import {
   type DayPoint,
 } from '../lib/stats'
 import { workHoursSummary } from '../lib/workday'
+import { addDaysKey } from '../lib/date'
 import { PRIORITIES, PRIORITY_LABEL, SOURCE_LABEL, type Settings, type Task } from '../types'
 
 /* =========================================================
@@ -42,6 +44,11 @@ export function DashboardView({
   const streak = useMemo(() => computeStreak(tasks, today), [tasks, today])
   const load = useMemo(() => workloadOf(tasks, today, settings), [tasks, today, settings])
   const allDays = useMemo(() => trimLeadingEmpty(dailyPoints(tasks, 90, today)), [tasks, today])
+  // 日報の集計と同じ見方（大分類ごとの時間と構成比）。直近10日ぶん。
+  const spent = useMemo(
+    () => categoryMinutes(tasks, addDaysKey(today, -9), today, settings.defaultEstimateMin),
+    [tasks, today, settings.defaultEstimateMin],
+  )
   const wh = workHoursSummary(settings.workHours)
 
   const pct = Math.round(load.ratio * 100)
@@ -114,6 +121,52 @@ export function DashboardView({
               <h2 className="tp-panel-title">処理の推移</h2>
               <p className="tp-empty-body">
                 登録と完了を続けると、日ごとの件数と消化率の推移が出ます。
+              </p>
+            </>
+          )}
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <div className="tp-panel-head">
+            <h2>区分ごとの時間</h2>
+            <span className="tp-badge tp-mono">直近10日</span>
+          </div>
+          {spent.total === 0 ? (
+            <p className="tp-empty-body">
+              完了したタスクがまだありません。区分と見込み時間を入れて完了にすると、
+              日報と同じ形で時間の配分が見えます。
+            </p>
+          ) : (
+            <>
+              {spent.groups.map((g) => (
+                <div className="tp-bar-item" key={g.group}>
+                  <div className="tp-bar-head">
+                    <span>{g.group}</span>
+                    <span className="tp-muted tp-mono">
+                      {durationLabel(g.minutes)}（{Math.round(g.share * 100)}%）
+                    </span>
+                  </div>
+                  <div className="tp-bar-track">
+                    <div
+                      className="tp-bar-fill"
+                      style={{ width: `${Math.round(g.share * 100)}%`, background: 'var(--chart-bar)' }}
+                    />
+                  </div>
+                  <ul className="tp-bar-items">
+                    {g.items.map((it) => (
+                      <li key={it.category}>
+                        <span>{it.category}</span>
+                        <span className="tp-mono">{durationLabel(it.minutes)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <p className="tp-muted tp-small">
+                合計 {durationLabel(spent.total)}。
+                これは<b>完了したタスクの見込み時間</b>の集計で、実際にかかった時間ではありません。
               </p>
             </>
           )}

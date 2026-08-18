@@ -11,7 +11,7 @@ import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
 
 /* =========================================================
  * 設定
- *   - 勤務時間（既定は 8:20 始業 / 12:25〜13:05 昼休憩 / 17:10 終業）
+ *   - 勤務時間（既定は日報の時間枠どおり。実働 8時間ちょうど）
  *   - 録音（音声を残すか・画面を点けたままにするか）
  *   - Googleカレンダー連携
  *   - JSON バックアップの書き出し／取り込み
@@ -143,6 +143,7 @@ export function SettingsView({
             <p className="tp-wh-sum">
               {summary.span}
               {summary.breakSpan && ` ／ 昼休憩 ${summary.breakSpan}`}
+              {summary.shortBreaks.length > 0 && ` ／ 小休憩 ${summary.shortBreaks.join(' ')}`}
               <b> 実働 {durationLabel(summary.minutes)}</b>
             </p>
           )}
@@ -168,7 +169,7 @@ export function SettingsView({
             <button
               type="button"
               className="tp-btn-ghost"
-              title="8:20 始業 / 12:25〜13:05 昼休憩 / 17:10 終業 / 月〜金"
+              title="8:20 始業 / 小休憩 10:20〜10:25・15:05〜15:10 / 昼休憩 12:25〜13:05 / 17:10 終業 / 月〜金"
               onClick={() => setWh(DEFAULT_WORK_HOURS)}
             >
               既定に戻す

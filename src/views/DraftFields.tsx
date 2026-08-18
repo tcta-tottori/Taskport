@@ -1,5 +1,6 @@
 import { Icon } from '../components/Icon'
-import { CATEGORY_SUGGESTIONS, PRIORITIES, PRIORITY_LABEL, type Draft } from '../types'
+import { PRIORITIES, PRIORITY_LABEL, type Draft } from '../types'
+import { CATEGORY_MASTER } from '../lib/workCategories'
 
 /**
  * Draft 1件ぶんの編集フォーム。
@@ -88,12 +89,17 @@ export function DraftFields({
           type="text"
           list={`${idPrefix}-cats`}
           value={draft.category}
-          placeholder="発注 / 納期確認 / 在庫 など"
+          placeholder="在庫確認、処理 / 納期確認、日程調整 など"
           onChange={(e) => onChange({ category: e.target.value })}
         />
+        {/* 日報の作業内容をそのまま候補にする。大分類ごとにまとめて出す。 */}
         <datalist id={`${idPrefix}-cats`}>
-          {CATEGORY_SUGGESTIONS.map((c) => (
-            <option key={c} value={c} />
+          {CATEGORY_MASTER.map((g) => (
+            <optgroup key={g.group} label={g.group}>
+              {g.items.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </optgroup>
           ))}
         </datalist>
       </label>

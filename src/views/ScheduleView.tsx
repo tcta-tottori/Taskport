@@ -13,6 +13,7 @@ import {
 } from '../lib/date'
 import { groupByDue, sortTasks } from '../lib/tasks'
 import {
+  allBreaks,
   breakSegment,
   dayLoad,
   isWorkDay,
@@ -101,11 +102,24 @@ function DayTimeline({
           />
         ))}
 
-        {br && (
-          <div className="tp-tl-break" style={{ top: y(br.from), height: (br.to - br.from) * PX_PER_MIN }}>
-            <span>昼休憩 {trim(fromMinutes(br.from))}〜{trim(fromMinutes(br.to))}</span>
-          </div>
-        )}
+        {/* 昼休憩と小休憩。日報の時間枠と同じ位置に出す。 */}
+        {allBreaks(wh).map((b) => {
+          const isLunch = !!br && b.from === br.from
+          const h = (b.to - b.from) * PX_PER_MIN
+          return (
+            <div
+              key={`${b.from}-${b.to}`}
+              className={`tp-tl-break${isLunch ? '' : ' is-short'}`}
+              style={{ top: y(b.from), height: h }}
+            >
+              {isLunch && (
+                <span>
+                  昼休憩 {trim(fromMinutes(b.from))}〜{trim(fromMinutes(b.to))}
+                </span>
+              )}
+            </div>
+          )
+        })}
 
         <div className="tp-tl-edge" style={{ top: y(workFrom) }}>
           <span>始業 {trim(wh.start)}</span>

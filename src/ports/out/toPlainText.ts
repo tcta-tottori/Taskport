@@ -1,6 +1,7 @@
-import { dayKey, formatMD, formatMDShort } from '../../lib/date'
+import { dayKey, formatMD, formatMDShort, fromMinutes, toMinutes } from '../../lib/date'
 import { sortTasks } from '../../lib/tasks'
-import type { Task } from '../../types'
+import { trim, workSegments } from '../../lib/workday'
+import type { Task, WorkHours } from '../../types'
 
 /* =========================================================
  * 出口: 日報・朝会用のプレーンテキスト
@@ -70,5 +71,101 @@ export function toBulletList(tasks: Task[]): string {
       const note = t.note ? `（${t.note}）` : ''
       return `・${head}${t.title}${note}`
     })
+    .join('\n')
+}
+
+/* =========================================================
+ * 出口: 業務日報（エクセル貼り付け用）
+ *
+ * 実際に使っている資材課日報と同じ「30分枠 × 時間／業務内容／詳細内容」
+ * の並びで書き出す。タブ区切りなので、日報シートにそのまま貼れる。
+ *
+ * 枠は勤務時間の設定から作る（小休憩と昼休憩は枠を作らない）。
+ * 時刻の入っているタスクをその枠に置き、時刻なしのタスクは空き枠へ
+ * 上から詰める。埋まらなかった枠は空欄のままにする（勝手に埋めない）。
+ * =======================================================*/
+
+/** 30分枠を作る。休憩は挟まない。 */
+export function workSlots(wh: WorkHours, slotMin = 30): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = []
+  for (const seg of workSegments(wh)) {
+    for (let t = seg.from; t + slotMin <= seg.to; t += slotMin) {
+      out.push({ from: t, to: t + slotMin })
+    }
+    // 端数（30分に満たない残り）も1枠として出す
+    const rest = (seg.to - seg.from) % slotMin
+    if (rest > 0) out.push({ from: seg.to - rest, to: seg.to })
+  }
+  return out.sort((a, b) => a.from - b.from)
+}
+
+export interface WorkLogRow {
+  /** "8:20～8:50" */
+  time: string
+  /** 業務内容（区分） */
+  category: string
+  /** 詳細内容 */
+  detail: string
+}
+
+/**
+ * その日の日報の行を作る。
+ * 時刻のあるタスクは該当枠へ、時刻なしは空き枠へ上から詰める。
+ */
+export function toWorkLogRows(
+  tasks: Task[],
+  day: string,
+  wh: WorkHours,
+  defaultEstimateMin: number,
+): WorkLogRow[] {
+  const slots = workSlots(wh)
+  const rows: WorkLogRow[] = slots.map((s) => ({
+    time: `${trim(fromMinutes(s.from))}～${trim(fromMinutes(s.to))}`,
+    category: '',
+    detail: '',
+  }))
+
+  const ofDay = tasks.filter((t) => t.due === day)
+  const timed = ofDay.filter((t) => t.dueTime !== null)
+  const untimed = sortTasks(ofDay.filter((t) => t.dueTime === null))
+
+  const fill = (index: number, task: Task) => {
+    if (index < 0 || index >= rows.length || rows[index].detail) return false
+    rows[index] = {
+      time: rows[index].time,
+      category: task.category,
+      detail: task.note ? `${task.title}（${task.note}）` : task.title,
+    }
+    return true
+  }
+
+  // 時刻のあるものを先に置く。長いタスクは続く枠も埋める。
+  for (const t of timed) {
+    const from = toMinutes(t.dueTime as string)
+    if (from === null) continue
+    const start = slots.findIndex((s) => from >= s.from && from < s.to)
+    if (start < 0) continue
+    const span = Math.max(1, Math.ceil((t.estimateMin && t.estimateMin > 0 ? t.estimateMin : defaultEstimateMin) / 30))
+    for (let i = 0; i < span; i++) fill(start + i, t)
+  }
+  // 時刻なしは空いている枠へ上から詰める
+  let cursor = 0
+  for (const t of untimed) {
+    while (cursor < rows.length && rows[cursor].detail) cursor++
+    if (cursor >= rows.length) break
+    fill(cursor, t)
+  }
+  return rows
+}
+
+/** 日報シートにそのまま貼れるタブ区切りテキスト */
+export function toWorkLogTsv(
+  tasks: Task[],
+  day: string,
+  wh: WorkHours,
+  defaultEstimateMin: number,
+): string {
+  return toWorkLogRows(tasks, day, wh, defaultEstimateMin)
+    .map((r) => [r.time, r.category, r.detail].join('\t'))
     .join('\n')
 }

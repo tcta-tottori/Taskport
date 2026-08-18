@@ -15,20 +15,45 @@ export interface Segment {
   label: string
 }
 
-/** 始業〜昼休憩前、昼休憩後〜終業 の2区間。休憩が範囲外なら1区間になる。 */
+/** 昼休憩と小休憩を合わせた、休んでいる区間の一覧（開始順） */
+export function allBreaks(wh: WorkHours): Segment[] {
+  const out: Segment[] = []
+  const lunch = breakSegment(wh)
+  if (lunch) out.push(lunch)
+  for (const b of wh.shortBreaks ?? []) {
+    const from = toMinutes(b.start)
+    const to = toMinutes(b.end)
+    if (from !== null && to !== null && to > from) out.push({ from, to, label: '休憩' })
+  }
+  return out.sort((a, b) => a.from - b.from)
+}
+
+/**
+ * 実際に手が動く区間。始業から終業までを、休憩でぶつ切りにする。
+ * 日報の時間枠がそうなっているので、昼休憩だけでなく小休憩も差し引く。
+ */
 export function workSegments(wh: WorkHours): Segment[] {
   const start = toMinutes(wh.start) ?? 0
   const end = toMinutes(wh.end) ?? 0
-  const bs = toMinutes(wh.breakStart)
-  const be = toMinutes(wh.breakEnd)
   if (end <= start) return []
-  if (bs === null || be === null || be <= bs || bs <= start || be >= end) {
-    return [{ from: start, to: end, label: '勤務' }]
+
+  const breaks = allBreaks(wh).filter((b) => b.to > start && b.from < end)
+  const segs: Segment[] = []
+  let cursor = start
+  for (const b of breaks) {
+    const from = Math.max(cursor, start)
+    const to = Math.min(b.from, end)
+    if (to > from) segs.push({ from, to, label: '勤務' })
+    cursor = Math.max(cursor, b.to)
   }
-  return [
-    { from: start, to: bs, label: '午前' },
-    { from: be, to: end, label: '午後' },
-  ]
+  if (end > cursor) segs.push({ from: cursor, to: end, label: '勤務' })
+
+  // 午前・午後の呼び分け（昼休憩をまたぐかで決める）
+  const lunch = breakSegment(wh)
+  if (lunch) {
+    for (const s of segs) s.label = s.to <= lunch.from ? '午前' : '午後'
+  }
+  return segs
 }
 
 /** 昼休憩の区間。設定が不正なら null。 */
@@ -59,16 +84,19 @@ export function isWithinWork(wh: WorkHours, nowMin: number): boolean {
   return workSegments(wh).some((seg) => nowMin >= seg.from && nowMin < seg.to)
 }
 
-/** 「8:20 〜 17:10（昼休憩 12:25〜13:05／実働 8時間10分）」の材料 */
+/** 「8:20 〜 17:10（昼休憩 12:25〜13:05／実働 8時間）」の材料 */
 export function workHoursSummary(wh: WorkHours): {
   span: string
   breakSpan: string | null
+  /** 小休憩の一覧。「10:20〜10:25」の形 */
+  shortBreaks: string[]
   minutes: number
 } {
   const br = breakSegment(wh)
   return {
     span: `${trim(wh.start)} 〜 ${trim(wh.end)}`,
     breakSpan: br ? `${trim(fromMinutes(br.from))} 〜 ${trim(fromMinutes(br.to))}` : null,
+    shortBreaks: (wh.shortBreaks ?? []).map((b) => `${trim(b.start)}〜${trim(b.end)}`),
     minutes: workMinutes(wh),
   }
 }
@@ -130,14 +158,14 @@ export interface Placed {
  */
 export function placeTimed(tasks: Task[], wh: WorkHours, defaultEstimateMin: number): Placed[] {
   const segs = workSegments(wh)
-  const br = breakSegment(wh)
   const out: Placed[] = []
+  const breaks = allBreaks(wh)
   for (const t of tasks) {
     const from = t.dueTime ? toMinutes(t.dueTime) : null
     if (from === null) continue
     const to = from + taskMinutes(t, defaultEstimateMin)
     const inWork = segs.some((s) => from >= s.from && from < s.to)
-    const inBreak = br ? from >= br.from && from < br.to : false
+    const inBreak = breaks.some((b) => from >= b.from && from < b.to)
     out.push({ task: t, from, to, outside: !inWork || inBreak })
   }
   return out.sort((a, b) => a.from - b.from)

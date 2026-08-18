@@ -4,7 +4,7 @@ import { Segmented } from '../components/Segmented'
 import { dayKey, formatMDShort } from '../lib/date'
 import { sortTasks } from '../lib/tasks'
 import { toCsv } from '../ports/out/toCsv'
-import { toBulletList, toDailyReport, toStandupText } from '../ports/out/toPlainText'
+import { toBulletList, toDailyReport, toStandupText, toWorkLogTsv } from '../ports/out/toPlainText'
 import { toGoogleCalendarUrl, toIcs, workHoursIcs } from '../ports/out/toCalendar'
 import { pushTasks } from '../ports/out/toGoogleCalendar'
 import { copyText, downloadText } from '../ports/out/download'
@@ -26,7 +26,7 @@ const KINDS: { key: Kind; label: string }[] = [
   { key: 'csv', label: 'CSV' },
 ]
 
-type TextForm = 'report' | 'standup' | 'bullets'
+type TextForm = 'worklog' | 'report' | 'standup' | 'bullets'
 
 export function ExportSheet({
   tasks,
@@ -42,7 +42,7 @@ export function ExportSheet({
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [kind, setKind] = useState<Kind>('text')
-  const [form, setForm] = useState<TextForm>('report')
+  const [form, setForm] = useState<TextForm>('worklog')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [pushing, setPushing] = useState(false)
 
@@ -52,11 +52,13 @@ export function ExportSheet({
   const wh = workHoursSummary(settings.workHours)
 
   const preview =
-    form === 'report'
-      ? toDailyReport(tasks, today)
-      : form === 'standup'
-        ? toStandupText(tasks, today)
-        : toBulletList(open)
+    form === 'worklog'
+      ? toWorkLogTsv(tasks, today, settings.workHours, settings.defaultEstimateMin)
+      : form === 'report'
+        ? toDailyReport(tasks, today)
+        : form === 'standup'
+          ? toStandupText(tasks, today)
+          : toBulletList(open)
 
   const toggle = (id: string) =>
     setPicked((prev) => {
@@ -91,6 +93,7 @@ export function ExportSheet({
             <>
               <Segmented
                 items={[
+                  { key: 'worklog' as TextForm, label: '業務日報' },
                   { key: 'report' as TextForm, label: '日報' },
                   { key: 'standup' as TextForm, label: '朝会' },
                   { key: 'bullets' as TextForm, label: '箇条書き' },
@@ -99,6 +102,13 @@ export function ExportSheet({
                 onChange={setForm}
                 ariaLabel="テキストの形"
               />
+              {form === 'worklog' && (
+                <p className="tp-note">
+                  資材課日報の様式（30分枠 × 時間／業務内容／詳細内容）です。
+                  タブ区切りなので、コピーして日報シートの時間欄にそのまま貼れます。
+                  時刻のないタスクは空き枠へ上から詰めています。<b>埋まらなかった枠は空欄のままです。</b>
+                </p>
+              )}
               <pre className="tp-preview">{preview}</pre>
               <div className="tp-row-end">
                 <button type="button" className="tp-btn-primary" onClick={() => copy(preview, '文面')}>
