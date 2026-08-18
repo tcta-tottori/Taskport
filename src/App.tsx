@@ -64,6 +64,8 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
+  /** 保存データを開けなかったときの案内。null なら正常。 */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [view, setView] = useState<ViewKey>('list')
   const [tab, setTab] = useState<ListTab>('today')
   const [drawer, setDrawer] = useState(false)
@@ -91,20 +93,47 @@ export default function App() {
     setTasks(list)
   }, [])
 
-  // 初期読み込み
+  /**
+   * 保存データを読む。
+   * 読めなかったときは必ず理由を画面に出す。
+   * 「読み込んでいます…」のまま止めない（何が起きたか分からず手の打ちようがなくなる）。
+   */
+  const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const [list, s] = await Promise.all([repository.list(), repository.loadSettings()])
+      setTasks(list)
+      setSettings(s)
+    } catch (err) {
+      setLoadError(
+        err instanceof Error
+          ? err.message
+          : '保存データを読めませんでした。ブラウザのプライベートモードでは保存できません。',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    void (async () => {
-      try {
-        const [list, s] = await Promise.all([repository.list(), repository.loadSettings()])
-        setTasks(list)
-        setSettings(s)
-      } catch {
-        notify('保存データを読めませんでした。ブラウザのプライベートモードでは保存できません。', 'error')
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [notify])
+    void load()
+  }, [load])
+
+  // 開けなかったときは、画面に戻ってきたら黙って開き直す。
+  // 「他のタブを閉じて戻る」で自然に直るようにするため。
+  useEffect(() => {
+    if (!loadError) return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [loadError, load])
 
   // 日付をまたいだら「今日」を更新する（アプリを開きっぱなしにする使い方を想定）
   useEffect(() => {
@@ -390,6 +419,15 @@ export default function App() {
       <main className="tp-main">
         {loading ? (
           <p className="tp-loading">読み込んでいます…</p>
+        ) : loadError ? (
+          <div className="tp-fatal" role="alert">
+            <Icon name="alert" size={28} />
+            <p className="tp-fatal-head">保存データを開けませんでした</p>
+            <p className="tp-fatal-body">{loadError}</p>
+            <button type="button" className="tp-btn-primary" onClick={() => void load()}>
+              もう一度試す
+            </button>
+          </div>
         ) : view === 'list' ? (
           <ListView
             tasks={tasks}

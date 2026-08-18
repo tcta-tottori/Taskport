@@ -1086,3 +1086,13 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   border-style: dashed;
   background: color-mix(in srgb, var(--brand2) 10%, var(--surface-2));
 }
+
+/* ---------- 保存データを開けなかったとき ----------
+   「読み込んでいます…」のまま止めず、何が起きたかと次の一手を出す。 */
+.tp-fatal {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 40px 22px; text-align: center;
+}
+.tp-fatal > svg { color: var(--danger); }
+.tp-fatal-head { margin: 4px 0 0; font-size: 15px; font-weight: 800; color: var(--ink); }
+.tp-fatal-body { margin: 0 0 6px; font-size: 13px; line-height: 1.8; color: var(--muted); max-width: 34em; }

@@ -39,10 +39,26 @@ interface TaskportDB extends DBSchema {
 }
 
 let dbPromise: Promise<IDBPDatabase<TaskportDB>> | null = null
+let dbInstance: IDBPDatabase<TaskportDB> | null = null
+
+/** 別のタブが古い版を掴んでいて開けないときに投げる。画面で案内を出すために区別する。 */
+export class DbBlockedError extends Error {
+  constructor() {
+    super(
+      'ほかのタブで開いている Taskport が、データの更新をさえぎっています。' +
+        '他のタブをすべて閉じてから、この画面を読み込み直してください。',
+    )
+    this.name = 'DbBlockedError'
+  }
+}
+
+/** いつまでも待たせない。開けなければ理由を付けて失敗させる。 */
+const OPEN_TIMEOUT_MS = 8000
 
 function db(): Promise<IDBPDatabase<TaskportDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<TaskportDB>(DB_NAME, DB_VERSION, {
+    let blocked = false
+    const open = openDB<TaskportDB>(DB_NAME, DB_VERSION, {
       upgrade(d) {
         if (!d.objectStoreNames.contains('tasks')) {
           const store = d.createObjectStore('tasks', { keyPath: 'id' })
@@ -59,6 +75,51 @@ function db(): Promise<IDBPDatabase<TaskportDB>> {
           d.createObjectStore('audio')
         }
       },
+      /** 別のタブが古い版を掴んでいて、こちらが上げられない */
+      blocked() {
+        blocked = true
+      },
+      /**
+       * こちらの接続が、別のタブの版上げをさえぎっている。
+       * すぐ手放して相手を進ませる（これがないとタブを開くたびに固まる）。
+       */
+      blocking() {
+        try {
+          dbInstance?.close()
+        } catch {
+          /* 既に閉じている */
+        }
+        dbInstance = null
+        dbPromise = null
+      },
+      /** ブラウザに接続を切られたら、次のアクセスで開き直す */
+      terminated() {
+        dbInstance = null
+        dbPromise = null
+      },
+    })
+
+    dbPromise = new Promise<IDBPDatabase<TaskportDB>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        dbPromise = null
+        reject(
+          blocked
+            ? new DbBlockedError()
+            : new Error('保存データを開けませんでした。ブラウザを開き直してみてください。'),
+        )
+      }, OPEN_TIMEOUT_MS)
+      open.then(
+        (d) => {
+          clearTimeout(timer)
+          dbInstance = d
+          resolve(d)
+        },
+        (err) => {
+          clearTimeout(timer)
+          dbPromise = null
+          reject(err)
+        },
+      )
     })
   }
   return dbPromise
