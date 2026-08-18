@@ -17,6 +17,7 @@ export function InputDock({
   onOpenForm,
   busy,
   voiceSupported,
+  keyboardFirst,
 }: {
   /** 自然文を構造化パイプラインへ渡す */
   onSubmitText: (text: string, source: Source) => void
@@ -26,21 +27,34 @@ export function InputDock({
   onOpenForm: () => void
   busy: boolean
   voiceSupported: boolean
+  /**
+   * キーボードが主な入力になる端末（PC）では、文字入力欄を最初から開けておく。
+   * スマホは親指で録音を押すのが主なので、閉じたまま出す。
+   */
+  keyboardFirst: boolean
 }) {
-  const [typing, setTyping] = useState(false)
+  const [typing, setTyping] = useState(keyboardFirst)
   const [text, setText] = useState('')
   const areaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
-    if (typing) areaRef.current?.focus()
-  }, [typing])
+    // 開いた直後だけ合わせる。PCで最初から開いているときは、
+    // 勝手に文字入力へ飛ばさない（画面を読む前にキーを取られると邪魔になる）
+    if (typing && !keyboardFirst) areaRef.current?.focus()
+  }, [typing, keyboardFirst])
+
+  // 端末の見分けは読み込みのあとに決まるので、決まった時点で開ける
+  useEffect(() => {
+    if (keyboardFirst) setTyping(true)
+  }, [keyboardFirst])
 
   const submit = () => {
     const t = text.trim()
     if (!t) return
     onSubmitText(t, 'text')
     setText('')
-    setTyping(false)
+    // PC では次の1件をすぐ打てるよう、欄を閉じない
+    setTyping(keyboardFirst)
   }
 
   return (
@@ -63,7 +77,7 @@ export function InputDock({
               type="button"
               className="tp-btn-ghost"
               onClick={() => {
-                setTyping(false)
+                setTyping(keyboardFirst)
                 setText('')
               }}
             >

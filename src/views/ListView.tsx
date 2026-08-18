@@ -100,7 +100,9 @@ export function ListView({
   const pct = Math.round(load.ratio * 100)
 
   return (
-    <div className="tp-view">
+    <div className="tp-view tp-cols">
+      {/* 左の列: その日の状況。PCでは一覧と並べて置き、スマホでは上に積む。 */}
+      <div className="tp-col">
       {/* 今日の稼働。設定した勤務時間に対して、今日締めのタスクがどれだけ積まれているか。 */}
       <section className="tp-today-card">
         <div className="tp-today-row">
@@ -154,23 +156,30 @@ export function ListView({
         />
       )}
 
-      <FilterBar
-        filter={filter}
-        onChange={onFilterChange}
-        saved={saved}
-        onSave={onSaveFilter}
-        onRemoveSaved={onRemoveSavedFilter}
-        hits={found.length}
-      />
+      </div>
 
-      {!searching && (
-        <Segmented
-          items={LIST_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))}
-          value={tab}
-          onChange={onTabChange}
-          ariaLabel="表示するタスクの範囲"
+      {/* 右の列: 探して、選んで、片づける */}
+      <div className="tp-col">
+      {/* 探す道具は、一覧が長くなっても手が届くように貼り付ける（スマホ） */}
+      <div className="tp-sticky">
+        <FilterBar
+          filter={filter}
+          onChange={onFilterChange}
+          saved={saved}
+          onSave={onSaveFilter}
+          onRemoveSaved={onRemoveSavedFilter}
+          hits={found.length}
         />
-      )}
+
+        {!searching && (
+          <Segmented
+            items={LIST_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))}
+            value={tab}
+            onChange={onTabChange}
+            ariaLabel="表示するタスクの範囲"
+          />
+        )}
+      </div>
 
       {shown.length === 0 ? (
         searching ? (
@@ -209,6 +218,7 @@ export function ListView({
           勤務時間の既定は {trim(settings.workHours.start)} 始業・{trim(settings.workHours.end)} 終業。設定から変えられます。
         </p>
       )}
+      </div>
     </div>
   )
 }

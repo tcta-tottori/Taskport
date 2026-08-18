@@ -911,7 +911,19 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-tl-hour > span { left: -40px; font-size: 9.5px; }
 }
 
-/* ---------- PC: サイドバーを常時展開 ---------- */
+/* ---------- スマホ: 探す道具を手の届く位置に留める ----------
+   一覧が長くなると、検索とタブが上へ流れて戻るのが面倒になる。
+   ヘッダーの下に貼り付けて、スクロールしても押せるようにする。 */
+.tp-sticky {
+  position: sticky; top: calc(var(--safe-t) + var(--header-h)); z-index: 20;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 8px 0;
+  background: linear-gradient(to bottom, var(--bg) 82%, transparent);
+}
+
+/* ---------- PC: サイドバーを常時展開し、面を横に並べる ----------
+   参考にした画面（Smartsheet のダッシュボード）と同じ考え方で、
+   広い画面では縦に積まず、左に状況・右に一覧を置いて一目で見渡せるようにする。 */
 @media (min-width: 1024px) {
   .tp-app { padding-left: var(--sidebar-w); }
   .tp-menu { display: none; }
@@ -921,6 +933,44 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-dock { left: var(--sidebar-w); }
   .tp-toast { left: calc(50% + var(--sidebar-w) / 2); }
   .tp-main { max-width: 900px; }
+
+  /* PC は文字入力欄を開いたまま出すので、その高さぶんを空けておく
+     （空けないと、下にある「朝の仕分け」などが隠れて押せなくなる） */
+  .tp-main { padding-bottom: calc(var(--safe-b) + 300px); }
+  /* 入力は本文の幅に合わせる（画面いっぱいに広げても打ちやすくならない） */
+  .tp-dock-panel, .tp-dock-bar { max-width: 720px; margin-left: auto; margin-right: auto; }
+}
+
+@media (min-width: 1180px) {
+  .tp-main { max-width: 1240px; }
+
+  /* 一覧: 左に「その日の状況」、右に「探して片づける」 */
+  .tp-view.tp-cols {
+    display: grid;
+    grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+    align-items: start;
+    gap: 18px;
+  }
+  .tp-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  /* 左の列は画面に貼り付けて、右を流し読みしても状況が見えるようにする */
+  .tp-cols > .tp-col:first-child { position: sticky; top: 12px; }
+  /* 横に並べたら、貼り付けは要らない */
+  .tp-sticky { position: static; padding: 0; background: none; }
+
+  /* 分析: カードを2枚ずつ並べる */
+  .tp-view.tp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 16px;
+  }
+  /* 幅の要るカード（推移のグラフ・区分ごとの時間）は横いっぱいに */
+  .tp-view.tp-grid > .tp-panel.is-wide { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1500px) {
+  .tp-main { max-width: 1440px; }
+  .tp-view.tp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* 候補の一行目でも優先度が読めるようにする（展開しないと分からない、を避ける） */
@@ -1633,4 +1683,18 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   margin: 0; padding: 12px; border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--pri-high) 8%, var(--surface-2));
   font-size: 13px; font-weight: 700; color: var(--pri-high);
+}
+
+/* PC のキー操作の案内。引き出しの下に小さく置く。 */
+.tp-keys {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+  margin: 0 0 10px; font-size: 10.5px; line-height: 1.9;
+  color: color-mix(in srgb, var(--on-chrome) 80%, transparent);
+}
+.tp-keys kbd {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 1px 5px; border-radius: 5px;
+  background: rgba(255, 255, 255, .18);
+  border: 1px solid rgba(255, 255, 255, .28);
+  color: var(--on-chrome);
 }

@@ -25,7 +25,7 @@ import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
 import { voiceSupported } from './ports/in/useVoiceInput'
 import { addDaysKey, dayKey, diffDays, formatMD, timeKey, toMinutes } from './lib/date'
-import { draftToTask, emptyDraft, type ListTab } from './lib/tasks'
+import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { clearRemote, syncOnce } from './lib/driveSync'
@@ -90,6 +90,12 @@ export default function App() {
   const [editingCalendar, setEditingCalendar] = useState(false)
   /** いまの時刻（0時からの分）。1分ごとに更新する */
   const [nowMin, setNowMin] = useState(() => toMinutes(timeKey()) ?? 0)
+  /**
+   * キーボードが主な端末か。
+   * 幅だけで決めない（タブレットは広くても指で触る）。
+   * 「細かく指せる装置がある（マウス等）」と「幅が広い」の両方で判断する。
+   */
+  const [desktop, setDesktop] = useState(false)
   /** 同期の様子。画面に出して、動いているのか失敗しているのかを分かるようにする */
   const [sync, setSync] = useState<{
     state: 'off' | 'idle' | 'running' | 'ok' | 'error'
@@ -184,6 +190,58 @@ export default function App() {
   )
 
   useEffect(() => onDbStatus((st) => setDbStatus(st)), [])
+
+  useEffect(() => {
+    const mq = window.matchMedia?.('(min-width: 1024px) and (pointer: fine)')
+    if (!mq) return
+    const apply = () => setDesktop(mq.matches)
+    apply()
+    mq.addEventListener?.('change', apply)
+    return () => mq.removeEventListener?.('change', apply)
+  }, [])
+
+  /**
+   * PC のキー操作。
+   *   /  … 探す      n … 直接入力    e … 書き出し
+   *   1〜4 … 一覧のタブ              Esc … 開いている面を閉じる
+   * 文字を打っている最中は何もしない（入力の邪魔をしない）。
+   */
+  useEffect(() => {
+    if (!desktop) return
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null
+      const typing =
+        !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+      if (e.key === 'Escape') {
+        if (session.recording) return
+        setExporting(false)
+        setEditing(null)
+        setCreating(false)
+        setTriaging(false)
+        setWrappingUp(false)
+        setEditingCalendar(false)
+        return
+      }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === '/') {
+        e.preventDefault()
+        setView('list')
+        document.querySelector<HTMLInputElement>('.tp-search-input')?.focus()
+      } else if (e.key === 'n') {
+        e.preventDefault()
+        setCreating(true)
+      } else if (e.key === 'e') {
+        e.preventDefault()
+        setExporting(true)
+      } else if (e.key >= '1' && e.key <= '4') {
+        e.preventDefault()
+        setView('list')
+        setTab(LIST_TABS[Number(e.key) - 1].key)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [desktop, session.recording])
 
   useEffect(() => {
     void load()
@@ -687,6 +745,12 @@ export default function App() {
               </span>
             </button>
           )}
+          {desktop && (
+            <p className="tp-keys">
+              <kbd>/</kbd> 探す <kbd>n</kbd> 直接入力 <kbd>e</kbd> 書き出し{' '}
+              <kbd>1</kbd>〜<kbd>4</kbd> タブ <kbd>Esc</kbd> 閉じる
+            </p>
+          )}
           <p className="tp-mono tp-drawer-count">
             未完了 {ov.open} ／ 超過 {ov.overdue}
           </p>
@@ -822,6 +886,7 @@ export default function App() {
           onSubmitText={(text, source) => runParse(text, source)}
           onStartVoice={() => void session.start()}
           onOpenForm={() => setCreating(true)}
+          keyboardFirst={desktop}
         />
       )}
 

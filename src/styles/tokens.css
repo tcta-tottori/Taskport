@@ -71,6 +71,9 @@
   --radius-card: 10px;
 
   --sidebar-w:   288px;
+  /* ヘッダーの高さ。下に貼り付けるものの位置合わせに使う
+     （ヘッダー自身も貼り付いているので、この分だけ下げないと潜り込む） */
+  --header-h:    59px;
   --safe-b:      env(safe-area-inset-bottom, 0px);
   --safe-t:      env(safe-area-inset-top, 0px);
 

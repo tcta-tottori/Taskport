@@ -69,9 +69,9 @@ export function DashboardView({
   }
 
   return (
-    <div className="tp-view tp-dash">
+    <div className="tp-view tp-dash tp-grid">
       <Reveal>
-        <section className="tp-panel tp-dash-hero">
+        <section className="tp-panel tp-dash-hero is-wide">
           <div className="tp-panel-head">
             <h2>本日の稼働</h2>
             <span className="tp-chip-flame">
@@ -113,7 +113,7 @@ export function DashboardView({
       </Reveal>
 
       <Reveal>
-        <section className="tp-panel">
+        <section className="tp-panel is-wide">
           {allDays.length > 0 ? (
             <TrendCard allDays={allDays} />
           ) : (
@@ -128,7 +128,7 @@ export function DashboardView({
       </Reveal>
 
       <Reveal>
-        <section className="tp-panel">
+        <section className="tp-panel is-wide">
           <div className="tp-panel-head">
             <h2>区分ごとの時間</h2>
             <span className="tp-badge tp-mono">直近10日</span>
