@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon, type IconName } from './components/Icon'
 import { InputDock } from './components/InputDock'
 import { Toast, type ToastMessage } from './components/Toast'
+import { TapWave } from './components/TapWave'
 import { ListView } from './views/ListView'
 import { ScheduleView } from './views/ScheduleView'
 import { DashboardView } from './views/DashboardView'
@@ -218,6 +219,7 @@ export default function App() {
 
   return (
     <div className="tp-app">
+      <TapWave />
       <div className="tp-glow" aria-hidden="true" />
 
       <header className="tp-header">

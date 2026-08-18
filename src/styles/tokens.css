@@ -1,52 +1,56 @@
 /* =========================================================
  * Taskport デザイントークン
  *
- * 配色は NoteLoop（同じ作者の議事録アプリ）の系統に合わせる。
- * 業務で長時間見ても疲れない白基調＋青紫のグラデーションを土台にし、
- * 優先度の色だけは design.md §7.1 の伝票的な色を保つ。
+ * 配色は NoteLoop 9.2（同じ作者の議事録アプリ）の現行デザインに合わせる。
+ * マットなグレーがかった黒がベース。面ごとの明度差は控えめにし、
+ * 光沢を出さないため彩度も低く抑える。層は明度差ではなく落ち影で作る。
+ *
+ * 優先度の色は design.md §7.1 の色相を保ちつつ、暗い面で読める明度へ上げた。
  * 色は必ずここの変数から取る。各ファイルに16進数を書かない。
  * =======================================================*/
 :root {
   /* --- 面と文字 --- */
-  --bg:          #f4f6fa;
-  --surface:     #ffffff;
-  --surface-2:   #f7f9fc;
-  --surface-3:   #eef1f7;
-  --ink:         #16233a;  /* 濃紺。黒よりも柔らかく、業務書類の墨に近い */
-  --muted:       #6b7a90;
-  --faint:       #9aa3b5;
-  --line:        #e9edf4;
-  --line-strong: #d3dbe4;
+  --bg:          #17181b;
+  --surface:     #212328;
+  --surface-2:   #191b1f;
+  --surface-3:   #2a2d33;
+  --ink:         #e7e9ee;
+  --muted:       #a3a9b5;
+  --faint:       #7b818d;
+  --line:        #2e3138;
+  --line-strong: #3c4048;
 
-  /* --- ブランド（入口＝Ports In の色。ヘッダー・録音・主要操作） --- */
-  --brand1:      #4f6ef7;
-  --brand2:      #7c5cf6;
-  --brand3:      #c74fbf;
+  /* --- ブランド（入口＝Ports In の色。録音・主要操作） --- */
+  --brand1:      #7b93ff;
+  --brand2:      #a68cff;
+  --brand3:      #d86fc4;
   --brand-ink:   #ffffff;
+  /* ブランド面の上に置く文字色。明るい面なので墨を載せる */
+  --on-brand:    #17181b;
 
-  /* --- 優先度（design.md §7.1 の値を維持。左端の色帯に使う） --- */
-  --pri-high:    #b03a28;
-  --pri-mid:     #b87a22;
-  --pri-low:     #3f7194;
+  /* --- 優先度（design.md §7.1 の色相を保ち、暗い面で読める明度に） --- */
+  --pri-high:    #ff7a6b;  /* 元 #b03a28 */
+  --pri-mid:     #e2a33f;  /* 元 #b87a22 */
+  --pri-low:     #78aed6;  /* 元 #3f7194 */
 
   /* --- 状態 --- */
-  --go:          #12695a;  /* 完了・確定操作 */
-  --danger:      #e0433d;
-  --amber:       #e08a1e;
-  --rec:         #ff2d6b;  /* 録音中 */
+  --go:          #4ade80;  /* 完了・確定操作 */
+  --danger:      #f87171;
+  --amber:       #fbbf24;
+  --rec:         #ff3d6b;  /* 録音中 */
 
   /* --- グラフ（StudyDeck の成績画面に合わせた読み取り優先の配色） --- */
-  --chart-bar:   #4f6ef7;
-  --chart-line:  #6b7a90;
-  --chart-good:  #12695a;
-  --chart-warn:  #b87a22;
-  --chart-bad:   #b03a28;
-  --chart-grid:  #d3dbe4;
+  --chart-bar:   #7b93ff;
+  --chart-line:  #a3a9b5;
+  --chart-good:  #4ade80;
+  --chart-warn:  #fbbf24;
+  --chart-bad:   #f87171;
+  --chart-grid:  #3c4048;
 
-  /* --- 影・角丸 --- */
-  --shadow-sm:   0 1px 2px rgba(22, 35, 58, .05);
-  --shadow-md:   0 2px 10px rgba(22, 35, 58, .06), 0 1px 3px rgba(22, 35, 58, .04);
-  --shadow-lg:   0 12px 34px rgba(22, 35, 58, .12);
+  /* --- 影・角丸（暗い面では黒を濃く） --- */
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-md:   0 2px 10px rgba(0, 0, 0, .38), 0 1px 3px rgba(0, 0, 0, .3);
+  --shadow-lg:   0 14px 36px rgba(0, 0, 0, .5);
   --radius:      18px;
   --radius-sm:   12px;
   /* カードの角丸は控えめに。丸すぎるとタスクが「柔らかいもの」に見え、
@@ -60,5 +64,6 @@
   /* --- 等幅（日付・件数・優先度は桁を揃えて走査を速くする） --- */
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Roboto Mono", monospace;
 
-  color-scheme: light;
+  /* 音声プレイヤー・日付入力など標準UIもダークにする */
+  color-scheme: dark;
 }

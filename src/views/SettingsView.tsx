@@ -9,7 +9,7 @@ import { DEFAULT_WORK_HOURS, type Settings, type Task, type WorkHours } from '..
 
 /* =========================================================
  * 設定
- *   - 勤務時間（既定は 8:20 始業 / 12:20〜13:05 昼休憩 / 17:10 終業）
+ *   - 勤務時間（既定は 8:20 始業 / 12:25〜13:05 昼休憩 / 17:10 終業）
  *   - AI構造化プロキシのURL
  *   - JSON バックアップの書き出し／取り込み
  * =======================================================*/
@@ -162,7 +162,7 @@ export function SettingsView({
             <button
               type="button"
               className="tp-btn-ghost"
-              title="8:20 始業 / 12:20〜13:05 昼休憩 / 17:10 終業 / 月〜金"
+              title="8:20 始業 / 12:25〜13:05 昼休憩 / 17:10 終業 / 月〜金"
               onClick={() => setWh(DEFAULT_WORK_HOURS)}
             >
               既定に戻す

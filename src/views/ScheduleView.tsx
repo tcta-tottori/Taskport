@@ -97,23 +97,29 @@ function DayTimeline({
           <span>終業 {trim(wh.end)}</span>
         </div>
 
-        {placed.map((p) => (
-          <button
-            key={p.task.id}
-            type="button"
-            className={`tp-tl-task tp-pri-${p.task.priority}${p.outside ? ' is-outside' : ''}${
-              p.task.status === 'done' ? ' is-done' : ''
-            }`}
-            style={{ top: y(p.from), height: Math.max(24, (p.to - p.from) * PX_PER_MIN - 2) }}
-            onClick={() => onEdit(p.task)}
-          >
-            <b>{p.task.title}</b>
-            <span className="tp-mono">
-              {fromMinutes(p.from)}–{fromMinutes(p.to)}
-              {p.outside ? ' ・勤務時間外' : ''}
-            </span>
-          </button>
-        ))}
+        {placed.map((p) => {
+          const h = Math.max(24, (p.to - p.from) * PX_PER_MIN - 2)
+          // 短い予定は2行に収まらないので、件名と時刻を1行に並べる。
+          // 件名が隠れると一覧としての意味がなくなるため、件名を優先する。
+          const short = h < 44
+          return (
+            <button
+              key={p.task.id}
+              type="button"
+              className={`tp-tl-task tp-pri-${p.task.priority}${short ? ' is-short' : ''}${
+                p.outside ? ' is-outside' : ''
+              }${p.task.status === 'done' ? ' is-done' : ''}`}
+              style={{ top: y(p.from), height: h }}
+              onClick={() => onEdit(p.task)}
+            >
+              <b>{p.task.title}</b>
+              <span className="tp-mono">
+                {fromMinutes(p.from)}–{fromMinutes(p.to)}
+                {p.outside ? ' ・勤務時間外' : ''}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {untimed.length > 0 && (

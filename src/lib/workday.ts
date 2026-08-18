@@ -59,7 +59,7 @@ export function isWithinWork(wh: WorkHours, nowMin: number): boolean {
   return workSegments(wh).some((seg) => nowMin >= seg.from && nowMin < seg.to)
 }
 
-/** 「8:20 〜 17:10（昼休憩 12:20〜13:05／実働 8時間05分）」の材料 */
+/** 「8:20 〜 17:10（昼休憩 12:25〜13:05／実働 8時間10分）」の材料 */
 export function workHoursSummary(wh: WorkHours): {
   span: string
   breakSpan: string | null

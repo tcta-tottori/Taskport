@@ -1,9 +1,9 @@
 /* =========================================================
  * Taskport スタイル
  *
- * 見た目は NoteLoop（グラデーションのヘッダー、ガラス面のパネル、
- * 下部固定のマイクボタン）に合わせ、グラフまわりは StudyDeck の
- * 成績画面に合わせている。
+ * 見た目は NoteLoop 9.2（マットな黒基調のダークテーマ、ガラス面のパネル、
+ * 下部固定のマイクボタン、タップの波）に合わせ、グラフまわりは
+ * StudyDeck の成績画面に合わせている。
  *
  * 満たすこと（design.md §7.4）:
  *   - 320px 幅まで崩れない
@@ -21,6 +21,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
+  overscroll-behavior-y: contain;
   /* Webフォントは読み込まない。通信環境の悪い倉庫内でも確実に出す。 */
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN",
     "Noto Sans JP", "Yu Gothic UI", "Segoe UI", Meiryo, system-ui, sans-serif;
@@ -64,15 +65,38 @@ input, textarea, select { font-family: inherit; }
 /* ---------- 全体レイアウト ---------- */
 .tp-app { min-height: 100%; display: flex; flex-direction: column; }
 
+/* 全画面共通の背景。マット感を出すため、ブランド色のにじみはごく薄く。 */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(130% 90% at 12% -5%, rgba(123, 147, 255, .10), transparent 55%),
+    radial-gradient(130% 90% at 100% 12%, rgba(166, 140, 255, .08), transparent 55%),
+    linear-gradient(170deg, #17181b 0%, #1a1a1f 55%, #1c1a1f 100%);
+}
+
+/* ---------- タップの波（端末が出す四角いハイライトの代わり） ---------- */
+.tp-wave-layer { position: fixed; inset: 0; z-index: 9999; pointer-events: none; overflow: hidden; }
+.tp-tap-wave {
+  position: absolute; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--brand1) 46%, transparent) 0%,
+    color-mix(in srgb, var(--brand2) 24%, transparent) 55%,
+    transparent 72%);
+  transform: scale(.2); opacity: .95;
+  animation: tpTapWave .5s cubic-bezier(.22, 1, .36, 1) forwards;
+}
+@keyframes tpTapWave { to { transform: scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tp-tap-wave { display: none; } }
+
 /* ヘッダー色が下へ伸びるブラーグロー。背面に置くので文字は隠れない。 */
 .tp-glow {
   position: fixed; top: 0; left: 0; right: 0; z-index: 0; pointer-events: none;
   height: 190px;
   background: linear-gradient(to bottom,
-    rgba(79, 110, 247, .48) 0%,
-    rgba(124, 92, 246, .34) 34%,
-    rgba(199, 79, 191, .18) 64%,
-    rgba(199, 79, 191, 0) 100%);
+    rgba(123, 147, 255, .16) 0%,
+    rgba(166, 140, 255, .11) 34%,
+    rgba(216, 111, 196, .06) 64%,
+    rgba(216, 111, 196, 0) 100%);
   filter: blur(8px);
 }
 
@@ -81,30 +105,31 @@ input, textarea, select { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   padding: 6px clamp(52px, 15vw, 76px);
   padding-top: max(6px, var(--safe-t));
-  /* 上端は theme-color と同色 → ステータスバーと継ぎ目なし */
-  background: linear-gradient(180deg, var(--brand1) 0%, var(--brand2) 58%, var(--brand3) 128%);
+  /* 上端は theme-color(#17181b) と同色 → ステータスバーと継ぎ目なし。
+     マット感を保つため、ブランド色はごく薄い色味としてだけ残す。 */
+  background: linear-gradient(180deg, #17181b 0%, #1b1c22 60%, #1f1c25 100%);
+  border-bottom: 1px solid #2a2c34;
 }
 .tp-brand { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .tp-wordmark {
   font-size: 19px; font-weight: 800; letter-spacing: .1em; color: #fff;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, .18);
 }
 .tp-tagline {
   margin-top: 1px; font-size: 9px; font-weight: 600; letter-spacing: .18em;
-  color: rgba(255, 255, 255, .82);
+  color: rgba(255, 255, 255, .58);
 }
 
 .tp-menu, .tp-head-btn {
   position: absolute; top: 50%; transform: translateY(-50%);
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px; padding: 0 10px; flex: none;
-  background: rgba(255, 255, 255, .16);
-  border: 1px solid rgba(255, 255, 255, .34);
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .16);
   border-radius: 11px; color: #fff; transition: .16s;
 }
 .tp-menu { left: clamp(10px, 3vw, 22px); flex-direction: column; gap: 5px; }
 .tp-head-btn { right: clamp(10px, 3vw, 22px); }
-.tp-menu:hover, .tp-head-btn:hover { background: rgba(255, 255, 255, .3); border-color: rgba(255, 255, 255, .68); }
+.tp-menu:hover, .tp-head-btn:hover { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .38); }
 .tp-bar { display: block; height: 2px; width: 100%; background: #fff; border-radius: 2px; transition: .25s; }
 .tp-menu[aria-expanded="true"] .tp-bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
 .tp-menu[aria-expanded="true"] .tp-bar:nth-child(2) { opacity: 0; }
@@ -124,13 +149,14 @@ input, textarea, select { font-family: inherit; }
 /* ---------- ドロワー ---------- */
 .tp-backdrop {
   position: fixed; inset: 0; z-index: 45;
-  background: rgba(20, 26, 40, .38);
+  background: rgba(0, 0, 0, .58);
   animation: tpFade .24s ease;
 }
 .tp-drawer {
   position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
   width: min(78vw, 292px);
-  background: linear-gradient(160deg, var(--brand1) 0%, var(--brand2) 52%, var(--brand3) 120%);
+  background: linear-gradient(160deg, #1c1e26 0%, #21202a 52%, #26202c 120%);
+  border-right: 1px solid #33353f;
   box-shadow: var(--shadow-lg);
   padding: max(16px, var(--safe-t)) 14px calc(16px + var(--safe-b));
   transform: translateX(-100%);
@@ -158,7 +184,9 @@ input, textarea, select { font-family: inherit; }
 .tp-drawer-n {
   margin-left: auto; min-width: 22px; text-align: center;
   font-family: var(--mono); font-size: 11.5px; font-weight: 700;
-  background: rgba(255, 255, 255, .9); color: var(--pri-high);
+  background: color-mix(in srgb, var(--pri-high) 22%, transparent);
+  color: var(--pri-high);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pri-high) 45%, transparent);
   border-radius: 999px; padding: 1px 7px;
 }
 .tp-drawer-foot {
@@ -171,7 +199,7 @@ input, textarea, select { font-family: inherit; }
 /* ---------- パネル（ガラス面） ---------- */
 .tp-panel {
   background: color-mix(in srgb, var(--surface) 84%, transparent);
-  border: 1px solid color-mix(in srgb, #ffffff 45%, var(--line));
+  border: 1px solid color-mix(in srgb, #ffffff 8%, var(--line));
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
   border-radius: var(--radius);
@@ -202,36 +230,36 @@ input, textarea, select { font-family: inherit; }
   margin: 12px 0 0; font-size: 11.5px; color: var(--amber);
 }
 
-/* ---------- 今日の稼働カード ---------- */
+/* ---------- 今日の稼働カード ----------
+   暗い面では塗りつぶしのグラデーションが浮くので、
+   NoteLoop 9.2 の「ブランド色を薄く敷いた囲み」に合わせる。 */
 .tp-today-card {
-  background: linear-gradient(135deg, var(--brand1) 0%, var(--brand2) 58%, var(--brand3) 122%);
+  background: color-mix(in srgb, var(--brand1) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand1) 30%, var(--line));
   border-radius: var(--radius);
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--brand1) 26%, transparent);
-  padding: 15px 17px; color: #fff;
+  box-shadow: var(--shadow-md);
+  padding: 15px 17px; color: var(--ink);
 }
-.tp-today-card .tp-label { color: rgba(255, 255, 255, .78); }
+.tp-today-card .tp-label { color: var(--muted); }
 .tp-today-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.tp-today-span { margin: 3px 0 0; font-family: var(--mono); font-size: 17px; font-weight: 800; letter-spacing: .02em; }
-.tp-today-break { margin: 2px 0 0; font-family: var(--mono); font-size: 11.5px; color: rgba(255, 255, 255, .8); }
+.tp-today-span { margin: 3px 0 0; font-family: var(--mono); font-size: 17px; font-weight: 800; letter-spacing: .02em; color: var(--brand1); }
+.tp-today-break { margin: 2px 0 0; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
 .tp-today-num { text-align: right; font-family: var(--mono); }
 .tp-today-num b { display: block; font-size: 17px; font-weight: 800; }
-.tp-today-num span { font-size: 11.5px; color: rgba(255, 255, 255, .8); }
-.tp-today-note { margin: 9px 0 0; font-size: 12px; color: rgba(255, 255, 255, .9); line-height: 1.6; }
+.tp-today-num span { font-size: 11.5px; color: var(--muted); }
+.tp-today-note { margin: 9px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
 
-.tp-progress { height: 8px; background: rgba(255, 255, 255, .3); border-radius: 999px; overflow: hidden; }
-.tp-progress > span { display: block; height: 100%; background: #fff; border-radius: 999px; transition: width .35s ease; }
-.tp-progress > span.is-tight { background: #ffe08a; }
-.tp-progress > span.is-over { background: #ff9d9d; }
-.tp-progress-lg { height: 10px; background: var(--surface-3); }
-.tp-progress-lg > span { background: var(--brand1); }
-.tp-progress-lg > span.is-tight { background: var(--chart-warn); }
-.tp-progress-lg > span.is-over { background: var(--chart-bad); }
+.tp-progress { height: 8px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+.tp-progress > span { display: block; height: 100%; background: var(--brand1); border-radius: 999px; transition: width .35s ease; }
+.tp-progress > span.is-tight { background: var(--chart-warn); }
+.tp-progress > span.is-over { background: var(--chart-bad); }
+.tp-progress-lg { height: 10px; }
 
 /* ---------- タブ ---------- */
 .tp-seg {
   display: flex; gap: 4px; padding: 4px;
   background: color-mix(in srgb, var(--surface) 80%, transparent);
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
   box-shadow: var(--shadow-sm);
 }
 .tp-seg-btn {
@@ -241,7 +269,7 @@ input, textarea, select { font-family: inherit; }
 .tp-seg-btn:hover { color: var(--brand1); }
 .tp-seg-btn.is-on {
   background: linear-gradient(135deg, var(--brand1), var(--brand2));
-  color: #fff; box-shadow: 0 4px 12px color-mix(in srgb, var(--brand1) 30%, transparent);
+  color: var(--on-brand); box-shadow: 0 4px 12px color-mix(in srgb, var(--brand1) 30%, transparent);
 }
 .tp-seg-n { font-family: var(--mono); font-size: 11px; font-weight: 700; opacity: .8; }
 
@@ -276,6 +304,7 @@ input, textarea, select { font-family: inherit; }
   border: 2px solid var(--line-strong); border-radius: 50%; transition: .16s;
 }
 .tp-check > svg { position: relative; }
+.tp-check[aria-pressed="true"] { color: var(--on-brand); }
 .tp-check[aria-pressed="true"]::before { background: var(--go); border-color: var(--go); }
 .tp-check:hover::before { border-color: var(--go); }
 
@@ -343,8 +372,8 @@ input, textarea, select { font-family: inherit; }
 
 .tp-dock-panel {
   max-width: 760px; margin: 0 auto 8px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--line-strong);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-radius: var(--radius); box-shadow: var(--shadow-lg);
@@ -368,7 +397,7 @@ input, textarea, select { font-family: inherit; }
   max-width: 760px; margin: 0 auto;
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 6px;
   background: color-mix(in srgb, var(--surface) 90%, transparent);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-radius: 999px; box-shadow: var(--shadow-lg);
@@ -381,12 +410,13 @@ input, textarea, select { font-family: inherit; }
 .tp-dock-side:hover, .tp-dock-side.is-on { color: var(--brand1); }
 
 .tp-fab-slot { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: -30px; }
+/* 録音前はブランドの紫グラデーション。録音中だけ赤系に変わる（NoteLoop 9.2 と同じ）。 */
 .tp-fab {
   position: relative;
   width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center;
   color: #fff;
-  background: linear-gradient(135deg, #ff2d6b 0%, #ff5a5f 45%, #ff9d4d 100%);
-  box-shadow: 0 10px 24px rgba(255, 61, 113, .42);
+  background: linear-gradient(135deg, var(--brand1), var(--brand2));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--brand1) 42%, transparent);
   transition: transform .12s ease, box-shadow .2s ease, background .3s ease;
 }
 .tp-fab:hover { transform: translateY(-2px); }
@@ -411,14 +441,14 @@ input, textarea, select { font-family: inherit; }
   font-size: 14px; font-weight: 700; transition: .16s;
 }
 .tp-btn-primary {
-  background: linear-gradient(135deg, var(--brand1), var(--brand2)); color: var(--brand-ink);
+  background: linear-gradient(135deg, var(--brand1), var(--brand2)); color: var(--on-brand);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--brand1) 28%, transparent);
 }
 .tp-btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 24px color-mix(in srgb, var(--brand1) 38%, transparent); }
 .tp-btn-primary:disabled { opacity: .45; cursor: default; box-shadow: none; }
 .tp-btn-ghost { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-strong); }
 .tp-btn-ghost:hover { border-color: var(--brand1); color: var(--brand1); }
-.tp-btn-danger { background: var(--danger); color: #fff; }
+.tp-btn-danger { background: var(--danger); color: var(--on-brand); }
 .tp-btn-danger:hover { filter: brightness(1.06); }
 .tp-icon-btn {
   display: grid; place-items: center; width: 44px; height: 44px;
@@ -461,9 +491,9 @@ input, textarea, select { font-family: inherit; }
   border: 1px solid var(--line-strong); background: var(--surface-2);
   font-size: 13.5px; font-weight: 700; color: var(--muted); transition: .16s;
 }
-.tp-pri-btn.tp-pri-high.is-on { background: var(--pri-high); border-color: var(--pri-high); color: #fff; }
-.tp-pri-btn.tp-pri-mid.is-on  { background: var(--pri-mid);  border-color: var(--pri-mid);  color: #fff; }
-.tp-pri-btn.tp-pri-low.is-on  { background: var(--pri-low);  border-color: var(--pri-low);  color: #fff; }
+.tp-pri-btn.tp-pri-high.is-on { background: var(--pri-high); border-color: var(--pri-high); color: var(--on-brand); }
+.tp-pri-btn.tp-pri-mid.is-on  { background: var(--pri-mid);  border-color: var(--pri-mid);  color: var(--on-brand); }
+.tp-pri-btn.tp-pri-low.is-on  { background: var(--pri-low);  border-color: var(--pri-low);  color: var(--on-brand); }
 
 /* ---------- シート（確認・編集・書き出し） ---------- */
 .tp-sheet {
@@ -520,7 +550,7 @@ input, textarea, select { font-family: inherit; }
 .tp-draft-n {
   flex: none; width: 22px; height: 22px; display: grid; place-items: center;
   border-radius: 6px; font-size: 11px; font-weight: 800;
-  background: linear-gradient(135deg, var(--brand1), var(--brand2)); color: #fff;
+  background: linear-gradient(135deg, var(--brand1), var(--brand2)); color: var(--on-brand);
 }
 .tp-draft-sum { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .tp-draft-sum > b { font-size: 14px; font-weight: 700; line-height: 1.4; word-break: break-word; }
@@ -572,9 +602,9 @@ input, textarea, select { font-family: inherit; }
 .tp-daychip.is-today { border-color: var(--brand1); }
 .tp-daychip.is-on {
   background: linear-gradient(135deg, var(--brand1), var(--brand2));
-  border-color: transparent; color: rgba(255, 255, 255, .86);
+  border-color: transparent; color: color-mix(in srgb, var(--on-brand) 72%, transparent);
 }
-.tp-daychip.is-on b { color: #fff; }
+.tp-daychip.is-on b { color: var(--on-brand); }
 .tp-note-off { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 12px; color: var(--amber); }
 
 .tp-tl {
@@ -608,7 +638,7 @@ input, textarea, select { font-family: inherit; }
 .tp-tl-edge > span {
   position: absolute; right: 4px; top: -16px;
   font-family: var(--mono); font-size: 10px; font-weight: 800; color: var(--brand1);
-  background: var(--surface); padding: 0 5px; border-radius: 4px;
+  background: var(--bg); padding: 0 5px; border-radius: 4px;
 }
 .tp-tl-task {
   position: absolute; left: 8px; right: 6px;
@@ -623,10 +653,14 @@ input, textarea, select { font-family: inherit; }
 .tp-tl-task.tp-pri-high { border-left-color: var(--pri-high); }
 .tp-tl-task.tp-pri-mid  { border-left-color: var(--pri-mid); }
 .tp-tl-task.tp-pri-low  { border-left-color: var(--pri-low); }
-.tp-tl-task.is-outside { border-style: dashed; background: color-mix(in srgb, var(--amber) 8%, var(--surface)); }
+.tp-tl-task.is-outside { border-style: dashed; background: color-mix(in srgb, var(--amber) 12%, var(--surface)); }
 .tp-tl-task.is-done { opacity: .55; }
 .tp-tl-task b { font-size: 12.5px; font-weight: 700; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-tl-task > span { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+/* 短い予定は件名と時刻を1行に。件名が隠れると一覧の意味がなくなるので件名を優先する。 */
+.tp-tl-task.is-short { flex-direction: row; align-items: center; gap: 8px; }
+.tp-tl-task.is-short b { flex: 1; min-width: 0; }
+.tp-tl-task.is-short > span { flex: none; }
 
 .tp-tl-untimed { margin-top: 14px; }
 .tp-tl-untimed ul, .tp-daylist { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
@@ -647,7 +681,7 @@ input, textarea, select { font-family: inherit; }
 .tp-fortnight { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .tp-fn-row { display: grid; grid-template-columns: 56px 1fr; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
 .tp-fn-row:first-child { border-top: none; }
-.tp-fn-row.is-off { background: color-mix(in srgb, var(--surface-3) 55%, transparent); }
+.tp-fn-row.is-off { background: color-mix(in srgb, var(--surface-3) 45%, transparent); }
 .tp-fn-row.is-today .tp-fn-date span:first-child { color: var(--brand1); }
 .tp-fn-date {
   display: flex; flex-direction: column; align-items: flex-start; min-height: 44px; padding-top: 2px;
@@ -732,12 +766,12 @@ input, textarea, select { font-family: inherit; }
 .tp-trend-range input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 16px; height: 16px; margin-top: -6px; border-radius: 50%;
-  background: var(--brand1); border: 2px solid #fff; box-shadow: var(--shadow-sm);
+  background: var(--brand1); border: 2px solid var(--surface); box-shadow: var(--shadow-sm);
 }
 .tp-trend-range input[type="range"]::-moz-range-track { height: 4px; border-radius: 999px; background: var(--line-strong); }
 .tp-trend-range input[type="range"]::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--brand1); }
 .tp-trend-range input[type="range"]::-moz-range-thumb {
-  width: 14px; height: 14px; border-radius: 50%; background: var(--brand1); border: 2px solid #fff;
+  width: 14px; height: 14px; border-radius: 50%; background: var(--brand1); border: 2px solid var(--surface);
 }
 
 /* SVG は幅に合わせて拡大するので、PC で文字だけ巨大にならないよう上限を置く */
@@ -783,7 +817,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   border: 1px solid var(--line-strong); background: var(--surface-2);
   font-size: 13px; font-weight: 700; color: var(--muted); transition: .16s;
 }
-.tp-daypick-btn.is-on { background: var(--brand1); border-color: var(--brand1); color: #fff; }
+.tp-daypick-btn.is-on { background: var(--brand1); border-color: var(--brand1); color: var(--on-brand); }
 .tp-about { margin: 0; display: grid; grid-template-columns: 116px 1fr; gap: 6px 12px; font-size: 12.5px; }
 .tp-about dt { font-weight: 700; color: var(--muted); }
 .tp-about dd { margin: 0; color: var(--ink); }
@@ -798,8 +832,12 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   box-shadow: var(--shadow-lg);
   animation: tpRise .24s cubic-bezier(.22, 1, .36, 1);
 }
-.tp-toast-ok { background: var(--ink); color: #fff; }
-.tp-toast-error { background: var(--danger); color: #fff; border-radius: var(--radius-sm); }
+.tp-toast-ok {
+  background: var(--surface-3); color: var(--ink);
+  border: 1px solid var(--line-strong);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.tp-toast-error { background: var(--danger); color: var(--on-brand); border-radius: var(--radius-sm); }
 
 /* ---------- Reveal（画面に入ったら浮かび上がる） ---------- */
 .tp-reveal { opacity: 0; transform: translateY(16px); transition: opacity .5s ease, transform .5s cubic-bezier(.22, 1, .36, 1); }
