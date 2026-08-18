@@ -232,6 +232,10 @@ export interface Settings {
   googleCalendarId: string
   /** 保存した絞り込み。一覧の検索欄からチップで呼び出す */
   savedFilters: SavedFilter[]
+  /** 期限のリマインドを出すか */
+  reminderEnabled: boolean
+  /** 何分前に出すか。0 は時刻ちょうど */
+  reminderLeadMin: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -243,6 +247,8 @@ export const DEFAULT_SETTINGS: Settings = {
   googleClientId: '',
   googleCalendarId: 'primary',
   savedFilters: [],
+  reminderEnabled: false,
+  reminderLeadMin: 10,
 }
 
 /* ---------------------------------------------------------

@@ -271,6 +271,8 @@ export class LocalRepository implements Repository {
       workHours: { ...DEFAULT_WORK_HOURS, ...(raw.workHours ?? {}) },
       // 後から足した項目。古い保存には無いので既定で埋める
       savedFilters: Array.isArray(raw.savedFilters) ? raw.savedFilters : [],
+      reminderEnabled: raw.reminderEnabled === true,
+      reminderLeadMin: typeof raw.reminderLeadMin === 'number' ? raw.reminderLeadMin : 10,
     }
   }
 

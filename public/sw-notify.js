@@ -11,6 +11,8 @@ const TP_NOTIF_ACTIONS = {
 };
 
 self.addEventListener('notificationclick', (event) => {
+  // 期限のリマインドは下のハンドラが受け持つ（二重に窓を開かないため）
+  if (String(event.notification.tag || '').startsWith('taskport-due-')) return;
   const msgType = TP_NOTIF_ACTIONS[event.action] || '';
   // 一時停止・再開は通知を残したまま、画面も前面に出さない
   // （通知だけで操作できるようにするため）
@@ -28,6 +30,21 @@ self.addEventListener('notificationclick', (event) => {
         } catch (_) {}
       }
       if (client && msgType) client.postMessage({ type: msgType });
+    })(),
+  );
+});
+
+// 期限のリマインドをタップしたらアプリを前面に出す。
+// tag が taskport-due- で始まるものがそれ。
+self.addEventListener('notificationclick', (event) => {
+  if (!String(event.notification.tag || '').startsWith('taskport-due-')) return;
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const client = clients.find((c) => 'focus' in c);
+      if (client) await client.focus();
+      else if (self.clients.openWindow) await self.clients.openWindow('./');
     })(),
   );
 });

@@ -8,16 +8,21 @@ import { downloadText } from '../ports/out/download'
 import { DEFAULT_WORK_HOURS, type Settings, type Task, type WorkHours } from '../types'
 import { APP_VERSION, buildLabel } from '../version'
 import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
+import { askPermission, leadLabel, notificationsUsable, triggersSupported } from '../lib/reminder'
 
 /* =========================================================
  * 設定
  *   - 勤務時間（既定は日報の時間枠どおり。実働 8時間ちょうど）
  *   - 録音（音声を残すか・画面を点けたままにするか）
+ *   - 期限のリマインド（出る条件をそのまま書く）
  *   - Googleカレンダー連携
  *   - JSON バックアップの書き出し／取り込み
  * =======================================================*/
 
 const WEEKDAY = ['日', '月', '火', '水', '木', '金', '土']
+
+/** リマインドの何分前。実務で使うところだけ並べる。 */
+const LEADS = [0, 5, 10, 15, 30, 60]
 
 /** 承認済みの JavaScript 生成元として Google Cloud に入れる値 */
 const origin = window.location.origin
@@ -219,6 +224,85 @@ export function SettingsView({
               onChange={(e) => setDraft({ ...draft, keepAwake: e.target.checked })}
             />
           </label>
+          <div className="tp-row-end">
+            <button
+              type="button"
+              className="tp-btn-primary"
+              disabled={!dirty}
+              onClick={() => {
+                onSave(draft)
+                onNotify('設定を保存しました')
+              }}
+            >
+              <Icon name="check" size={16} />
+              保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">期限のリマインド</h2>
+          <p className="tp-note">
+            <b>時刻を入れたタスク</b>だけが対象です。期限が日付だけのものは通知しません。
+          </p>
+
+          <label className="tp-switch">
+            <span>
+              <b>締め切り前に通知する</b>
+              <small>
+                {triggersSupported()
+                  ? 'この端末は予約に対応しています。アプリを閉じていても通知が出ます。'
+                  : 'この端末は予約に対応していません。アプリを開いている間だけ通知が出ます。'}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.reminderEnabled}
+              onChange={async (e) => {
+                const on = e.target.checked
+                if (on) {
+                  const p = await askPermission()
+                  if (p !== 'granted') {
+                    onNotify('通知が許可されていません。ブラウザの通知許可を確認してください。')
+                    return
+                  }
+                }
+                setDraft({ ...draft, reminderEnabled: on })
+              }}
+            />
+          </label>
+
+          {draft.reminderEnabled && (
+            <div className="tp-field">
+              <span className="tp-label">いつ出すか</span>
+              <div className="tp-chips">
+                {LEADS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`tp-fchip${draft.reminderLeadMin === m ? ' is-on' : ''}`}
+                    aria-pressed={draft.reminderLeadMin === m}
+                    onClick={() => setDraft({ ...draft, reminderLeadMin: m })}
+                  >
+                    {leadLabel(m)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="tp-note">
+            通知はこの端末の中だけで組み立てます。予定を外部のサーバへ送ることはありません。
+            そのぶん、<b>
+              {triggersSupported()
+                ? '7日先までのぶんを予約し、アプリを開くたびに張り直します。それより先の予定は、次にアプリを開いたときに予約されます。'
+                : 'アプリを閉じている間は通知が出ません。'}
+            </b>
+            {!notificationsUsable() && ' この環境では通知そのものが使えません。'}
+          </p>
+
           <div className="tp-row-end">
             <button
               type="button"

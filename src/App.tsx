@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon, type IconName } from './components/Icon'
 import { InputDock } from './components/InputDock'
 import { Toast, type ToastMessage } from './components/Toast'
@@ -25,6 +25,12 @@ import { draftToTask, emptyDraft, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { nextOccurrence, repeatLabel } from './lib/repeat'
+import {
+  rescheduleReminders,
+  showDueNotification,
+  startForegroundReminders,
+  type ForegroundReminders,
+} from './lib/reminder'
 import { ulid } from './lib/ulid'
 import {
   DEFAULT_SETTINGS,
@@ -358,6 +364,35 @@ export default function App() {
     },
     [reload, settings],
   )
+
+  /* --- 期限のリマインド ---
+     予約に対応した端末では、7日先までのぶんを Service Worker に預ける。
+     対応していない端末では、アプリを開いている間だけタイマーで出す。
+     どちらも端末内で完結し、予定を外へ送らない。 */
+  useEffect(() => {
+    if (loading) return
+    void rescheduleReminders(tasks, settings)
+  }, [tasks, settings, loading])
+
+  const liveRef = useRef({ tasks, settings })
+  liveRef.current = { tasks, settings }
+  const fgRef = useRef<ForegroundReminders | null>(null)
+  useEffect(() => {
+    const fg = startForegroundReminders(
+      () => liveRef.current.tasks,
+      () => liveRef.current.settings,
+      (task) => void showDueNotification(task, liveRef.current.settings.reminderLeadMin),
+    )
+    fgRef.current = fg
+    return () => {
+      fgRef.current = null
+      fg.stop()
+    }
+  }, [])
+  // 台帳や設定が変わったら張り直す（起動直後の読み込み完了もここを通る）
+  useEffect(() => {
+    fgRef.current?.refresh()
+  }, [tasks, settings])
 
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
 
