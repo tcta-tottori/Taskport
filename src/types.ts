@@ -370,6 +370,11 @@ export interface Settings {
   voiceEnabled: boolean
   /** 録音した音声を端末内に残すか */
   keepAudio: boolean
+  /**
+   * あとから高精度で取り直すときに使う端末内モデル（`lib/whisper.ts` の鍵）。
+   * 初回だけ取り込みが要る。大きいほど精度は上がり、そのぶん遅い。
+   */
+  whisperModel: string
   /** 録音中に画面を点けたままにするか */
   keepAwake: boolean
   /** Googleカレンダー連携のクライアントID（利用者が自分の Google Cloud で作る） */
@@ -399,6 +404,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultEstimateMin: 30,
   voiceEnabled: true,
   keepAudio: true,
+  whisperModel: 'base',
   keepAwake: false,
   googleClientId: '',
   googleCalendarId: 'primary',

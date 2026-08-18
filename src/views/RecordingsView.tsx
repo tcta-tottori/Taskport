@@ -4,6 +4,7 @@ import { Reveal } from '../components/Reveal'
 import { dayOfIso, durationLabel } from '../lib/date'
 import { repository } from '../repository'
 import { RECORDING_KEEP, type Recording } from '../types'
+import type { WhisperProgress } from '../lib/whisper'
 
 /* =========================================================
  * 録音履歴
@@ -26,7 +27,25 @@ function sizeLabel(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: 'ok' | 'error') => void }) {
+export function RecordingsView({
+  onNotify,
+  canRefine,
+  refining,
+  modelLabel,
+  onRefine,
+  onStopRefine,
+}: {
+  onNotify: (text: string, tone?: 'ok' | 'error') => void
+  /** 端末内Whisperを動かせるか */
+  canRefine?: boolean
+  /** 取り直しの進み具合。null なら走っていない */
+  refining?: WhisperProgress | null
+  /** 初回に取り込む量の目安（「約80MB」） */
+  modelLabel?: string
+  /** この録音から高精度で取り直し、確認画面へ渡す */
+  onRefine?: (recordingId: string) => void
+  onStopRefine?: () => void
+}) {
   const [items, setItems] = useState<Recording[]>([])
   const [loading, setLoading] = useState(true)
   const [playing, setPlaying] = useState<string | null>(null)
@@ -116,6 +135,23 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
 
   return (
     <div className="tp-view">
+      {refining && (
+        <div className="tp-refine" role="status">
+          <p className="tp-refine-now">
+            <span className="tp-spin" aria-hidden="true" />
+            {refining.message}
+          </p>
+          {refining.percent !== null && (
+            <div className="tp-progress">
+              <span style={{ width: `${Math.min(100, refining.percent)}%` }} />
+            </div>
+          )}
+          <button type="button" className="tp-link-quiet" onClick={onStopRefine}>
+            やめる
+          </button>
+        </div>
+      )}
+
       {items.map((rec) => (
         <Reveal key={rec.id}>
           <section className="tp-panel tp-recitem">
@@ -164,6 +200,18 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
                 <Icon name="download" size={14} />
                 音声を保存
               </button>
+              {/* 音声が残っていれば、あとから端末内で聞き直して文字を作り直せる */}
+              {canRefine && (
+                <button
+                  type="button"
+                  className="tp-chip-btn"
+                  disabled={rec.bytes === 0 || !!refining}
+                  onClick={() => onRefine?.(rec.id)}
+                >
+                  <Icon name="sparkle" size={14} />
+                  高精度で取り直す
+                </button>
+              )}
               {confirmId === rec.id ? (
                 <>
                   <button type="button" className="tp-chip-btn" onClick={() => setConfirmId(null)}>
@@ -187,6 +235,8 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
 
       <p className="tp-list-foot">
         録音は新しい方から {RECORDING_KEEP} 本まで端末内に残します。古いものは自動で消えます。
+        {canRefine &&
+          `「高精度で取り直す」は、保存してある音声を端末の中だけで聞き直します。音声は外へ出ません。初回だけモデル（${modelLabel ?? ''}）を取り込みます。`}
       </p>
     </div>
   )

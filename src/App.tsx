@@ -45,6 +45,14 @@ import { ulid } from './lib/ulid'
 import { applyTemplate, forget, remember, touch } from './lib/templates'
 import { cleanCategories } from './lib/workCategories'
 import {
+  cancelTranscribe,
+  modelOf,
+  transcribe,
+  WhisperCancelled,
+  whisperSupported,
+  type WhisperProgress,
+} from './lib/whisper'
+import {
   DEFAULT_SETTINGS,
   type CalendarEvent,
   type CategoryGroup,
@@ -82,6 +90,8 @@ interface Pending {
   hint?: string
   /** 音声から来た場合、確定後にタスクIDを紐づける録音 */
   recordingId?: string
+  /** すでに端末内Whisperで取り直したか（二度押しの案内を変える） */
+  refined?: boolean
 }
 
 export default function App() {
@@ -127,6 +137,8 @@ export default function App() {
   /** 記憶から呼び出したときの下敷き。フォームを開くときに使う */
   const [seed, setSeed] = useState<Draft | null>(null)
   const [exporting, setExporting] = useState(false)
+  /** 録音から高精度で取り直している最中の進み具合。null なら走っていない */
+  const [refining, setRefining] = useState<WhisperProgress | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   /** 記憶したタスク（定型）。登録するたびに控え、直接入力から呼び出す */
   const [templates, setTemplates] = useState<TaskTemplate[]>([])
@@ -321,6 +333,64 @@ export default function App() {
     },
     [today, notify, settings.categoryGroups],
   )
+
+  /**
+   * 録音から高精度で取り直す。
+   *
+   * 録音中に出ているのは Web Speech の文字で、速いかわりに取りこぼす。
+   * ここでは**保存してある音声そのもの**を端末内の Whisper に通して、
+   * 精度の高い文字に置き換え、そのまま候補を作り直す。
+   *
+   * 音声は端末から出ない。外へ取りに行くのは仕組みとモデルだけ。
+   * 時間がかかるので、押されたときだけ走らせる（自動にしない）。
+   */
+  const refineFromRecording = useCallback(
+    async (recordingId: string) => {
+      if (refining) return
+      setRefining({ stage: 'decode', percent: null, message: '録音を読み込んでいます…' })
+      try {
+        const audio = await repository.getRecordingAudio(recordingId)
+        if (!audio) {
+          notify('この録音の音声が残っていません。設定で「音声を残す」を入れると次から使えます。', 'error')
+          return
+        }
+        const text = (await transcribe(audio, liveRef.current.settings.whisperModel, setRefining)).trim()
+        if (!text) {
+          notify('音声から文字を取れませんでした。もう少し近くではっきり話してみてください。', 'error')
+          return
+        }
+        // 取り直した文字を録音の履歴にも残す（次からはこちらが正）
+        await repository.updateRecording(recordingId, { transcript: text })
+        const result = parseToTasks(text, 'voice', {
+          today,
+          categoryGroups: liveRef.current.settings.categoryGroups,
+        })
+        if (result.drafts.length === 0) {
+          notify('取り直しましたが、タスクを取り出せませんでした。', 'error')
+          return
+        }
+        setPending({
+          drafts: result.drafts,
+          sourceText: text,
+          recordingId,
+          refined: true,
+          hint: '録音から端末内で取り直しました。件名を確認してください。',
+        })
+      } catch (err) {
+        if (err instanceof WhisperCancelled) return
+        // 文言は whisper.ts 側が持っている（何が起きて次に何をすればよいかまで）
+        notify(err instanceof Error ? err.message : String(err), 'error')
+      } finally {
+        setRefining(null)
+      }
+    },
+    [refining, notify, today],
+  )
+
+  const stopRefine = useCallback(() => {
+    cancelTranscribe()
+    setRefining(null)
+  }, [])
 
   // 他アプリから共有されてきた本文も同じパイプラインへ流す
   useEffect(() => {
@@ -1008,7 +1078,14 @@ export default function App() {
         ) : view === 'dashboard' ? (
           <DashboardView tasks={tasks} today={today} settings={settings} />
         ) : view === 'recordings' ? (
-          <RecordingsView onNotify={notify} />
+          <RecordingsView
+            onNotify={notify}
+            refining={refining}
+            canRefine={whisperSupported()}
+            modelLabel={modelOf(settings.whisperModel).size}
+            onRefine={(id) => void refineFromRecording(id)}
+            onStopRefine={stopRefine}
+          />
         ) : (
           <SettingsView
             settings={settings}
@@ -1054,6 +1131,12 @@ export default function App() {
           onChangeCategoryGroups={saveCategoryGroups}
           onCommit={(d) => void guard(() => commitDrafts(d))}
           onCancel={() => setPending(null)}
+          canRefine={!!pending.recordingId && whisperSupported()}
+          refined={pending.refined === true}
+          refining={refining}
+          onRefine={() => pending.recordingId && void refineFromRecording(pending.recordingId)}
+          onStopRefine={stopRefine}
+          modelLabel={modelOf(settings.whisperModel).size}
         />
       )}
 

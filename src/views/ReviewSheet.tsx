@@ -4,6 +4,7 @@ import { DraftFields } from './DraftFields'
 import { dueLabel } from '../lib/date'
 import { CategoryChip } from '../components/CategoryChip'
 import { colorOf } from '../lib/workCategories'
+import type { WhisperProgress } from '../lib/whisper'
 import {
   PRIORITY_LABEL,
   SOURCE_LABEL,
@@ -32,6 +33,12 @@ export function ReviewSheet({
   onChangeCategoryGroups,
   onCommit,
   onCancel,
+  canRefine,
+  refined,
+  refining,
+  onRefine,
+  onStopRefine,
+  modelLabel,
 }: {
   drafts: Draft[]
   /** 予定からの取り込みなど、経路ごとの補足 */
@@ -43,6 +50,16 @@ export function ReviewSheet({
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
   onCommit: (drafts: Draft[]) => void
   onCancel: () => void
+  /** 録音が残っていて、端末内で取り直せるか */
+  canRefine?: boolean
+  /** すでに取り直したあとか */
+  refined?: boolean
+  /** 取り直しの進み具合。null なら走っていない */
+  refining?: WhisperProgress | null
+  onRefine?: () => void
+  onStopRefine?: () => void
+  /** 初回に取り込む量の目安（「約80MB」） */
+  modelLabel?: string
 }) {
   const [items, setItems] = useState<Draft[]>(drafts)
   const [openId, setOpenId] = useState<string | null>(drafts.length === 1 ? drafts[0].tempId : null)
@@ -71,6 +88,41 @@ export function ReviewSheet({
           端末内で解析しました。期限の取り違えが起きやすいので必ず確認してください。
         </p>
         {hint && <p className="tp-engine-note">{hint}</p>}
+
+        {/* 録音から取り直す。録音中の文字は速いかわりに取りこぼすので、
+            気になったときだけ、保存してある音声を端末内で聞き直させる。 */}
+        {canRefine && (
+          <div className="tp-refine">
+            {refining ? (
+              <>
+                <p className="tp-refine-now">
+                  <span className="tp-spin" aria-hidden="true" />
+                  {refining.message}
+                </p>
+                {refining.percent !== null && (
+                  <div className="tp-progress">
+                    <span style={{ width: `${Math.min(100, refining.percent)}%` }} />
+                  </div>
+                )}
+                <button type="button" className="tp-link-quiet" onClick={onStopRefine}>
+                  やめる
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="tp-refine-btn" onClick={onRefine}>
+                  <Icon name="sparkle" size={15} />
+                  {refined ? 'もう一度 録音から取り直す' : '録音から高精度で取り直す'}
+                </button>
+                <p className="tp-refine-note">
+                  {refined
+                    ? '端末内で取り直したものです。'
+                    : `いま出ているのは録音中に拾った文字です。取りこぼしがあれば、保存してある音声を端末内で聞き直して作り直せます。処理は端末の中だけで、音声は外へ出ません。初回だけモデル（${modelLabel ?? ''}）を取り込みます。`}
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="tp-sheet-body">
           {items.length === 0 && (

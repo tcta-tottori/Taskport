@@ -17,6 +17,7 @@ import {
 import { APP_VERSION, buildLabel } from '../version'
 import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
 import { askPermission, leadLabel, notificationsUsable, triggersSupported } from '../lib/reminder'
+import { WHISPER_MODELS, whisperSupported } from '../lib/whisper'
 
 /* =========================================================
  * 設定
@@ -300,6 +301,33 @@ export function SettingsView({
               onChange={(e) => setDraft({ ...draft, keepAudio: e.target.checked })}
             />
           </label>
+          {/* あとから高精度で取り直すときのモデル。端末の中だけで走る。 */}
+          {whisperSupported() && (
+            <div className="tp-field">
+              <span className="tp-label">高精度で取り直すときのモデル</span>
+              <div className="tp-chips" role="group" aria-label="端末内で使うモデル">
+                {WHISPER_MODELS.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`tp-fchip${draft.whisperModel === m.key ? ' is-on' : ''}`}
+                    aria-pressed={draft.whisperModel === m.key}
+                    onClick={() => setDraft({ ...draft, whisperModel: m.key })}
+                  >
+                    {m.label}
+                    <small className="tp-fchip-sub tp-mono">{m.size}</small>
+                  </button>
+                ))}
+              </div>
+              <p className="tp-hint">
+                {WHISPER_MODELS.find((m) => m.key === draft.whisperModel)?.note}。
+                録音中の文字起こしは今までどおりその場に出ます。こちらは
+                <b>確認画面か録音履歴で押したときだけ</b>、保存してある音声を
+                <b>端末の中だけで</b>聞き直して作り直すものです。音声は外へ出ません。
+                初回だけ、仕組みとモデルをインターネットから取り込みます（以後は端末に残ります）。
+              </p>
+            </div>
+          )}
           <label className="tp-switch">
             <span>
               <b>録音中は画面を点けたままにする</b>

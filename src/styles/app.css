@@ -2201,3 +2201,46 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-field-row-2 { grid-template-columns: 1fr 1fr; }
   .tp-live-row { align-items: flex-start; }
 }
+
+/* =========================================================
+ * 録音から高精度で取り直す（端末内 Whisper）
+ *
+ * 録音中に出るのは Web Speech の文字で、速いかわりに取りこぼす。
+ * ここは「もう一度、音声そのものから起こす」ための帯。
+ * 待たせる処理なので、いま何をしているか（モデルの取り込み／文字起こし）を
+ * 必ず言葉で出す。黙って固まったように見せない。
+ * =======================================================*/
+.tp-refine {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  margin: 0 0 4px; padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--brand1) 6%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--brand1) 22%, transparent);
+}
+.tp-refine-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 44px; padding: 0 15px; border-radius: 999px;
+  font-size: 13px; font-weight: 800;
+  background: var(--surface); color: var(--brand1);
+  border: 1px solid color-mix(in srgb, var(--brand1) 45%, transparent);
+  transition: background .15s, border-color .15s;
+}
+.tp-refine-btn:hover { background: color-mix(in srgb, var(--brand1) 10%, var(--surface)); }
+.tp-refine-note { margin: 0; font-size: 11.5px; line-height: 1.7; color: var(--muted); }
+.tp-refine-now {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0; font-size: 12.5px; font-weight: 700; color: var(--ink);
+}
+.tp-refine .tp-progress { width: 100%; }
+
+/* 回っていることだけを示す小さな輪。中身の進み具合は文字で出す。 */
+.tp-spin {
+  flex: none; width: 15px; height: 15px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--brand1) 28%, transparent);
+  border-top-color: var(--brand1);
+  animation: tpSpin .9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-spin { animation: none; }
+}
