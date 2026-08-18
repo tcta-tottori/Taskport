@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
 import { TemplateSheet } from './TemplateSheet'
@@ -26,6 +26,7 @@ import {
 export function TaskEditor({
   task,
   initialDraft,
+  initialMode = 'form',
   onSave,
   onDelete,
   onClose,
@@ -40,6 +41,11 @@ export function TaskEditor({
   /** 既存タスクの編集なら渡す。新規作成なら undefined */
   task?: Task
   initialDraft: Draft
+  /**
+   * どの入口から開いたか（＋の扇で選んだもの）。
+   *   form … 空のフォーム ／ memory … 記憶を開いた状態 ／ text … 文章の欄を開いた状態
+   */
+  initialMode?: 'form' | 'memory' | 'text'
   workHours: WorkHours
   categoryGroups: CategoryGroup[]
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
@@ -56,11 +62,18 @@ export function TaskEditor({
 }) {
   const [draft, setDraft] = useState<Draft>(task ? taskToDraft(task) : initialDraft)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [recalling, setRecalling] = useState(false)
+  // 開いた入口に合わせて、最初から該当の面を出しておく
+  const [recalling, setRecalling] = useState(!task && initialMode === 'memory')
   const [freeText, setFreeText] = useState('')
-  const [freeOpen, setFreeOpen] = useState(false)
+  const [freeOpen, setFreeOpen] = useState(!task && initialMode === 'text')
+  const freeRef = useRef<HTMLTextAreaElement | null>(null)
 
   const creating = !task
+
+  // 「文章から作る」で開いたときは、そのまま打ち始められるようにする
+  useEffect(() => {
+    if (creating && initialMode === 'text') freeRef.current?.focus()
+  }, [creating, initialMode])
 
   return (
     <div className="tp-sheet" role="dialog" aria-modal="true" aria-label={task ? 'タスクを編集' : 'タスクを作る'}>
@@ -104,6 +117,7 @@ export function TaskEditor({
           {creating && freeOpen && (
             <div className="tp-free">
               <textarea
+                ref={freeRef}
                 className="tp-free-area"
                 rows={3}
                 value={freeText}

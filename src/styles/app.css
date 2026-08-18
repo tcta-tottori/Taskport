@@ -405,6 +405,80 @@ body::before {
   border: 2px solid color-mix(in srgb, var(--rec) 70%, transparent); opacity: 0; transform: scale(.85);
 }
 
+/* ---------- ＋から開く扇（作り方を選ぶ） ----------
+   ＋を押す／長押しすると、真上から左横までの 1/4 円に4つ並ぶ。
+   真上＝手描き、左へ 記憶・文章・マイク（利用者のスケッチのとおり）。
+   位置は「向き（--fx/--fy）×半径（--fan-r）」で出し、
+   半径だけを画面幅で変える。 */
+.tp-quick { --fan-r: 118px; --fan-label-r: 44px; }
+.tp-fan { position: relative; }
+
+.tp-fan-backdrop {
+  position: fixed; inset: 0; z-index: -1;
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  animation: tpFade .18s ease;
+  cursor: default;
+}
+
+.tp-fan-item {
+  position: absolute; left: 50%; top: 50%;
+  width: 52px; height: 52px; margin: -26px 0 0 -26px;
+  transform: translate(calc(var(--fan-r) * var(--fx)), calc(var(--fan-r) * var(--fy)));
+  animation: tpFanIn .26s cubic-bezier(.22, 1, .36, 1) backwards;
+  animation-delay: calc(var(--i) * 40ms);
+}
+.tp-fan-btn {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--surface); color: var(--brand1);
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
+  transition: transform .12s ease, color .16s, border-color .16s;
+}
+.tp-fan-btn:hover { border-color: var(--brand1); transform: translateY(-2px); }
+/* 指が乗っているアイコン（長押しのまま滑らせて選ぶとき）。離すとここが動く */
+.tp-fan-btn.is-hot {
+  background: var(--brand1); color: var(--on-brand); border-color: var(--brand1);
+  transform: scale(1.12);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--brand1) 40%, transparent);
+}
+.tp-fan-btn:active { transform: scale(.94); }
+.tp-fan-btn:disabled { opacity: .45; cursor: default; }
+/* 名前は円の「外側」（＋から見て向こう側）に置く。
+   下に置くと隣の円とぶつかり、真横のものは画面の下に切れる。 */
+.tp-fan-label {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%)
+    translate(calc(var(--fx) * var(--fan-label-r)), calc(var(--fy) * var(--fan-label-r)));
+  white-space: nowrap;
+  font-size: 10.5px; font-weight: 700; color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-radius: 999px; padding: 1px 7px;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+/* 扇の中にもマイクがあるので、開いている間は左下の録音ボタンを引っ込める
+   （同じ形の丸が2つ並ぶと、どちらを押したのか分からなくなる） */
+.tp-quick.is-open .tp-quick-mic {
+  opacity: 0; transform: scale(.8); pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+/* 長押しのまま滑らせるので、押している間に画面が動かないようにする */
+.tp-quick-add { touch-action: none; }
+
+/* 開いている間の＋は、閉じる操作であることが分かるように回して色を反転する */
+.tp-quick-add.is-on {
+  background: var(--brand1); color: var(--on-brand); border-color: var(--brand1);
+  transform: rotate(45deg);
+}
+
+@keyframes tpFanIn {
+  from { opacity: 0; transform: translate(0, 0) scale(.3); }
+  to { opacity: 1; transform: translate(calc(var(--fan-r) * var(--fx)), calc(var(--fan-r) * var(--fy))) scale(1); }
+}
+
 /* 録音中の波形（録音オーバーレイと共用） */
 .tp-wave { display: block; width: 100%; height: 100%; }
 .tp-wave-timer {
@@ -859,6 +933,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-reveal { opacity: 1; transform: none; }
   .tp-trend .tp-t-line-anim { stroke-dashoffset: 0; }
   .tp-quick-btn { transition: none; }
+  .tp-quick-add.is-on { transform: rotate(45deg); }
 }
 
 /* ---------- 320px 幅まで崩れない ---------- */
@@ -870,6 +945,9 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-about { grid-template-columns: 1fr; gap: 2px; }
   .tp-about dd { margin-bottom: 8px; }
   .tp-quick-btn { width: 54px; height: 54px; }
+  .tp-quick { --fan-r: 100px; --fan-label-r: 40px; }
+  .tp-fan-item { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
+  .tp-fan-btn { width: 48px; height: 48px; }
   .tp-hero-num { font-size: 34px; }
   .tp-tl { margin-left: 40px; }
   .tp-tl-hour > span { left: -40px; font-size: 9.5px; }

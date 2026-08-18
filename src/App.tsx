@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon, type IconName } from './components/Icon'
-import { QuickBar } from './components/QuickBar'
+import { QuickBar, type MakeMode } from './components/QuickBar'
 import { Toast, type ToastMessage } from './components/Toast'
 import { TapWave } from './components/TapWave'
 import { ListView } from './views/ListView'
@@ -113,7 +113,12 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<Pending | null>(null)
   const [editing, setEditing] = useState<Task | null>(null)
-  const [creating, setCreating] = useState(false)
+  /**
+   * タスクを作る画面。どの入口から開いたかを持つ（＋の扇で選んだもの）。
+   *   form … 自分で書く ／ memory … 記憶から呼び出す ／ text … 文章から作る
+   * false は閉じている。
+   */
+  const [creating, setCreating] = useState<Exclude<MakeMode, 'voice'> | false>(false)
   const [exporting, setExporting] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   /** 記憶したタスク（定型）。登録するたびに控え、直接入力から呼び出す */
@@ -246,7 +251,7 @@ export default function App() {
         document.querySelector<HTMLInputElement>('.tp-search-input')?.focus()
       } else if (e.key === 'n') {
         e.preventDefault()
-        setCreating(true)
+        setCreating('form')
       } else if (e.key === 'e') {
         e.preventDefault()
         setExporting(true)
@@ -941,7 +946,7 @@ export default function App() {
           busy={busy}
           voiceSupported={voiceSupported()}
           onStartVoice={() => void session.start()}
-          onOpenForm={() => setCreating(true)}
+          onCreate={(mode) => setCreating(mode)}
         />
       )}
 
@@ -971,6 +976,7 @@ export default function App() {
         <TaskEditor
           task={editing ?? undefined}
           initialDraft={emptyDraft('form')}
+          initialMode={creating || 'form'}
           workHours={settings.workHours}
           categoryGroups={settings.categoryGroups}
           onChangeCategoryGroups={saveCategoryGroups}
