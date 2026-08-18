@@ -327,11 +327,84 @@ export function SettingsView({
             予定の読み込みと追加ができます。<b>予定を追加すると、タスクの件名とメモが Google に渡ります。</b>
             送るのは押したときに選んだ分だけで、自動では送りません。
           </p>
-          <p className="tp-note">
-            使うには、自分の Google Cloud で OAuth クライアントID（ウェブアプリケーション）を作り、
-            承認済みの JavaScript 生成元に <code className="tp-mono">{origin}</code> を入れてください。
-            Google Calendar API の有効化も必要です。
-          </p>
+          {/* Google Cloud の画面は階層が深く、毎回たどるのが手間なので直接飛べるようにする。
+              リンク先は Google のコンソール。ここを押した時点では何も送らない。 */}
+          <ol className="tp-steps">
+            <li>
+              <span className="tp-step-n tp-mono">1</span>
+              <span>
+                <b>Google Calendar API を有効にする</b>
+                <a
+                  className="tp-step-link"
+                  href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  APIライブラリを開く
+                  <Icon name="arrow" size={13} />
+                </a>
+              </span>
+            </li>
+            <li>
+              <span className="tp-step-n tp-mono">2</span>
+              <span>
+                <b>OAuth 同意画面を作る</b>
+                <small>自分だけで使うなら、対象は「外部」でテストユーザーに自分を入れる。</small>
+                <a
+                  className="tp-step-link"
+                  href="https://console.cloud.google.com/auth/overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  同意画面を開く
+                  <Icon name="arrow" size={13} />
+                </a>
+              </span>
+            </li>
+            <li>
+              <span className="tp-step-n tp-mono">3</span>
+              <span>
+                <b>OAuth クライアントID（ウェブアプリケーション）を作る</b>
+                <small>
+                  承認済みの JavaScript 生成元に、下の値をそのまま入れる。
+                </small>
+                <span className="tp-origin">
+                  <code className="tp-mono">{origin}</code>
+                  <button
+                    type="button"
+                    className="tp-btn-ghost tp-origin-copy"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(origin)
+                        onNotify('生成元をコピーしました')
+                      } catch {
+                        onNotify('コピーできませんでした。手で入力してください。', 'error')
+                      }
+                    }}
+                  >
+                    <Icon name="copy" size={14} />
+                    コピー
+                  </button>
+                </span>
+                <a
+                  className="tp-step-link"
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  認証情報を開く
+                  <Icon name="arrow" size={13} />
+                </a>
+              </span>
+            </li>
+            <li>
+              <span className="tp-step-n tp-mono">4</span>
+              <span>
+                <b>できたクライアントIDを下に貼る</b>
+                <small>IDはこの端末の中だけに保存します。リポジトリには入りません。</small>
+              </span>
+            </li>
+          </ol>
           <label className="tp-field">
             <span className="tp-label">クライアントID</span>
             <input

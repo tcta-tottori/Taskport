@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react'
  * 本ごとに伸びやすさ・揺れの速さ・乱数の切り替わる間隔を変えてあるので、
  * 同じ音量でも伸びる長さがばらつき、機械的な弧に見えない。
  *
+ * 色は CSS 変数 --wave から取る（.tp-wave で指定）。
  * prefers-reduced-motion では静止した点だけを描く。
  * =======================================================*/
 
@@ -126,7 +127,9 @@ export function Wave({ active, level }: { active: boolean; level: number }) {
       }
 
       const now = performance.now() / 1000
-      ctx.fillStyle = '#ffffff'
+      // 色は CSS 側（--wave）から取る。地の色が変わっても描き直さずに済む。
+      ctx.fillStyle =
+        getComputedStyle(canvas).getPropertyValue('--wave').trim() || 'currentColor'
 
       // 1本のパスにまとめて一度に塗る（本ごとに fill すると重い）
       ctx.beginPath()

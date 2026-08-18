@@ -69,9 +69,9 @@ input, textarea, select { font-family: inherit; }
 body::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(130% 90% at 12% -5%, rgba(123, 147, 255, .10), transparent 55%),
-    radial-gradient(130% 90% at 100% 12%, rgba(166, 140, 255, .08), transparent 55%),
-    linear-gradient(170deg, #17181b 0%, #1a1a1f 55%, #1c1a1f 100%);
+    radial-gradient(130% 90% at 12% -5%, color-mix(in srgb, var(--brand1) 7%, transparent), transparent 55%),
+    radial-gradient(130% 90% at 100% 12%, color-mix(in srgb, var(--brand2) 6%, transparent), transparent 55%),
+    var(--bg);
 }
 
 /* ---------- タップの波（端末が出す四角いハイライトの代わり） ---------- */
@@ -93,10 +93,10 @@ body::before {
   position: fixed; top: 0; left: 0; right: 0; z-index: 0; pointer-events: none;
   height: 190px;
   background: linear-gradient(to bottom,
-    rgba(123, 147, 255, .16) 0%,
-    rgba(166, 140, 255, .11) 34%,
-    rgba(216, 111, 196, .06) 64%,
-    rgba(216, 111, 196, 0) 100%);
+    color-mix(in srgb, var(--chrome-1) 14%, transparent) 0%,
+    color-mix(in srgb, var(--chrome-2) 9%, transparent) 34%,
+    color-mix(in srgb, var(--chrome-3) 5%, transparent) 64%,
+    transparent 100%);
   filter: blur(8px);
 }
 
@@ -105,18 +105,18 @@ body::before {
   display: flex; align-items: center; justify-content: center;
   padding: 6px clamp(52px, 15vw, 76px);
   padding-top: max(6px, var(--safe-t));
-  /* 上端は theme-color(#17181b) と同色 → ステータスバーと継ぎ目なし。
-     マット感を保つため、ブランド色はごく薄い色味としてだけ残す。 */
-  background: linear-gradient(180deg, #17181b 0%, #1b1c22 60%, #1f1c25 100%);
-  border-bottom: 1px solid #2a2c34;
+  /* 上端は theme-color と同色 → ステータスバーと継ぎ目なし。
+     本文は白地だが、ここだけは色面のままにして「どのアプリか」を一目で示す。 */
+  background: linear-gradient(180deg, var(--chrome-1) 0%, var(--chrome-2) 60%, var(--chrome-3) 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--chrome-3) 60%, transparent);
 }
 .tp-brand { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .tp-wordmark {
-  font-size: 19px; font-weight: 800; letter-spacing: .1em; color: #fff;
+  font-size: 19px; font-weight: 800; letter-spacing: .1em; color: var(--on-chrome);
 }
 .tp-tagline {
   margin-top: 1px; font-size: 9px; font-weight: 600; letter-spacing: .18em;
-  color: rgba(255, 255, 255, .58);
+  color: color-mix(in srgb, var(--on-chrome) 72%, transparent);
 }
 
 .tp-menu, .tp-head-btn {
@@ -125,12 +125,12 @@ body::before {
   width: 44px; height: 44px; padding: 0 10px; flex: none;
   background: rgba(255, 255, 255, .07);
   border: 1px solid rgba(255, 255, 255, .16);
-  border-radius: 11px; color: #fff; transition: .16s;
+  border-radius: 11px; color: var(--on-chrome); transition: .16s;
 }
 .tp-menu { left: clamp(10px, 3vw, 22px); flex-direction: column; gap: 5px; }
 .tp-head-btn { right: clamp(10px, 3vw, 22px); }
 .tp-menu:hover, .tp-head-btn:hover { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .38); }
-.tp-bar { display: block; height: 2px; width: 100%; background: #fff; border-radius: 2px; transition: .25s; }
+.tp-bar { display: block; height: 2px; width: 100%; background: var(--on-chrome); border-radius: 2px; transition: .25s; }
 .tp-menu[aria-expanded="true"] .tp-bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
 .tp-menu[aria-expanded="true"] .tp-bar:nth-child(2) { opacity: 0; }
 .tp-menu[aria-expanded="true"] .tp-bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
@@ -149,14 +149,14 @@ body::before {
 /* ---------- ドロワー ---------- */
 .tp-backdrop {
   position: fixed; inset: 0; z-index: 45;
-  background: rgba(0, 0, 0, .58);
+  background: rgba(15, 20, 35, .42);
   animation: tpFade .24s ease;
 }
 .tp-drawer {
   position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
   width: min(78vw, 292px);
-  background: linear-gradient(160deg, #1c1e26 0%, #21202a 52%, #26202c 120%);
-  border-right: 1px solid #33353f;
+  background: linear-gradient(160deg, var(--chrome-1) 0%, var(--chrome-2) 52%, var(--chrome-3) 120%);
+  border-right: 1px solid color-mix(in srgb, var(--chrome-3) 70%, transparent);
   box-shadow: var(--shadow-lg);
   padding: max(16px, var(--safe-t)) 14px calc(16px + var(--safe-b));
   transform: translateX(-100%);
@@ -168,31 +168,32 @@ body::before {
   margin: 0 -14px 14px; padding: 8px 18px 16px;
   display: flex; flex-direction: column;
 }
-.tp-drawer-name { font-size: 18px; font-weight: 800; letter-spacing: .08em; color: #fff; }
-.tp-drawer-sub { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, .82); margin-top: 2px; }
+.tp-drawer-name { font-size: 18px; font-weight: 800; letter-spacing: .08em; color: var(--on-chrome); }
+.tp-drawer-sub { font-size: 11px; font-weight: 600; color: color-mix(in srgb, var(--on-chrome) 86%, transparent); margin-top: 2px; }
 .tp-drawer-item {
   display: flex; align-items: center; gap: 12px;
   min-height: 46px; padding: 11px 14px; border-radius: 12px;
   font-size: 15px; font-weight: 700; text-align: left;
-  color: rgba(255, 255, 255, .9); transition: .16s;
+  color: color-mix(in srgb, var(--on-chrome) 92%, transparent); transition: .16s;
 }
-.tp-drawer-item:hover { background: rgba(255, 255, 255, .15); color: #fff; }
+.tp-drawer-item:hover { background: rgba(255, 255, 255, .16); color: var(--on-chrome); }
 .tp-drawer-item.is-on {
-  background: rgba(255, 255, 255, .24); color: #fff;
+  background: rgba(255, 255, 255, .26); color: var(--on-chrome);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28);
 }
 .tp-drawer-n {
   margin-left: auto; min-width: 22px; text-align: center;
   font-family: var(--mono); font-size: 11.5px; font-weight: 700;
-  background: color-mix(in srgb, var(--pri-high) 22%, transparent);
-  color: var(--pri-high);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pri-high) 45%, transparent);
+  /* 色面の上なので、優先度の色ではなく白抜きで出す（暗い赤は沈んで読めない） */
+  background: rgba(255, 255, 255, .22);
+  color: var(--on-chrome);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .38);
   border-radius: 999px; padding: 1px 7px;
 }
 .tp-drawer-foot {
   margin-top: auto; padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, .2);
-  font-size: 11.5px; color: rgba(255, 255, 255, .84);
+  font-size: 11.5px; color: color-mix(in srgb, var(--on-chrome) 88%, transparent);
 }
 .tp-drawer-foot p { margin: 0; }
 .tp-drawer-count { margin-bottom: 8px !important; }
@@ -201,12 +202,12 @@ body::before {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
 .tp-drawer-ver > span { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
-.tp-drawer-ver b { font-size: 12px; font-weight: 800; letter-spacing: .04em; color: #fff; }
-.tp-drawer-ver > span > span { font-size: 10.5px; color: rgba(255, 255, 255, .62); }
+.tp-drawer-ver b { font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--on-chrome); }
+.tp-drawer-ver > span > span { font-size: 10.5px; color: color-mix(in srgb, var(--on-chrome) 78%, transparent); }
 .tp-ver-btn {
   flex: none; min-height: 32px; padding: 5px 11px;
   border-radius: 999px; font-size: 11px; font-weight: 700;
-  color: #fff; background: rgba(255, 255, 255, .14);
+  color: var(--on-chrome); background: rgba(255, 255, 255, .16);
   border: 1px solid rgba(255, 255, 255, .24); transition: .16s;
 }
 .tp-ver-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .26); }
@@ -215,7 +216,7 @@ body::before {
 /* ---------- パネル（ガラス面） ---------- */
 .tp-panel {
   background: color-mix(in srgb, var(--surface) 84%, transparent);
-  border: 1px solid color-mix(in srgb, #ffffff 8%, var(--line));
+  border: 1px solid var(--line);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
   border-radius: var(--radius);
@@ -444,10 +445,10 @@ body::before {
 .tp-fab:disabled { opacity: .5; cursor: default; }
 .tp-fab-ring {
   position: absolute; inset: -7px; border-radius: 50%;
-  border: 2px solid rgba(255, 90, 95, .7); opacity: 0; transform: scale(.85);
+  border: 2px solid color-mix(in srgb, var(--rec) 70%, transparent); opacity: 0; transform: scale(.85);
 }
 .tp-fab.is-rec {
-  background: linear-gradient(135deg, #e11d48 0%, #ff3d6b 50%, #ff8a3d 100%);
+  background: linear-gradient(135deg, var(--danger) 0%, var(--rec) 55%, var(--amber) 100%);
   animation: tpFabBlink 1.1s ease-in-out infinite;
 }
 .tp-fab.is-rec .tp-fab-ring { animation: tpRing 1.5s ease-out infinite; }
@@ -937,7 +938,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-rec-wrap { position: fixed; inset: 0; z-index: 55; }
 .tp-rec-backdrop {
   position: absolute; inset: 0;
-  background: rgba(0, 0, 0, .55);
+  background: rgba(15, 20, 35, .38);
   animation: tpFade .2s ease;
 }
 .tp-rec {
@@ -945,7 +946,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   height: min(58vh, 560px);
   display: flex; flex-direction: column;
   max-width: 760px; margin: 0 auto;
-  background: linear-gradient(180deg, #1c1e26 0%, var(--surface) 40%);
+  background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 40%);
   border-top: 1px solid var(--line-strong);
   border-radius: 22px 22px 0 0;
   box-shadow: var(--shadow-lg);
@@ -973,9 +974,10 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-rec-timer.is-paused b { color: var(--muted); }
 .tp-rec-timer.is-paused .tp-rec-dot { background: var(--muted); box-shadow: none; animation: none; }
 
-/* ゲージ。バーは白一色で、音量に応じてその場で伸縮する。 */
+/* ゲージ。バーは1色で、音量に応じてその場で伸縮する。
+   白地なのでブランド色で描く（Wave.tsx が --wave を読む）。 */
 .tp-rec-gauge { flex: none; height: 84px; margin-top: 2px; }
-.tp-wave { display: block; width: 100%; height: 100%; }
+.tp-wave { display: block; width: 100%; height: 100%; --wave: var(--brand1); }
 
 .tp-rec-alert, .tp-rec-note {
   flex: none; display: flex; align-items: flex-start; gap: 6px;
@@ -1054,15 +1056,15 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   position: relative;
   width: 68px; height: 68px; border-radius: 50%;
   display: grid; place-items: center;
-  background: linear-gradient(135deg, #e11d48 0%, #ff3d6b 50%, #ff8a3d 100%);
-  box-shadow: 0 10px 26px rgba(255, 45, 107, .42);
+  background: linear-gradient(135deg, var(--danger) 0%, var(--rec) 55%, var(--amber) 100%);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--rec) 34%, transparent);
   animation: tpFabBlink 1.1s ease-in-out infinite;
   transition: transform .12s ease;
 }
 .tp-rec-fab:active { transform: scale(.95); }
 .tp-rec-ring {
   position: absolute; inset: -8px; border-radius: 50%;
-  border: 2px solid rgba(255, 90, 95, .7); opacity: 0; transform: scale(.85);
+  border: 2px solid color-mix(in srgb, var(--rec) 70%, transparent); opacity: 0; transform: scale(.85);
   animation: tpRing 1.5s ease-out infinite;
 }
 .tp-rec-stop { width: 23px; height: 23px; border-radius: 5px; background: #fff; }
@@ -1384,3 +1386,36 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   font-size: 12.5px; line-height: 1.6; color: var(--muted); text-align: center;
 }
 .tp-slow > svg { flex: none; color: var(--amber); }
+
+/* ---------- 手順（Googleカレンダーの設定） ---------- */
+.tp-steps {
+  list-style: none; margin: 0 0 4px; padding: 0;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.tp-steps > li { display: flex; align-items: flex-start; gap: 10px; }
+.tp-steps > li > span:last-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.tp-steps b { font-size: 13px; font-weight: 700; line-height: 1.6; color: var(--ink); }
+.tp-steps small { font-size: 12px; line-height: 1.7; color: var(--muted); }
+.tp-step-n {
+  flex: none; width: 22px; height: 22px; margin-top: 1px;
+  display: grid; place-items: center; border-radius: 999px;
+  background: color-mix(in srgb, var(--brand1) 12%, transparent);
+  color: var(--brand1); font-size: 11.5px; font-weight: 800;
+}
+.tp-step-link {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
+  min-height: 38px; padding: 0 12px; margin-top: 2px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  font-size: 12.5px; font-weight: 700; color: var(--brand1); text-decoration: none;
+  transition: .16s;
+}
+.tp-step-link:hover { border-color: var(--brand1); background: color-mix(in srgb, var(--brand1) 8%, transparent); }
+.tp-origin {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 2px;
+}
+.tp-origin code {
+  flex: 1; min-width: 0; padding: 7px 10px; overflow-wrap: anywhere;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; font-size: 12px; color: var(--ink);
+}
+.tp-origin-copy { flex: none; min-height: 38px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; }

@@ -140,6 +140,10 @@ Pages の Source は「Deploy from a branch → gh-pages / (root)」に設定し
 
 ### Googleカレンダー連携（任意）
 
+設定画面に Google Cloud の各ページへ飛べるリンクと、承認済み生成元のコピーボタンがある。
+手順は「Calendar API を有効化 → OAuth 同意画面 → クライアントID を作る → IDを貼る」の4つ。
+
+
 **未設定でもアプリは動く。** 使う場合は、自分の Google Cloud で用意する。
 
 1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作る
@@ -175,8 +179,10 @@ Pages の Source は「Deploy from a branch → gh-pages / (root)」に設定し
 
 ### 見た目
 
-同じ作者の [NoteLoop](https://github.com/tcta-tottori/NoteLoop) 9.2（`main` ブランチ）の
-ダークテーマに合わせている。グラフは [study-deck](https://github.com/tcta-tottori/study-deck) の成績画面に合わせた。
+白地。面の作りは同じ作者の [NoteLoop](https://github.com/tcta-tottori/NoteLoop) 9.2（`main` ブランチ）に、
+グラフは [study-deck](https://github.com/tcta-tottori/study-deck) の成績画面に合わせている。
+ヘッダーと引き出しだけ色面にしてあるのは、Android のステータスバーと繋げて「どのアプリか」を示すため。
+文字と背景のコントラストは全色 WCAG AA（4.5:1）以上。
 配色は `src/styles/tokens.css` に集約してあるので、色を変えるときはそこだけ触る。
 
 詳しい設計は [`design.md`](./design.md)、
