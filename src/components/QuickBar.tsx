@@ -4,7 +4,7 @@ import { Icon, type IconName } from './Icon'
 /* =========================================================
  * 画面下に固定するボタン
  *
- * 左下＝録音、右下＝＋（作り方を選ぶ）。
+ * 右下の ＋ だけ。録音もこの中（扇のマイク）から始める。
  *
  * ＋を押す（または長押しする）と、＋の周り 1/4 の円に沿って
  * 4つの入口が開く。真上から左へ順に
@@ -18,6 +18,8 @@ import { Icon, type IconName } from './Icon'
  * （狙いを外しただけで閉じられると、もう一度長押しからやり直しになる）。
  *
  * v1.10 までの統合バー（下辺いっぱいのバー）は廃止済み。
+ * 左下に別で置いていた録音ボタンも v1.12.1 で外した。同じ形の丸が2つあると
+ * どちらを押したのか分からなくなるうえ、マイクは扇の中にもう1つある。
  * =======================================================*/
 
 /** ＋から開く入口。どれもタスクを作る道で、開く先が違うだけ。 */
@@ -114,18 +116,6 @@ export function QuickBar({
           onClick={() => setOpen(false)}
         />
       )}
-
-      <button
-        type="button"
-        className="tp-quick-btn tp-quick-mic"
-        disabled={busy || !voiceSupported}
-        aria-label={voiceSupported ? '音声で入力する' : '音声は使えません'}
-        title={voiceSupported ? '音声で入力' : '音声は未対応'}
-        onClick={onStartVoice}
-      >
-        <span className="tp-fab-ring" aria-hidden="true" />
-        <Icon name="mic" size={26} strokeWidth={2} />
-      </button>
 
       <div className="tp-fan">
         {open &&

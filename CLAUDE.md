@@ -161,6 +161,17 @@ npm run preview    # ビルド結果の確認
 npm run lint       # 型チェックのみ
 ```
 
+アイコンを直すときは `public/icons/icon.svg` を編集して次を走らせる（PNG を焼き直す）。
+
+```bash
+npm i -D playwright-core     # 手元に無いときだけ
+node scripts/makeIcons.mjs
+```
+
+**アイコンの地は 512×512 の全面を塗る。** 絵の中に角丸のカードを描かない
+（端末がさらに角丸で切り抜くので、枠が二重になり中身が小さくなる）。
+絵は中央 80% の円（maskable の安全域）に収める。
+
 `vite.config.ts` の `base` は **リポジトリ名と完全に一致させる**こと（GitHub Pages のサブパス配信のため）。
 現在のリポジトリ名は `Taskport` なので `base = '/Taskport/'`。
 リポジトリ名を変えたら `base` も必ず合わせる。ここがずれると全アセットが 404 になる。

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Taskport">
+  <!--
+    アプリアイコンの元絵。ここを直して scripts/makeIcons.mjs で PNG を作り直す。
+
+    【地は端まで塗る】
+    v1.10 のアイコンは「白い角丸のカード」を絵の中に描いていた。Android は
+    受け取った絵をさらに角丸で切り抜くので、枠が二重に見え、そのぶん中の絵が
+    小さくなっていた（利用者の指摘）。地は 512×512 の全面を塗り、角丸は
+    端末側に任せる。
+
+    【安全域】
+    maskable は中央 80%（直径 409px）の円までしか残らないことがある。
+    絵はすべてこの円の内側に収めてある。
+  -->
+  <defs>
+    <linearGradient id="tpBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3f4fc4" />
+      <stop offset="0.55" stop-color="#5b45bd" />
+      <stop offset="1" stop-color="#7b3fae" />
+    </linearGradient>
+    <linearGradient id="tpBand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4a5bd0" />
+      <stop offset="1" stop-color="#7350c8" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#tpBg)" />
+
+  <g id="tp-glyph">
+    <!-- 綴じ具 -->
+    <rect x="176" y="122" width="16" height="52" rx="8" fill="#ffffff" />
+    <rect x="320" y="122" width="16" height="52" rx="8" fill="#ffffff" />
+
+    <!-- 台紙 -->
+    <rect x="124" y="148" width="264" height="208" rx="28" fill="#ffffff" />
+    <!-- 見出しの帯 -->
+    <path d="M124 176a28 28 0 0 1 28-28h208a28 28 0 0 1 28 28v26H124z" fill="url(#tpBand)" />
+
+    <!-- 日付のマス -->
+    <g fill="#d7dcf4">
+      <rect x="152" y="228" width="42" height="34" rx="10" />
+      <rect x="206" y="228" width="42" height="34" rx="10" />
+      <rect x="260" y="228" width="42" height="34" rx="10" />
+      <rect x="314" y="228" width="42" height="34" rx="10" />
+      <rect x="152" y="276" width="42" height="34" rx="10" />
+      <rect x="260" y="276" width="42" height="34" rx="10" />
+      <rect x="152" y="324" width="42" height="34" rx="10" />
+    </g>
+    <!-- 今日 -->
+    <rect x="206" y="276" width="42" height="34" rx="10" fill="url(#tpBand)" />
+
+    <!-- 済の印 -->
+    <circle cx="330" cy="330" r="62" fill="#ffffff" />
+    <circle cx="330" cy="330" r="52" fill="url(#tpBand)" />
+    <path d="M306 331l16 17 32-35" fill="none" stroke="#ffffff" stroke-width="17"
+          stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

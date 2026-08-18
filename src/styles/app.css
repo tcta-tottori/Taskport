@@ -367,14 +367,14 @@ body::before {
 .tp-empty-head { margin: 4px 0 0; font-size: 14px; font-weight: 700; color: var(--ink); }
 .tp-empty-body { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
 
-/* ---------- 下に固定する2つのボタン（左＝録音・右＝＋） ----------
+/* ---------- 下に固定するボタン（右下の＋だけ） ----------
    v1.10 までの統合バー（.tp-dock）は廃止した。入口が3つに割れていて、
    どれを押せば何が起きるのか分かりにくかった。
-   いまは左下に録音、右下に＋（タスクを作る）だけを置き、
-   自然文の入力は＋の中（タスクを作る画面）に入れてある。 */
+   左下に別で置いていた録音ボタンも外した（v1.12.1）。
+   いまは＋だけを置き、録音を含む4つの入口は＋の扇から開く。 */
 .tp-quick {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 35;
-  display: flex; justify-content: space-between; align-items: flex-end;
+  display: flex; justify-content: flex-end; align-items: flex-end;
   padding: 0 clamp(10px, 4vw, 22px) calc(var(--safe-b) + 14px);
   pointer-events: none;
 }
@@ -390,19 +390,10 @@ body::before {
 .tp-quick-btn:hover { transform: translateY(-2px); }
 .tp-quick-btn:active { transform: scale(.95); }
 .tp-quick-btn:disabled { opacity: .45; cursor: default; }
-/* 録音はブランドの紫。＋は同じ形の白面にして、押し間違えないようにする。 */
-.tp-quick-mic {
-  background: linear-gradient(135deg, var(--brand1), var(--brand2));
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--brand1) 42%, transparent);
-}
+/* ＋はブランドの紫。画面に1つしかない固定ボタンなので、ここだけ色で立てる。 */
 .tp-quick-add {
-  background: var(--surface); color: var(--brand1);
-  border: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-lg);
-}
-.tp-fab-ring {
-  position: absolute; inset: -7px; border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--rec) 70%, transparent); opacity: 0; transform: scale(.85);
+  background: linear-gradient(135deg, var(--brand1), var(--brand2)); color: var(--on-brand);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--brand1) 42%, transparent);
 }
 
 /* ---------- ＋から開く扇（作り方を選ぶ） ----------
@@ -458,21 +449,11 @@ body::before {
   box-shadow: var(--shadow-sm);
   pointer-events: none;
 }
-/* 扇の中にもマイクがあるので、開いている間は左下の録音ボタンを引っ込める
-   （同じ形の丸が2つ並ぶと、どちらを押したのか分からなくなる） */
-.tp-quick.is-open .tp-quick-mic {
-  opacity: 0; transform: scale(.8); pointer-events: none;
-  transition: opacity .16s ease, transform .16s ease;
-}
-
 /* 長押しのまま滑らせるので、押している間に画面が動かないようにする */
 .tp-quick-add { touch-action: none; }
 
-/* 開いている間の＋は、閉じる操作であることが分かるように回して色を反転する */
-.tp-quick-add.is-on {
-  background: var(--brand1); color: var(--on-brand); border-color: var(--brand1);
-  transform: rotate(45deg);
-}
+/* 開いている間の＋は、閉じる操作であることが分かるように回す */
+.tp-quick-add.is-on { transform: rotate(45deg); }
 
 @keyframes tpFanIn {
   from { opacity: 0; transform: translate(0, 0) scale(.3); }

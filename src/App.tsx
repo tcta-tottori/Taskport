@@ -940,7 +940,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 左下＝録音、右下＝＋（タスクを作る）。統合バーは v1.11.0 で廃止した。 */}
+      {/* 右下の ＋ だけ。押すと4つの入口（手描き・記憶・文章・マイク）が扇に開く。 */}
       {view !== 'settings' && !session.recording && (
         <QuickBar
           busy={busy}
