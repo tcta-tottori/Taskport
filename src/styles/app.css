@@ -695,63 +695,7 @@ body::before {
 .tp-daychip.is-on b { color: var(--on-brand); }
 .tp-note-off { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 12px; color: var(--amber); }
 
-.tp-tl {
-  position: relative; margin: 4px 0 0 46px;
-  border-left: 1px solid var(--line-strong);
-}
-.tp-tl-hour {
-  position: absolute; left: 0; right: 0; height: 0;
-  border-top: 1px dashed var(--line);
-}
-.tp-tl-hour > span {
-  position: absolute; left: -46px; top: -8px;
-  font-family: var(--mono); font-size: 10.5px; color: var(--faint);
-}
-.tp-tl-work {
-  position: absolute; left: 0; right: 0;
-  background: color-mix(in srgb, var(--brand1) 6%, transparent);
-  border-left: 3px solid color-mix(in srgb, var(--brand1) 32%, transparent);
-}
-.tp-tl-break {
-  position: absolute; left: 0; right: 0;
-  background: repeating-linear-gradient(135deg,
-    color-mix(in srgb, var(--muted) 9%, transparent) 0 6px,
-    transparent 6px 12px);
-  border-top: 1px solid var(--line-strong);
-  border-bottom: 1px solid var(--line-strong);
-  display: flex; align-items: center; justify-content: center;
-}
-.tp-tl-break > span { font-family: var(--mono); font-size: 10.5px; font-weight: 700; color: var(--muted); }
-.tp-tl-edge { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--brand1); }
-.tp-tl-edge > span {
-  position: absolute; right: 4px; top: -16px;
-  font-family: var(--mono); font-size: 10px; font-weight: 800; color: var(--brand1);
-  background: var(--bg); padding: 0 5px; border-radius: 4px;
-}
-.tp-tl-task {
-  position: absolute; left: 8px; right: 6px;
-  display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  text-align: left; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--line);
-  border-left: 4px solid var(--pri-low);
-  border-radius: 6px; box-shadow: var(--shadow-sm);
-  padding: 4px 8px; transition: .16s;
-}
-.tp-tl-task:hover { box-shadow: var(--shadow-md); }
-.tp-tl-task.tp-pri-high { border-left-color: var(--pri-high); }
-.tp-tl-task.tp-pri-mid  { border-left-color: var(--pri-mid); }
-.tp-tl-task.tp-pri-low  { border-left-color: var(--pri-low); }
-.tp-tl-task.is-outside { border-style: dashed; background: color-mix(in srgb, var(--amber) 12%, var(--surface)); }
-.tp-tl-task.is-done { opacity: .55; }
-.tp-tl-task b { font-size: 12.5px; font-weight: 700; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-tl-task > span { font-family: var(--mono); font-size: 10px; color: var(--muted); }
-/* 短い予定は件名と時刻を1行に。件名が隠れると一覧の意味がなくなるので件名を優先する。 */
-.tp-tl-task.is-short { flex-direction: row; align-items: center; gap: 8px; }
-.tp-tl-task.is-short b { flex: 1; min-width: 0; }
-.tp-tl-task.is-short > span { flex: none; }
-
-.tp-tl-untimed { margin-top: 14px; }
-.tp-tl-untimed ul, .tp-daylist { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.tp-daylist { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .tp-mini {
   width: 100%; min-height: 40px;
   display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left;
@@ -978,8 +922,6 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-fan-item { width: 54px; height: 54px; margin: -27px 0 0 -27px; }
   .tp-fan-btn { width: 54px; height: 54px; }
   .tp-hero-num { font-size: 34px; }
-  .tp-tl { margin-left: 40px; }
-  .tp-tl-hour > span { left: -40px; font-size: 9.5px; }
 }
 
 /* ---------- スマホ: 探す道具を手の届く位置に留める ----------
@@ -1262,22 +1204,13 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 }
 /* 予定はタスクの帯とぶつからないよう右側に細く重ねる。
    台帳のタスクとは別物なので、色帯ではなく破線の枠で区別する。 */
-.tp-tl-event {
-  position: absolute; right: 6px; width: 38%;
-  display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  text-align: left; overflow: hidden;
-  background: color-mix(in srgb, var(--brand2) 14%, var(--surface));
-  border: 1px dashed color-mix(in srgb, var(--brand2) 55%, var(--line));
-  border-radius: 6px; padding: 3px 7px; transition: .16s;
+/* 終日の予定・枠を決めていないもの。どちらも枠の表の外に置く。 */
+.tp-board-allday, .tp-board-free { margin-top: 14px; }
+.tp-board-allday ul, .tp-board-free ul {
+  list-style: none; margin: 6px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 5px;
 }
-.tp-tl-event:hover { background: color-mix(in srgb, var(--brand2) 24%, var(--surface)); }
-.tp-tl-event b {
-  font-size: 11px; font-weight: 700; line-height: 1.3; color: var(--ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.tp-tl-event > span { font-size: 9.5px; color: var(--muted); }
-.tp-tl-allday { margin-top: 14px; }
-.tp-tl-allday ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.tp-board-free .tp-hint { margin-top: 6px; }
 .tp-mini-event {
   border-left-color: var(--brand2) !important;
   border-style: dashed;
@@ -1309,15 +1242,6 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
 }
 .tp-fatal-reset p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.7; color: var(--muted); text-align: left; }
-
-/* 小休憩。昼休憩より控えめに、細い帯だけで示す。 */
-.tp-tl-break.is-short {
-  background: repeating-linear-gradient(135deg,
-    color-mix(in srgb, var(--muted) 14%, transparent) 0 4px,
-    transparent 4px 8px);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
 
 /* 区分ごとの時間の内訳（大分類の下にぶら下げる小分類） */
 .tp-bar-items {
@@ -2244,3 +2168,42 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 @media (prefers-reduced-motion: reduce) {
   .tp-spin { animation: none; }
 }
+
+/* =========================================================
+ * スケジュールの1日（勤務時間の枠ごとに並べる）
+ *
+ * v1.16.0 で、1分＝0.9px のタイムラインをやめた。予定の入っていない
+ * 時間のほうが長いので画面のほとんどが余白になり、そのぶん
+ * 時刻を決めていないタスクが下へ押し出されて見えなくなっていた。
+ * 枠は「今日の進めかた」と同じ見た目（.tp-band）を使い回す。
+ * 同じ考えのものは同じ形に見せる。
+ * =======================================================*/
+.tp-board { margin-top: 4px; }
+.tp-board-item { list-style: none; }
+
+/* 枠と枠のあいだの休憩。次の枠の頭に、細い行として置く。 */
+.tp-board-break {
+  display: flex; align-items: center; gap: 8px;
+  margin: 2px 0 6px; padding: 0 2px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700; color: var(--faint);
+}
+.tp-board-break::before, .tp-board-break::after {
+  content: ""; flex: 1; height: 1px;
+  background: repeating-linear-gradient(90deg, var(--line-strong) 0 4px, transparent 4px 8px);
+}
+
+/* 枠の中に並べる仕事。1行1件で、右端に時刻か長さ。 */
+.tp-band-list { list-style: none; margin: 7px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.tp-band-list .tp-mini { background: var(--surface); }
+.tp-band-note.is-over { color: var(--pri-high); font-weight: 700; }
+
+/* 完了したものは、残っているものより引く */
+.tp-mini.is-done { opacity: .55; }
+.tp-mini.is-done > span:first-child { text-decoration: line-through; }
+
+/* 日付チップに曜日を入れる（数字だけだと何曜日か分からない） */
+.tp-daychip-wd { font-size: 9.5px; font-weight: 700; color: var(--faint); line-height: 1; }
+.tp-daychip.is-on .tp-daychip-wd { color: var(--on-brand); opacity: .85; }
+
+/* その日ぜんぶの積み上がり。数字の下に細い帯で出す。 */
+.tp-day-progress { margin: -2px 0 10px; }

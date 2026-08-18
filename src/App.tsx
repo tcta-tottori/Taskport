@@ -1057,6 +1057,7 @@ export default function App() {
             tasks={tasks}
             today={today}
             settings={settings}
+            nowMin={nowMin}
             onEdit={setEditing}
             onImportEvent={importEvent}
             onNotify={notify}
