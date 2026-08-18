@@ -1,30 +1,87 @@
 import { useEffect, useRef } from 'react'
 
 /* =========================================================
- * 録音中のウェーブアニメーション（NoteLoop と同じ描き方）
+ * 録音中のゲージ（NoteLoop 9.2 と同じ描き方）
  *
- * 3層の線を重ね、端に向かって振幅を細くして背景に溶け込ませる。
- * 声が大きいほど速く・大きく揺れる。アタックは速くリリースはゆっくり。
- * prefers-reduced-motion では静止した線だけを描く。
+ * バーの位置は固定で、周囲の音の大きさに応じてその場で上下に伸びる。
+ * 静かになると全部が丸い点に戻る。
+ * 本ごとに伸びやすさ・揺れの速さ・乱数の切り替わる間隔を変えてあるので、
+ * 同じ音量でも伸びる長さがばらつき、機械的な弧に見えない。
+ *
+ * prefers-reduced-motion では静止した点だけを描く。
  * =======================================================*/
 
-const LAYERS = [
-  { amp: 0.42, freq: 1.3, speed: 0.8, varName: '--brand2', alpha: 0.42 },
-  { amp: 0.3, freq: 1.9, speed: -1.1, varName: '--brand1', alpha: 0.38 },
-  { amp: 0.2, freq: 2.7, speed: 1.5, varName: '--brand3', alpha: 0.3 },
-]
+/** 決まった見た目を再現するための擬似乱数（同じ種なら同じ値） */
+function noise(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453
+  return x - Math.floor(x)
+}
 
-function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#4f6ef7'
+/**
+ * i 本目のバーの、いまの乱数値（0..1）。
+ * tn の整数が変わるたびに別の乱数へ、その間はなめらかに繋ぐ。
+ * 一定周期の sin と違い、伸びる長さが毎回変わって見える。
+ */
+function barRandom(i: number, tn: number): number {
+  const k = Math.floor(tn)
+  const f = tn - k
+  const sm = f * f * (3 - 2 * f)
+  return noise(i * 17.3 + k * 1.7) * (1 - sm) + noise(i * 17.3 + (k + 1) * 1.7) * sm
+}
+
+interface Bar {
+  /** いまの高さ 0..1 */
+  v: number
+  /** 伸びやすさの個体差（大きいほど高く伸びる） */
+  gain: number
+  /** 揺れの速さ */
+  speed: number
+  phase: number
+  /** 揺れ幅の下限。小さいほど大きく伸び縮みする */
+  lo: number
+  /** 乱数の切り替わる間隔（秒）。短いほど機敏にパタパタ動く */
+  step: number
+}
+
+function newBar(i: number): Bar {
+  return {
+    v: 0,
+    gain: 0.55 + noise(i * 3.9) * 1.15,
+    speed: 1.6 + noise(i * 1.3) * 5.2,
+    phase: noise(i * 2.7) * Math.PI * 2,
+    lo: 0.04 + noise(i * 8.7) * 0.34,
+    step: 0.085 + noise(i * 4.4) * 0.115,
+  }
+}
+
+/** 角丸矩形を、組み立て中のパスに足す（まとめて一度に塗るため） */
+function roundedPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const rr = Math.min(r, h / 2, w / 2)
+  ctx.moveTo(x + rr, y)
+  ctx.arcTo(x + w, y, x + w, y + h, rr)
+  ctx.arcTo(x + w, y + h, x, y + h, rr)
+  ctx.arcTo(x, y + h, x, y, rr)
+  ctx.arcTo(x, y, x + w, y, rr)
+  ctx.closePath()
 }
 
 export function Wave({ active, level }: { active: boolean; level: number }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number | null>(null)
-  const phaseRef = useRef(0)
-  const smoothRef = useRef(0.12)
+  const barsRef = useRef<Bar[]>([])
+  const smoothRef = useRef(0)
+  const lastDrawRef = useRef(0)
   const levelRef = useRef(level)
   levelRef.current = level
+  const activeRef = useRef(active)
+  activeRef.current = active
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -32,7 +89,6 @@ export function Wave({ active, level }: { active: boolean; level: number }) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const colors = LAYERS.map((l) => cssVar(l.varName))
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 
     const resize = () => {
@@ -41,6 +97,7 @@ export function Wave({ active, level }: { active: boolean; level: number }) {
       if (rect.width > 0) {
         canvas.width = Math.round(rect.width * dpr)
         canvas.height = Math.round(rect.height * dpr)
+        barsRef.current = [] // 幅が変わったら本数を作り直す
       }
     }
     resize()
@@ -49,48 +106,67 @@ export function Wave({ active, level }: { active: boolean; level: number }) {
     const draw = () => {
       const w = canvas.width
       const h = canvas.height
-      const mid = h * 0.52
+      // 上部は経過時間の表示に譲るため、バーの中心は少し下に置く
+      const mid = h * 0.6
       ctx.clearRect(0, 0, w, h)
-      const step = Math.max(2, w / 240)
-      ctx.lineJoin = 'round'
-      ctx.lineCap = 'round'
-      LAYERS.forEach((L, i) => {
-        ctx.beginPath()
-        for (let x = 0; x <= w; x += step) {
-          const t = x / w
-          const env = Math.sin(t * Math.PI) // 端で0 → 中央でふくらむ
-          const y =
-            mid +
-            Math.sin(t * Math.PI * 2 * L.freq + phaseRef.current * L.speed) *
-              (h * L.amp * (0.05 + smoothRef.current)) *
-              env
-          if (x === 0) ctx.moveTo(x, y)
-          else ctx.lineTo(x, y)
-        }
-        ctx.strokeStyle = colors[i]
-        ctx.globalAlpha = L.alpha
-        ctx.lineWidth = Math.max(2.5, w * 0.0045)
-        ctx.shadowColor = colors[i]
-        ctx.shadowBlur = 14
-        ctx.stroke()
-      })
-      ctx.globalAlpha = 1
-      ctx.shadowBlur = 0
+
+      // 等間隔・同じ太さで並べる。幅から決めた本数から、
+      // 左右の端を2本ずつ減らして余白を作る。
+      const full = Math.max(13, Math.min(25, Math.round(w / 40)))
+      const pitch = w / (full + 1)
+      const count = Math.max(5, full - 4)
+      const left = (w - (count - 1) * pitch) / 2
+      // 太さ（無音時の「点」の大きさでもある）。高さに対して太くなりすぎないよう抑える。
+      const barW = Math.max(4, Math.min(Math.round(pitch * 0.32), Math.round(h * 0.1)))
+      const maxH = h * 0.6
+      const minH = barW
+
+      if (barsRef.current.length !== count) {
+        barsRef.current = Array.from({ length: count }, (_, i) => newBar(i))
+      }
+
+      const now = performance.now() / 1000
+      ctx.fillStyle = '#ffffff'
+
+      // 1本のパスにまとめて一度に塗る（本ごとに fill すると重い）
+      ctx.beginPath()
+      for (let i = 0; i < count; i++) {
+        const b = barsRef.current[i]
+        const t = count > 1 ? i / (count - 1) : 0.5
+        // 中央ほど大きく振れる。山はゆるめにして、隣り合う本の差が
+        // 「きれいな弧」に見えないようにする。
+        const env = 0.55 + 0.45 * Math.pow(Math.sin(Math.PI * t), 0.5)
+        const rnd = barRandom(i, now / b.step)
+        const s1 = Math.sin(now * b.speed + b.phase)
+        const wobble = b.lo + (1 - b.lo) * (0.72 * rnd + 0.28 * (0.5 + 0.5 * s1))
+        const target = Math.min(1, smoothRef.current * b.gain * env * wobble)
+        // 伸びるのは即座に、戻るのも速めに（声にきびきび追従させる）
+        b.v += (target - b.v) * (target > b.v ? 1 : 0.5)
+
+        const bh = Math.max(barW, minH + (maxH - minH) * b.v)
+        roundedPath(ctx, left + i * pitch - barW / 2, mid - bh / 2, barW, bh, barW / 2)
+      }
+      ctx.fill()
     }
 
     if (reduce) {
-      smoothRef.current = 0.14
+      smoothRef.current = 0
       draw()
       return () => window.removeEventListener('resize', resize)
     }
 
     const loop = () => {
       rafRef.current = requestAnimationFrame(loop)
-      const target = active ? levelRef.current : 0.12 + Math.sin(phaseRef.current * 1.4) * 0.04
-      // アタックは速く、リリースはゆっくり → 自然な揺れ
-      const k = target > smoothRef.current ? 0.4 : 0.06
+      // 描き替えは 50fps 程度まで。上限が無いと端末によっては描画で詰まる。
+      const t = performance.now()
+      if (t - lastDrawRef.current < 20) return
+      lastDrawRef.current = t
+
+      // 一時停止中はバーを点に戻して止める
+      const target = activeRef.current ? levelRef.current : 0
+      // 上がるのは即座に、下がるのも速めに
+      const k = target > smoothRef.current ? 0.9 : 0.45
       smoothRef.current += (target - smoothRef.current) * k
-      phaseRef.current += 0.02 + smoothRef.current * 0.055
       draw()
     }
     loop()
@@ -100,7 +176,7 @@ export function Wave({ active, level }: { active: boolean; level: number }) {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
     }
-  }, [active])
+  }, [])
 
   return <canvas ref={canvasRef} className="tp-wave" aria-hidden="true" />
 }
