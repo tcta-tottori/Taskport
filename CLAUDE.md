@@ -148,7 +148,9 @@ npx wrangler dev      # Workers ローカル実行
 npx wrangler deploy   # Workers デプロイ
 ```
 
-`vite.config.ts` の `base` は `/taskport/` に設定すること（GitHub Pages のサブパス配信のため）。
+`vite.config.ts` の `base` は **リポジトリ名と完全に一致させる**こと（GitHub Pages のサブパス配信のため）。
+現在のリポジトリ名は `Taskport` なので `base = '/Taskport/'`。
+リポジトリ名を変えたら `base` も必ず合わせる。ここがずれると全アセットが 404 になる。
 
 ---
 

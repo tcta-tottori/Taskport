@@ -2,8 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// GitHub Pages: https://<owner>.github.io/taskport/ で配信する前提のサブパス。
-const BASE = '/taskport/'
+// GitHub Pages のサブパス。リポジトリ名（Taskport）と完全に一致させる。
+// https://tcta-tottori.github.io/Taskport/
+const BASE = '/Taskport/'
 
 export default defineConfig({
   base: BASE,

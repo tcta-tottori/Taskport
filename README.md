@@ -73,6 +73,11 @@ npm run lint       # 型チェックのみ
 `main` に push すると GitHub Actions が `gh-pages` ブランチへ配信する。
 Pages の Source は「Deploy from a branch → gh-pages / (root)」に設定しておく。
 
+公開URL: **https://tcta-tottori.github.io/Taskport/**
+
+`vite.config.ts` の `base` はリポジトリ名（`Taskport`）と完全に一致させること。
+リポジトリ名を変えたら `base` も合わせる。ずれると全アセットが 404 になる。
+
 ### AI構造化プロキシ（任意）
 
 **未設定でもアプリは動く。** そのときは端末内のかんたん解析で候補を作り、
