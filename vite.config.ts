@@ -17,7 +17,7 @@ export default defineConfig({
     VitePWA({
       // 直したその日に反映させたいので自動更新（skipWaiting + clientsClaim）。
       registerType: 'autoUpdate',
-      includeAssets: ['icons/favicon-32.png', 'icons/apple-touch-icon.png'],
+      includeAssets: ['icons/favicon-32.png', 'icons/favicon-48.png', 'icons/apple-touch-icon.png'],
       manifest: {
         name: 'Taskport — タスク・スケジュール管理',
         short_name: 'Taskport',
