@@ -42,6 +42,7 @@ export function ListView({
   onTabChange,
   onToggle,
   onEdit,
+  onToggleSubtask,
   filter,
   onFilterChange,
   saved,
@@ -55,6 +56,7 @@ export function ListView({
   onTabChange: (tab: ListTab) => void
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
+  onToggleSubtask: (task: Task, subtaskId: string) => void
   filter: TaskFilter
   onFilterChange: (next: TaskFilter) => void
   saved: SavedFilter[]
@@ -156,7 +158,14 @@ export function ListView({
       ) : (
         <ul className="tp-list">
           {shown.map((task) => (
-            <TaskCard key={task.id} task={task} today={today} onToggle={onToggle} onEdit={onEdit} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              today={today}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onToggleSubtask={onToggleSubtask}
+            />
           ))}
         </ul>
       )}

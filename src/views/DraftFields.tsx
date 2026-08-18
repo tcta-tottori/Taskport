@@ -1,8 +1,9 @@
 import { Icon } from '../components/Icon'
-import { PRIORITIES, PRIORITY_LABEL, type Draft, type RepeatUnit } from '../types'
+import { PRIORITIES, PRIORITY_LABEL, type Draft, type RepeatUnit, type Subtask } from '../types'
 import { CATEGORY_MASTER } from '../lib/workCategories'
 import { emptyRepeat, REPEAT_UNITS } from '../lib/repeat'
 import { weekdayOf } from '../lib/date'
+import { ulid } from '../lib/ulid'
 
 /**
  * Draft 1件ぶんの編集フォーム。
@@ -31,6 +32,9 @@ export function DraftFields({
           : []
     onChange({ repeat: { ...emptyRepeat(unit), weekdays, until: repeat?.until ?? null } })
   }
+
+  const setSubtasks = (subtasks: Subtask[]) => onChange({ subtasks })
+  const doneCount = draft.subtasks.filter((s) => s.done).length
 
   return (
     <div className="tp-fields">
@@ -122,6 +126,65 @@ export function DraftFields({
 
       <div className="tp-field">
         <span className="tp-label">
+          手順 <Icon name="checklist" size={12} />
+          {draft.subtasks.length > 0 && (
+            <b className="tp-sub-count tp-mono">
+              {doneCount}/{draft.subtasks.length}
+            </b>
+          )}
+        </span>
+
+        {draft.subtasks.length > 0 && (
+          <ul className="tp-sub-edit">
+            {draft.subtasks.map((st, i) => (
+              <li key={st.id}>
+                <button
+                  type="button"
+                  className={`tp-sub-check${st.done ? ' is-on' : ''}`}
+                  aria-pressed={st.done}
+                  aria-label={st.done ? `${st.title} を未了に戻す` : `${st.title} を済にする`}
+                  onClick={() =>
+                    setSubtasks(draft.subtasks.map((x, j) => (j === i ? { ...x, done: !x.done } : x)))
+                  }
+                >
+                  {st.done && <Icon name="check" size={13} strokeWidth={2.6} />}
+                </button>
+                <input
+                  type="text"
+                  value={st.title}
+                  placeholder="手順を書く"
+                  onChange={(e) =>
+                    setSubtasks(draft.subtasks.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))
+                  }
+                />
+                <button
+                  type="button"
+                  className="tp-sub-del"
+                  aria-label={`${st.title || '空の手順'} を消す`}
+                  onClick={() => setSubtasks(draft.subtasks.filter((_, j) => j !== i))}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <button
+          type="button"
+          className="tp-sub-add"
+          onClick={() => setSubtasks([...draft.subtasks, { id: ulid(), title: '', done: false }])}
+        >
+          <Icon name="plus" size={14} />
+          手順を足す
+        </button>
+        <p className="tp-hint">
+          1つの作業が何工程かに分かれるときに使います。手順だけを済にしても、タスクは完了になりません。
+        </p>
+      </div>
+
+      <div className="tp-field">
+        <span className="tp-label">
           繰り返し <Icon name="repeat" size={12} />
         </span>
         <div className="tp-chips" role="group" aria-label="繰り返し">
@@ -197,7 +260,7 @@ export function DraftFields({
           {!draft.due
             ? '期限を入れると繰り返しを設定できます。'
             : repeat
-              ? '完了にしたとき、次の1件だけを作ります。先の分をまとめては作りません。'
+              ? '完了にしたとき、次の1件だけを作ります。手順のチェックは外した状態で引き継ぎます。'
               : '日報・週次会議・棚卸のような定例に使います。'}
         </p>
       </div>

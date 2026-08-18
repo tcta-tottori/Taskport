@@ -266,6 +266,17 @@ export default function App() {
     [reload, today, settings.workHours.workDays, notify],
   )
 
+  /** 手順1つの済／未了。カードから直接切り替えられるようにする。 */
+  const toggleSubtask = useCallback(
+    async (task: Task, subtaskId: string) => {
+      await repository.update(task.id, {
+        subtasks: task.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s)),
+      })
+      await reload()
+    },
+    [reload],
+  )
+
   const saveEdit = useCallback(
     async (draft: Draft) => {
       if (editing) {
@@ -277,6 +288,7 @@ export default function App() {
           estimateMin: draft.estimateMin,
           priority: draft.priority,
           category: draft.category.trim(),
+          subtasks: draft.subtasks.filter((t) => t.title.trim()).map((t) => ({ ...t, title: t.title.trim() })),
           repeat: draft.due ? draft.repeat : null,
         })
         notify('保存しました')
@@ -468,6 +480,7 @@ export default function App() {
             onTabChange={setTab}
             onToggle={(t) => void toggleDone(t)}
             onEdit={setEditing}
+            onToggleSubtask={(t, id) => void toggleSubtask(t, id)}
             filter={filter}
             onFilterChange={setFilter}
             saved={settings.savedFilters}

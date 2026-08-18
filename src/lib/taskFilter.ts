@@ -39,11 +39,13 @@ function norm(s: string): string {
   return s.normalize('NFKC').toLowerCase()
 }
 
-/** 語がすべて含まれるか（AND） */
+/** 語がすべて含まれるか（AND）。手順の中の語も探せる。 */
 function matchQuery(task: Task, q: string): boolean {
   const terms = norm(q).split(/\s+/).filter(Boolean)
   if (terms.length === 0) return true
-  const hay = norm(`${task.title} ${task.note} ${task.category}`)
+  const hay = norm(
+    `${task.title} ${task.note} ${task.category} ${task.subtasks.map((s) => s.title).join(' ')}`,
+  )
   return terms.every((t) => hay.includes(t))
 }
 

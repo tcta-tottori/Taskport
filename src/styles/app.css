@@ -295,7 +295,7 @@ body::before {
 /* ---------- タスクカード ---------- */
 .tp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .tp-card {
-  position: relative; display: flex; align-items: stretch; gap: 10px;
+  position: relative; display: flex; flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left: 5px solid var(--pri-low);
@@ -305,6 +305,7 @@ body::before {
   transition: box-shadow .16s, transform .16s;
 }
 .tp-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.tp-card-main { display: flex; align-items: stretch; gap: 10px; }
 .tp-card.tp-pri-high { border-left-color: var(--pri-high); }
 .tp-card.tp-pri-mid  { border-left-color: var(--pri-mid); }
 .tp-card.tp-pri-low  { border-left-color: var(--pri-low); }
@@ -1305,3 +1306,55 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 }
 .tp-link-quiet:hover { color: var(--brand1); }
 .tp-hint { margin: 4px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--faint); }
+
+/* ---------- 手順（サブタスク） ---------- */
+/* カード内の開閉 */
+.tp-sub-toggle {
+  display: flex; align-items: center; gap: 8px;
+  margin: 6px 0 0 44px; min-height: 34px; padding: 0 8px 0 0;
+  font-size: 11.5px; font-weight: 700; color: var(--muted); text-align: left;
+}
+.tp-sub-toggle:hover { color: var(--brand1); }
+.tp-sub-toggle .tp-sub-caret { transition: transform .16s; opacity: .7; }
+.tp-sub-toggle.is-open .tp-sub-caret { transform: rotate(90deg); }
+.tp-sub-bar {
+  flex: 1; max-width: 120px; height: 4px; border-radius: 999px;
+  background: var(--surface-3); overflow: hidden;
+}
+.tp-sub-bar > span { display: block; height: 100%; background: var(--go); border-radius: 999px; transition: width .25s ease; }
+
+.tp-sub-list { list-style: none; margin: 2px 0 2px 40px; padding: 0; display: flex; flex-direction: column; }
+.tp-sub-list > li { display: flex; align-items: center; gap: 4px; }
+.tp-sub-list > li > span { font-size: 13px; line-height: 1.5; color: var(--ink); word-break: break-word; }
+.tp-sub-list > li > span.is-done { color: var(--faint); text-decoration: line-through; }
+
+/* 済のまる。タップ領域 44x44、見た目は 20px */
+.tp-sub-check {
+  position: relative; flex: none; width: 44px; height: 44px;
+  display: grid; place-items: center; color: var(--on-brand); transition: .16s;
+}
+.tp-sub-check::before {
+  content: ""; position: absolute; width: 20px; height: 20px;
+  border: 2px solid var(--line-strong); border-radius: 6px; transition: .16s;
+}
+.tp-sub-check > svg { position: relative; }
+.tp-sub-check.is-on::before { background: var(--go); border-color: var(--go); }
+.tp-sub-check:hover::before { border-color: var(--go); }
+
+/* 編集画面の手順 */
+.tp-sub-count {
+  margin-left: 6px; font-size: 11px; color: var(--go);
+  font-variant-numeric: tabular-nums;
+}
+.tp-sub-edit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tp-sub-edit > li { display: flex; align-items: center; gap: 2px; }
+.tp-sub-edit input { flex: 1; min-width: 0; }
+.tp-sub-del { flex: none; width: 40px; height: 44px; display: grid; place-items: center; color: var(--faint); }
+.tp-sub-del:hover { color: var(--danger); }
+.tp-sub-add {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
+  min-height: 40px; padding: 0 12px; margin-top: 2px; border-radius: 999px;
+  background: var(--surface-2); border: 1px dashed var(--line-strong);
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+}
+.tp-sub-add:hover { color: var(--brand1); border-color: var(--brand1); }

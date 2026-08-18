@@ -145,6 +145,8 @@ export function nextOccurrence(task: Task, today: string, workDays: number[]): T
     due,
     status: 'open',
     doneAt: null,
+    // 手順は毎回やり直すものなので、チェックを外して持ち越す
+    subtasks: task.subtasks.map((s) => ({ ...s, id: ulid(), done: false })),
     createdAt: now,
     updatedAt: now,
   }

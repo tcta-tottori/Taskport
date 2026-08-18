@@ -1,5 +1,6 @@
 import { isDayKey, isTimeKey } from './date'
-import { PRIORITIES, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Task } from '../types'
+import { ulid } from './ulid'
+import { PRIORITIES, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task } from '../types'
 
 /* =========================================================
  * JSON バックアップ（端末故障・キャッシュ削除への備え）
@@ -29,6 +30,20 @@ export function makeBackup(tasks: Task[], settings: Settings): string {
 
 const SOURCES: Source[] = ['voice', 'text', 'form', 'share', 'calendar']
 const REPEAT_KINDS: RepeatUnit[] = ['day', 'workday', 'week', 'month', 'monthEnd']
+
+/** 取り込んだ手順。件名の無いものは落とす。 */
+function toSubtasks(raw: unknown): Subtask[] {
+  if (!Array.isArray(raw)) return []
+  const out: Subtask[] = []
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue
+    const o = item as Record<string, unknown>
+    const title = typeof o.title === 'string' ? o.title.trim() : ''
+    if (!title) continue
+    out.push({ id: typeof o.id === 'string' && o.id ? o.id : ulid(), title, done: o.done === true })
+  }
+  return out
+}
 
 /** 取り込んだ繰り返し設定。形が合わなければ捨てる（誤って毎日増え続けるより安全） */
 function toRepeat(raw: unknown): Repeat | null {
@@ -61,6 +76,7 @@ function toTask(raw: unknown): Task | null {
     estimateMin: typeof o.estimateMin === 'number' && o.estimateMin > 0 ? Math.round(o.estimateMin) : null,
     priority: PRIORITIES.includes(o.priority as Priority) ? (o.priority as Priority) : 'mid',
     category: typeof o.category === 'string' ? o.category : '',
+    subtasks: toSubtasks(o.subtasks),
     repeat: isDayKey(o.due) ? toRepeat(o.repeat) : null,
     status: o.status === 'done' ? 'done' : 'open',
     source: SOURCES.includes(o.source as Source) ? (o.source as Source) : 'form',
