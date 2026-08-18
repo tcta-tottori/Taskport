@@ -1,6 +1,7 @@
 import { googleFetch } from './googleAuth'
 import { mergeLedgers, type Ledger, type Tombstones } from './merge'
-import type { Task } from '../types'
+import { normalizeCalendar } from './workCalendar'
+import type { Task, WorkCalendar } from '../types'
 
 /* =========================================================
  * 端末どうしの同期（Google Drive のアプリ専用フォルダ）
@@ -31,6 +32,12 @@ interface RemoteLedger {
   updatedAt: string
   tasks: Task[]
   deleted: Tombstones
+  /**
+   * 会社カレンダー。設定の中で唯一これだけ同期する。
+   * 両方の端末で同じ勤務日を使わないと、稼働率も空き時間も食い違うため。
+   * 突き合わせは丸ごと更新時刻の新しいほう（1日ずつは混ぜない）。
+   */
+  calendar?: WorkCalendar
 }
 
 function isRemote(v: unknown): v is RemoteLedger {
@@ -119,6 +126,8 @@ export async function clearRemote(clientId: string): Promise<number> {
 }
 
 export interface SyncOutcome {
+  /** 向こうの会社カレンダーのほうが新しければ、それ（手元へ入れ直す） */
+  calendar: WorkCalendar | null
   /** 手元に取り込んだ件数 */
   pulled: number
   /** 向こうへ上げた件数（併合後の総数） */
@@ -139,6 +148,7 @@ export async function syncOnce(
   clientId: string,
   local: Ledger,
   apply: (upsert: Task[], removeIds: string[], deleted: Tombstones) => Promise<void>,
+  localCalendar?: WorkCalendar,
 ): Promise<SyncOutcome> {
   const now = new Date().toISOString()
   let fileId = await findFileId(clientId)
@@ -151,32 +161,45 @@ export async function syncOnce(
       updatedAt: now,
       tasks: local.tasks,
       deleted: local.deleted,
+      calendar: localCalendar,
     }
     fileId = await createFile(clientId, payload)
     await apply([], [], local.deleted)
-    return { pulled: 0, pushed: local.tasks.length, removed: 0, wrote: true, at: now }
+    return { calendar: null, pulled: 0, pushed: local.tasks.length, removed: 0, wrote: true, at: now }
   }
 
-  const remote = (await readFile(clientId, fileId)) ?? { tasks: [], deleted: {} }
+  const remote = (await readFile(clientId, fileId)) ?? { tasks: [], deleted: {}, calendar: undefined }
   const result = mergeLedgers(local, { tasks: remote.tasks, deleted: remote.deleted }, now)
+
+  // 会社カレンダーは丸ごと新しいほうを採る
+  const remoteCal = remote.calendar ? normalizeCalendar(remote.calendar) : null
+  const takeRemoteCal =
+    !!remoteCal && (!localCalendar || remoteCal.updatedAt > localCalendar.updatedAt)
+  const mergedCal = takeRemoteCal ? remoteCal : (localCalendar ?? remoteCal ?? undefined)
+  const calChanged =
+    !takeRemoteCal &&
+    !!localCalendar &&
+    (!remoteCal || localCalendar.updatedAt > remoteCal.updatedAt)
 
   await apply(result.toUpsert, result.toRemove, result.merged.deleted)
 
-  if (result.remoteChanged) {
+  if (result.remoteChanged || calChanged) {
     await writeFile(clientId, fileId, {
       app: 'taskport',
       version: 1,
       updatedAt: now,
       tasks: result.merged.tasks,
       deleted: result.merged.deleted,
+      calendar: mergedCal ?? undefined,
     })
   }
 
   return {
+    calendar: takeRemoteCal ? remoteCal : null,
     pulled: result.toUpsert.length,
     pushed: result.merged.tasks.length,
     removed: result.toRemove.length,
-    wrote: result.remoteChanged,
+    wrote: result.remoteChanged || calChanged,
     at: now,
   }
 }

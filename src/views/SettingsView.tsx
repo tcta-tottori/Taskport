@@ -49,6 +49,7 @@ export function SettingsView({
   sync,
   onSyncNow,
   onClearRemote,
+  onEditCalendar,
 }: {
   settings: Settings
   tasks: Task[]
@@ -60,6 +61,8 @@ export function SettingsView({
   onSyncNow: () => void
   /** Drive 側の置き場を空にする */
   onClearRemote: () => Promise<void>
+  /** 会社カレンダーの画面を開く */
+  onEditCalendar: () => void
 }) {
   const [draft, setDraft] = useState<Settings>(settings)
   const [connected, setConnected] = useState(isConnected())
@@ -200,6 +203,33 @@ export function SettingsView({
             >
               <Icon name="check" size={16} />
               保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">会社カレンダー</h2>
+          <p className="tp-note">
+            祝日・一斉有給・土曜出勤など、<b>曜日だけでは決まらない日</b>を持ちます。
+            稼働率・空き時間・スケジュール・「稼働日ごと」の繰り返しが、これに従います。
+          </p>
+          <p className="tp-cal-sum">
+            <Icon name="calendar" size={15} />
+            {settings.workCalendar.holidays.length + settings.workCalendar.workdays.length === 0 ? (
+              'まだ登録がありません。曜日の設定だけで動いています。'
+            ) : (
+              <>
+                休み <b className="tp-mono">{settings.workCalendar.holidays.length}</b> 日 ／ 出勤{' '}
+                <b className="tp-mono">{settings.workCalendar.workdays.length}</b> 日
+              </>
+            )}
+          </p>
+          <div className="tp-row-end">
+            <button type="button" className="tp-btn-ghost" onClick={onEditCalendar}>
+              <Icon name="calendar" size={15} />
+              カレンダーを開く
             </button>
           </div>
         </section>

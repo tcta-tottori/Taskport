@@ -279,6 +279,8 @@ export function ScheduleView({
     dayTasks.filter((t) => t.status === 'open'),
     settings.workHours,
     settings.defaultEstimateMin,
+    day,
+    settings.workCalendar,
   )
   const noDue = useMemo(() => sortTasks(open.filter((t) => !t.due)), [open])
 
@@ -321,7 +323,7 @@ export function ScheduleView({
           <div className="tp-daystrip" role="tablist" aria-label="表示する日">
             {strip.map((d) => {
               const n = (byDue.get(d) ?? []).filter((t) => t.status === 'open').length
-              const off = !isWorkDay(d, settings.workHours)
+              const off = !isWorkDay(d, settings.workHours, settings.workCalendar)
               return (
                 <button
                   key={d}
@@ -340,7 +342,7 @@ export function ScheduleView({
             })}
           </div>
 
-          {!isWorkDay(day, settings.workHours) && (
+          {!isWorkDay(day, settings.workHours, settings.workCalendar) && (
             <p className="tp-note-off">
               <Icon name="sun" size={14} /> この日は稼働曜日ではありません。
             </p>
@@ -385,8 +387,8 @@ export function ScheduleView({
           <ol className="tp-fortnight">
             {fortnight.map((d) => {
               const list = (byDue.get(d) ?? []).filter((t) => t.status === 'open')
-              const off = !isWorkDay(d, settings.workHours)
-              const l = dayLoad(list, settings.workHours, settings.defaultEstimateMin)
+              const off = !isWorkDay(d, settings.workHours, settings.workCalendar)
+              const l = dayLoad(list, settings.workHours, settings.defaultEstimateMin, d, settings.workCalendar)
               return (
                 <li key={d} className={`tp-fn-row${off ? ' is-off' : ''}${d === today ? ' is-today' : ''}`}>
                   <button type="button" className="tp-fn-date" onClick={() => setDay(d)}>

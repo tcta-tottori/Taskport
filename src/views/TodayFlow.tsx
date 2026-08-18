@@ -1,7 +1,7 @@
 import { Icon } from '../components/Icon'
 import { durationLabel, toMinutes } from '../lib/date'
 import { bandLoads, currentBand, nextUp, timeboxLabel, unboxed } from '../lib/timebox'
-import { taskMinutes, trim } from '../lib/workday'
+import { isWorkDay, taskMinutes, trim } from '../lib/workday'
 import type { Settings, Task } from '../types'
 
 /* =========================================================
@@ -17,6 +17,7 @@ import type { Settings, Task } from '../types'
 
 export function TodayFlow({
   tasks,
+  today,
   settings,
   nowMin,
   overdue,
@@ -27,6 +28,7 @@ export function TodayFlow({
 }: {
   /** 今日やる未完了タスク（超過ぶんを含む） */
   tasks: Task[]
+  today: string
   settings: Settings
   /** いまの時刻（0時からの分） */
   nowMin: number
@@ -43,6 +45,7 @@ export function TodayFlow({
   const loads = bandLoads(tasks, wh, settings.defaultEstimateMin)
   const free = unboxed(tasks, wh)
   const endMin = toMinutes(wh.end) ?? 0
+  const working = isWorkDay(today, wh, settings.workCalendar)
 
   return (
     <section className="tp-flow">
@@ -52,6 +55,14 @@ export function TodayFlow({
           {now === 'out' ? '時間外' : `${timeboxLabel(now, wh)}`}
         </span>
       </div>
+
+      {/* 会社カレンダーで休みの日は、枠の話をしても意味がないので先に断る */}
+      {!working && (
+        <p className="tp-flow-off">
+          <Icon name="sun" size={15} />
+          今日は会社カレンダーで休みです。
+        </p>
+      )}
 
       {/* --- いま やる1件 --- */}
       {next ? (
@@ -83,7 +94,8 @@ export function TodayFlow({
         </p>
       )}
 
-      {/* --- 枠ごとの積み上げ --- */}
+      {/* --- 枠ごとの積み上げ（休みの日は出さない） --- */}
+      {working && (
       <ul className="tp-bands">
         {loads.map((l) => {
           const cap = l.capacity
@@ -121,8 +133,9 @@ export function TodayFlow({
           )
         })}
       </ul>
+      )}
 
-      {free.length > 0 && (
+      {working && free.length > 0 && (
         <p className="tp-band-free">
           <Icon name="clock" size={13} />
           枠を決めていないタスクが <b className="tp-mono">{free.length}</b> 件あります。

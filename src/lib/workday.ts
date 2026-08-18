@@ -1,5 +1,5 @@
 import { fromMinutes, toMinutes, weekdayOf } from './date'
-import type { Task, WorkHours } from '../types'
+import type { Task, WorkCalendar, WorkHours } from '../types'
 
 /* =========================================================
  * 勤務時間の計算
@@ -69,8 +69,15 @@ export function workMinutes(wh: WorkHours): number {
   return workSegments(wh).reduce((s, seg) => s + (seg.to - seg.from), 0)
 }
 
-/** その日付が稼働曜日か */
-export function isWorkDay(dayKeyStr: string, wh: WorkHours): boolean {
+/**
+ * その日付が稼働日か。
+ * 会社カレンダー（休日・出勤日の実日付）を渡すと、曜日の設定より優先される。
+ */
+export function isWorkDay(dayKeyStr: string, wh: WorkHours, cal?: WorkCalendar | null): boolean {
+  if (cal) {
+    if (cal.workdays.includes(dayKeyStr)) return true
+    if (cal.holidays.includes(dayKeyStr)) return false
+  }
   return wh.workDays.includes(weekdayOf(dayKeyStr))
 }
 
@@ -127,9 +134,18 @@ export interface DayLoad {
   over: number
 }
 
-/** その日ぶんのタスクが勤務時間に収まるか */
-export function dayLoad(tasks: Task[], wh: WorkHours, defaultEstimateMin: number): DayLoad {
-  const capacity = workMinutes(wh)
+/**
+ * その日ぶんのタスクが勤務時間に収まるか。
+ * 会社カレンダーを渡すと、休みの日は積める時間が 0 になる。
+ */
+export function dayLoad(
+  tasks: Task[],
+  wh: WorkHours,
+  defaultEstimateMin: number,
+  day?: string,
+  cal?: WorkCalendar | null,
+): DayLoad {
+  const capacity = day && !isWorkDay(day, wh, cal) ? 0 : workMinutes(wh)
   const planned = tasks.reduce((s, t) => s + taskMinutes(t, defaultEstimateMin), 0)
   return {
     planned,

@@ -1557,3 +1557,80 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-sync-panel { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; }
 .tp-sync-panel.is-error { color: var(--danger); }
 .tp-sync-panel.is-ok { color: var(--go); }
+
+/* ---------- 会社カレンダー ---------- */
+.tp-cal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 14px 0 8px;
+}
+.tp-cal-head b { font-size: 15px; font-weight: 800; color: var(--ink); }
+.tp-flip { transform: rotate(180deg); }
+
+.tp-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.tp-cal-w {
+  text-align: center; font-size: 11px; font-weight: 700; color: var(--muted);
+  padding-bottom: 2px;
+}
+.tp-cal-w.is-end { color: var(--faint); }
+.tp-cal-blank { aspect-ratio: 1; }
+.tp-cal-d {
+  aspect-ratio: 1; min-height: 40px; display: grid; place-items: center;
+  border-radius: 9px; font-size: 13px; font-weight: 700;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--ink); transition: .14s;
+}
+.tp-cal-d:hover { border-color: var(--brand1); }
+.tp-cal-d.is-holiday {
+  background: color-mix(in srgb, var(--pri-high) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--pri-high) 45%, transparent);
+  color: var(--pri-high);
+}
+.tp-cal-d.is-workday {
+  background: color-mix(in srgb, var(--go) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--go) 45%, transparent);
+  color: var(--go);
+}
+.tp-cal-d.is-today { box-shadow: inset 0 0 0 2px var(--brand1); }
+
+.tp-cal-legend {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px;
+  margin: 10px 0 0; font-size: 11.5px; color: var(--muted);
+}
+.tp-cal-key { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); }
+.tp-cal-key.is-holiday { background: color-mix(in srgb, var(--pri-high) 30%, var(--surface)); }
+.tp-cal-key.is-workday { background: color-mix(in srgb, var(--go) 30%, var(--surface)); }
+.tp-cal-key.is-normal { background: var(--surface-2); }
+.tp-cal-count {
+  margin: 10px 0 0; padding: 9px 11px; border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 12.5px; line-height: 1.7; color: var(--muted);
+}
+.tp-cal-count b { color: var(--ink); }
+.tp-cal-h { margin: 20px 0 6px; font-size: 13px; font-weight: 800; color: var(--ink); }
+.tp-cal-found { margin: 12px 0 6px; font-size: 12.5px; color: var(--muted); }
+.tp-cal-found b { color: var(--ink); }
+.tp-cal-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tp-cal-list > li {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 8px 10px; border-radius: var(--radius-card);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.tp-cal-list > li > span:first-child { flex: 1; min-width: 120px; display: flex; flex-direction: column; gap: 1px; }
+.tp-cal-list b { font-size: 12.5px; color: var(--ink); }
+.tp-cal-list small { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.tp-cal-list .tp-fchip { min-height: 32px; font-size: 11px; padding: 0 9px; }
+
+.tp-cal-sum {
+  display: flex; align-items: center; gap: 7px; margin: 0;
+  padding: 9px 11px; border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 12.5px; color: var(--muted);
+}
+.tp-cal-sum > svg { color: var(--brand1); }
+.tp-cal-sum b { color: var(--ink); }
+
+/* 休日の帯（今日の進めかた） */
+.tp-flow-off {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  margin: 0; padding: 12px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--pri-high) 8%, var(--surface-2));
+  font-size: 13px; font-weight: 700; color: var(--pri-high);
+}

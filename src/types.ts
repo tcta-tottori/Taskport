@@ -11,6 +11,36 @@ export type Status = 'open' | 'done'
 export type Source = 'voice' | 'text' | 'form' | 'share' | 'calendar'
 
 /* ---------------------------------------------------------
+ * 会社カレンダー
+ * ------------------------------------------------------- */
+
+/**
+ * 会社の休日・出勤日。
+ *
+ * 曜日だけでは実際の勤務日と合わない。祝日・一斉有給・年末年始は休みだし、
+ * 逆に土曜出勤の日もある。ここに実日付で持ち、稼働日の判定を上書きする。
+ *
+ * 端末どうしで同じものを使いたいので、同期にも乗せる（更新時刻の新しいほう）。
+ */
+export interface WorkCalendar {
+  /** 休みにする日 "YYYY-MM-DD" */
+  holidays: string[]
+  /** 出勤にする日 "YYYY-MM-DD"。土曜出勤など。休日より優先する */
+  workdays: string[]
+  /** 取り込み元のカレンダーID（Googleカレンダー）。空なら手入力だけ */
+  sourceCalendarId: string
+  /** 最後に触った時刻（同期の突き合わせに使う） */
+  updatedAt: string
+}
+
+export const EMPTY_WORK_CALENDAR: WorkCalendar = {
+  holidays: [],
+  workdays: [],
+  sourceCalendarId: '',
+  updatedAt: '1970-01-01T00:00:00.000Z',
+}
+
+/* ---------------------------------------------------------
  * タイムボックス（時間枠）
  * ------------------------------------------------------- */
 
@@ -151,7 +181,7 @@ export interface WorkHours {
   breakEnd: string
   /** 終業 "HH:mm" */
   end: string
-  /** 稼働曜日。0=日 〜 6=土 */
+  /** 稼働曜日。0=日 〜 6=土。会社カレンダーがあればそちらが優先される */
   workDays: number[]
   /** 小休憩。実働から差し引き、タイムラインにも出す */
   shortBreaks: ShortBreak[]
@@ -237,6 +267,8 @@ export interface SavedFilter {
 
 export interface Settings {
   workHours: WorkHours
+  /** 会社の休日・出勤日。曜日の設定より優先する */
+  workCalendar: WorkCalendar
   /** 見積が未入力のタスクを稼働量に積むときの既定値（分） */
   defaultEstimateMin: number
   /** 音声入力を使うか（非対応環境では自動的に false 扱い） */
@@ -265,6 +297,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   workHours: DEFAULT_WORK_HOURS,
+  workCalendar: EMPTY_WORK_CALENDAR,
   defaultEstimateMin: 30,
   voiceEnabled: true,
   keepAudio: true,
@@ -287,6 +320,11 @@ export interface CalendarEvent {
   title: string
   /** "YYYY-MM-DD" */
   day: string
+  /**
+   * 終日予定の終わり "YYYY-MM-DD"（Google の値そのまま＝翌日を指す）。
+   * 年末年始のように何日かにまたがる予定を展開するのに使う。
+   */
+  endDay: string | null
   /** "HH:mm"。終日予定は null */
   startTime: string | null
   endTime: string | null

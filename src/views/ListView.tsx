@@ -8,7 +8,7 @@ import { filterByTab, LIST_TABS, type ListTab } from '../lib/tasks'
 import { applyFilter, isFilterActive } from '../lib/taskFilter'
 import { diffDays, durationLabel } from '../lib/date'
 import { workloadOf } from '../lib/stats'
-import { trim, workHoursSummary } from '../lib/workday'
+import { isWorkDay, trim, workHoursSummary } from '../lib/workday'
 import type { SavedFilter, Settings, Task, TaskFilter } from '../types'
 
 /* =========================================================
@@ -91,6 +91,7 @@ export function ListView({
     [searching, found, tasks, tab, today],
   )
   const load = useMemo(() => workloadOf(tasks, today, settings), [tasks, today, settings])
+  const working = isWorkDay(today, settings.workHours, settings.workCalendar)
   const overdueCount = useMemo(
     () => tasks.filter((t) => t.status === 'open' && !!t.due && diffDays(t.due, today) < 0).length,
     [tasks, today],
@@ -125,11 +126,15 @@ export function ListView({
           />
         </div>
         <p className="tp-today-note">
-          {load.tasks.length === 0
-            ? '今日締めのタスクはまだありません。'
-            : load.over > 0
-              ? `${load.tasks.length}件で${durationLabel(load.over)}あふれています。期限をずらすか分担を検討してください。`
-              : `${load.tasks.length}件・残り${durationLabel(load.capacity - load.planned)}ぶん空いています。`}
+          {!working
+            ? load.tasks.length === 0
+              ? '今日は会社カレンダーで休みです。'
+              : `今日は休みですが、${load.tasks.length}件の期限が今日になっています。朝の仕分けで送り先を決めてください。`
+            : load.tasks.length === 0
+              ? '今日締めのタスクはまだありません。'
+              : load.over > 0
+                ? `${load.tasks.length}件で${durationLabel(load.over)}あふれています。期限をずらすか分担を検討してください。`
+                : `${load.tasks.length}件・残り${durationLabel(load.capacity - load.planned)}ぶん空いています。`}
         </p>
       </section>
 
@@ -138,6 +143,7 @@ export function ListView({
       {!searching && tab === 'today' && (
         <TodayFlow
           tasks={load.tasks}
+          today={today}
           settings={settings}
           nowMin={nowMin}
           overdue={overdueCount}

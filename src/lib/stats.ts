@@ -1,5 +1,5 @@
 import { addDaysKey, dayKey, lastNDays } from './date'
-import { taskMinutes, workMinutes } from './workday'
+import { isWorkDay, taskMinutes, workMinutes } from './workday'
 import { groupOf } from './workCategories'
 import { PRIORITIES, type Priority, type Settings, type Source, type Task } from '../types'
 
@@ -130,7 +130,10 @@ export interface Workload {
 export function workloadOf(tasks: Task[], day: string, settings: Settings): Workload {
   const targets = tasks.filter((t) => t.status === 'open' && t.due === day)
   const planned = targets.reduce((s, t) => s + taskMinutes(t, settings.defaultEstimateMin), 0)
-  const capacity = workMinutes(settings.workHours)
+  // 休日は積める時間が無い（会社カレンダーの休みも含む）
+  const capacity = isWorkDay(day, settings.workHours, settings.workCalendar)
+    ? workMinutes(settings.workHours)
+    : 0
   return {
     tasks: targets,
     planned,

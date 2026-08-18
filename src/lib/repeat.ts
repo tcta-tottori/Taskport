@@ -1,6 +1,7 @@
 import { addDaysKey, diffDays, parseDayKey, dayKey, weekdayOf } from './date'
 import { ulid } from './ulid'
-import type { Repeat, RepeatUnit, Task } from '../types'
+import { isWorkDay } from './workday'
+import type { Repeat, RepeatUnit, Task, WorkCalendar, WorkHours } from '../types'
 
 /* =========================================================
  * 繰り返し
@@ -55,24 +56,23 @@ function addMonthsKey(key: string, n: number, keepDay: number): string {
   return dayKey(target)
 }
 
-/** 稼働曜日の集合。空や不正なら月〜金として扱う。 */
-function normalizeWorkDays(workDays: number[]): number[] {
-  const ok = workDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
-  return ok.length > 0 ? ok : [1, 2, 3, 4, 5]
+/** 稼働の判定に使う設定。会社カレンダーがあれば祝日・一斉有給・土曜出勤も見る。 */
+export interface WorkRule {
+  workHours: WorkHours
+  workCalendar?: WorkCalendar | null
 }
 
 /** from の翌日以降で、条件に合う最初の日を1つ返す */
-function step(from: string, repeat: Repeat, workDays: number[]): string {
+function step(from: string, repeat: Repeat, rule: WorkRule): string {
   switch (repeat.unit) {
     case 'day':
       return addDaysKey(from, 1)
 
     case 'workday': {
-      const days = normalizeWorkDays(workDays)
       let d = addDaysKey(from, 1)
-      // 最大7日見れば必ず当たる（稼働曜日が1つでも入っているため）
-      for (let i = 0; i < 7; i++) {
-        if (days.includes(weekdayOf(d))) return d
+      // 連休や年末年始をまたぐことがあるので、少し広めに見る
+      for (let i = 0; i < 40; i++) {
+        if (isWorkDay(d, rule.workHours, rule.workCalendar)) return d
         d = addDaysKey(d, 1)
       }
       return d
@@ -116,13 +116,13 @@ export function nextDue(
   due: string,
   repeat: Repeat,
   today: string,
-  workDays: number[],
+  rule: WorkRule,
 ): string | null {
-  let d = step(due, repeat, workDays)
+  let d = step(due, repeat, rule)
   // 進めても今日以前なら、今日より後になるまで送る。
   // 月単位でも 400 回あれば 30 年ぶん進むので、無限には回らない。
   for (let i = 0; i < 400 && diffDays(d, today) <= 0; i++) {
-    d = step(d, repeat, workDays)
+    d = step(d, repeat, rule)
   }
   if (repeat.until && diffDays(d, repeat.until) > 0) return null
   return d
@@ -134,9 +134,9 @@ export function nextDue(
  *
  * 完了したほうには手を触れない（履歴として残す）。
  */
-export function nextOccurrence(task: Task, today: string, workDays: number[]): Task | null {
+export function nextOccurrence(task: Task, today: string, rule: WorkRule): Task | null {
   if (!task.repeat || !task.due) return null
-  const due = nextDue(task.due, task.repeat, today, workDays)
+  const due = nextDue(task.due, task.repeat, today, rule)
   if (!due) return null
   const now = new Date().toISOString()
   return {

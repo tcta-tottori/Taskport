@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { Repository } from './Repository'
+import { normalizeCalendar } from '../lib/workCalendar'
 import {
   DEFAULT_SETTINGS,
   DEFAULT_WORK_HOURS,
@@ -444,6 +445,7 @@ export class LocalRepository implements Repository {
       ...DEFAULT_SETTINGS,
       ...raw,
       workHours: { ...DEFAULT_WORK_HOURS, ...(raw.workHours ?? {}) },
+      workCalendar: normalizeCalendar(raw.workCalendar),
       // 後から足した項目。古い保存には無いので既定で埋める
       savedFilters: Array.isArray(raw.savedFilters) ? raw.savedFilters : [],
       syncEnabled: raw.syncEnabled === true,

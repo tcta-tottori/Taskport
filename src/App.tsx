@@ -12,6 +12,7 @@ import { ReviewSheet } from './views/ReviewSheet'
 import { TaskEditor } from './views/TaskEditor'
 import { TriageSheet, type TriageAction } from './views/TriageSheet'
 import { WrapUpSheet } from './views/WrapUpSheet'
+import { WorkCalendarSheet } from './views/WorkCalendarSheet'
 import { RecordingOverlay } from './views/RecordingOverlay'
 import { RecordingsView } from './views/RecordingsView'
 import { repository } from './repository'
@@ -86,6 +87,7 @@ export default function App() {
   const [dbStatus, setDbStatus] = useState<DbStatus>('idle')
   const [triaging, setTriaging] = useState(false)
   const [wrappingUp, setWrappingUp] = useState(false)
+  const [editingCalendar, setEditingCalendar] = useState(false)
   /** いまの時刻（0時からの分）。1分ごとに更新する */
   const [nowMin, setNowMin] = useState(() => toMinutes(timeKey()) ?? 0)
   /** 同期の様子。画面に出して、動いているのか失敗しているのかを分かるようにする */
@@ -321,13 +323,13 @@ export default function App() {
       // 完了したほうは履歴として残し、触らない。
       let next: Task | null = null
       if (!done) {
-        next = nextOccurrence(task, today, settings.workHours.workDays)
+        next = nextOccurrence(task, today, { workHours: settings.workHours, workCalendar: settings.workCalendar })
         if (next) await repository.add([next])
       }
       await reload()
       if (next) notify(`完了。次は ${formatMD(next.due ?? '')}（${repeatLabel(task.repeat)}）`)
     },
-    [reload, today, settings.workHours.workDays, notify],
+    [reload, today, settings.workHours, settings.workCalendar, notify],
   )
 
   /** 手順1つの済／未了。カードから直接切り替えられるようにする。 */
@@ -482,7 +484,14 @@ export default function App() {
           s.googleClientId,
           { tasks: tasksNow, deleted: tombstones },
           (upsert, removeIds, deleted) => repository.applySync(upsert, removeIds, deleted),
+          s.workCalendar,
         )
+        // 向こうの会社カレンダーのほうが新しければ、こちらへ入れ直す
+        if (out.calendar) {
+          const next: Settings = { ...liveRef.current.settings, workCalendar: out.calendar }
+          setSettings(next)
+          await repository.saveSettings(next)
+        }
         await reload()
         setSync({ state: 'ok', at: out.at, message: '' })
         if (manual) {
@@ -557,12 +566,12 @@ export default function App() {
         await repository.update(task.id, { due: null, timebox: null })
       } else {
         await repository.update(task.id, { status: 'done', doneAt: new Date().toISOString() })
-        const next = nextOccurrence(task, today, settings.workHours.workDays)
+        const next = nextOccurrence(task, today, { workHours: settings.workHours, workCalendar: settings.workCalendar })
         if (next) await repository.add([next])
       }
       await reload()
     },
-    [today, reload, settings.workHours.workDays],
+    [today, reload, settings.workHours, settings.workCalendar],
   )
 
   const pushToTomorrow = useCallback(
@@ -799,6 +808,7 @@ export default function App() {
             sync={sync}
             onSyncNow={() => void runSync(true)}
             onClearRemote={() => guard(() => clearSyncStore())}
+            onEditCalendar={() => setEditingCalendar(true)}
             onRestore={restore}
             onNotify={notify}
           />
@@ -846,6 +856,16 @@ export default function App() {
             setEditing(null)
             setCreating(false)
           }}
+        />
+      )}
+
+      {editingCalendar && (
+        <WorkCalendarSheet
+          settings={settings}
+          today={today}
+          onNotify={notify}
+          onSave={(cal) => void guard(() => saveSettings({ ...settings, workCalendar: cal }))}
+          onClose={() => setEditingCalendar(false)}
         />
       )}
 
