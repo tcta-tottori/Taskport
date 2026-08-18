@@ -343,7 +343,7 @@ body::before {
   font-size: 11.5px; font-weight: 700; color: var(--muted);
 }
 .tp-due.is-over { color: var(--pri-high); }
-.tp-chip-time, .tp-chip-est, .tp-chip-cat, .tp-pri-tag {
+.tp-chip-time, .tp-chip-est, .tp-chip-cat, .tp-chip-rep, .tp-pri-tag {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px;
 }
@@ -1286,3 +1286,22 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   border: 1px solid var(--line-strong);
 }
 .tp-filter-reset:hover { border-color: var(--brand1); }
+
+/* ---------- 繰り返し ---------- */
+.tp-chip-rep {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: color-mix(in srgb, var(--brand2) 12%, transparent);
+  color: var(--brand2);
+}
+.tp-fchip:disabled { opacity: .4; }
+.tp-fchip-day { min-width: 40px; padding: 0; justify-content: center; }
+.tp-repeat-until {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 2px;
+  font-size: 12px; color: var(--muted);
+}
+.tp-repeat-until input { flex: none; width: auto; }
+.tp-link-quiet {
+  font-size: 12px; color: var(--faint); text-decoration: underline; min-height: 32px;
+}
+.tp-link-quiet:hover { color: var(--brand1); }
+.tp-hint { margin: 4px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--faint); }

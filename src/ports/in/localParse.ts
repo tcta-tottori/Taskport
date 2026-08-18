@@ -1,7 +1,7 @@
 import { addDaysKey, dayKey, isDayKey, parseDayKey, weekdayLabel } from '../../lib/date'
 import { emptyDraft } from '../../lib/tasks'
 import { detectCategory } from '../../lib/workCategories'
-import type { Draft, Priority, Source } from '../../types'
+import type { Draft, Priority, Repeat, Source } from '../../types'
 
 /* =========================================================
  * 端末内のかんたん解析（AIプロキシが無い / 届かないときの受け皿）
@@ -47,6 +47,35 @@ function weekdayTarget(today: string, wd: number, nextWeek: boolean, includeToda
 function endOfMonth(today: string): string {
   const d = parseDayKey(today)
   return dayKey(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12))
+}
+
+/* ---------------------------------------------------------
+ * 繰り返し
+ *
+ * 「毎週月曜」「毎日」「毎月末」だけを拾う。曖昧な言い回し
+ * （「定期的に」「都度」）は当てない。誤って毎日増え続けるより、
+ * 拾わずに人が付けるほうが害が小さい。
+ * ------------------------------------------------------- */
+
+/** 文から繰り返しを拾う。読み取れなければ null。 */
+export function extractRepeat(sentence: string): Repeat | null {
+  const s = sentence.replace(/\s+/g, '')
+
+  // 毎週◯曜（複数可: 「毎週月・木」「毎週火曜と金曜」）
+  const week = s.match(/(毎週|週1回|週一回|各週)([日月火水木金土](曜日?)?([と、・･／\/][日月火水木金土](曜日?)?)*)?/)
+  if (week) {
+    const days = (week[2] ?? '').match(/[日月火水木金土]/g) ?? []
+    const weekdays = [...new Set(days.map((d) => WEEKDAYS.indexOf(d)))].filter((i) => i >= 0)
+    return { unit: 'week', weekdays, until: null }
+  }
+
+  if (/(毎月末|月末ごと|毎月の末日)/.test(s)) return { unit: 'monthEnd', weekdays: [], until: null }
+  if (/(毎月|月1回|月一回|毎月初|月初ごと)/.test(s)) return { unit: 'month', weekdays: [], until: null }
+  if (/(毎営業日|営業日ごと|毎稼働日|平日毎日|毎平日)/.test(s))
+    return { unit: 'workday', weekdays: [], until: null }
+  if (/(毎日|日次|1日1回|一日一回)/.test(s)) return { unit: 'day', weekdays: [], until: null }
+
+  return null
 }
 
 /** 文の中から期限らしき日付を1つ拾う */
@@ -149,6 +178,9 @@ function cleanTitle(sentence: string): string {
     .replace(/(明後日|あさって|明日|あした|あす|今日|本日|今月末|月末|今週末|週末)(までに|まで|に)?/g, '')
     .replace(/((再来週|来週|今週)?\s*[日月火水木金土]曜日?)(までに|まで|に)?/g, '')
     .replace(/(再来週|来週)(までに|まで|に)?/g, '')
+    .replace(/(毎週|週1回|週一回|各週)\s*([日月火水木金土](曜日?)?([と、・･／\/]\s*[日月火水木金土](曜日?)?)*)?(に|は)?/g, '')
+    .replace(/(毎月末|月末ごと|毎月の末日|毎月初|月初ごと|毎月|月1回|月一回)(に|は)?/g, '')
+    .replace(/(毎営業日|営業日ごと|毎稼働日|平日毎日|毎平日|毎日|日次|1日1回|一日一回)(に|は)?/g, '')
     .replace(/(\d{1,2}\s*日後)(までに|まで|に)?/g, '')
     .replace(
       /(午前|午後|夕方|夜|朝)?\s*([0-2]?\d\s*時\s*半|[0-2]?\d\s*時\s*\d{1,2}\s*分|[0-2]?\d\s*時|[0-2]?\d:[0-5]\d)(から|まで|に|より)?/g,
@@ -166,7 +198,11 @@ export function localParse(text: string, source: Source, today = dayKey()): Draf
   const sentences = splitSentences(text)
   const drafts: Draft[] = []
   for (const sentence of sentences) {
-    const due = extractDue(sentence, today)
+    const repeat = extractRepeat(sentence)
+    // 「毎日」「毎営業日」のように回りかたしか言っていない文は、
+    // 初回を今日として置く。日付を推測しているのではなく、
+    // 繰り返しの起点が要るため（確認画面で必ず目に入る）。
+    const due = extractDue(sentence, today) ?? (repeat ? today : null)
     const dueTime = extractTime(sentence)
     const title = cleanTitle(sentence)
     if (title.length < 2) continue
@@ -179,12 +215,15 @@ export function localParse(text: string, source: Source, today = dayKey()): Draf
       dueTime,
       priority: detectPriority(sentence, due, today),
       category: detectCategory(sentence),
+      // 繰り返しは期限が決まっているときだけ付ける（次回の日が出せないため）
+      repeat: due ? repeat : null,
     })
   }
   // 1件も取れなかったときは、入力そのものを1件の候補にする（捨てない）
   if (drafts.length === 0 && text.trim()) {
     const t = text.trim()
-    const due = extractDue(t, today)
+    const repeat = extractRepeat(t)
+    const due = extractDue(t, today) ?? (repeat ? today : null)
     drafts.push({
       ...emptyDraft(source),
       title: t.slice(0, 80),
@@ -193,6 +232,7 @@ export function localParse(text: string, source: Source, today = dayKey()): Draf
       dueTime: extractTime(t),
       priority: detectPriority(t, due, today),
       category: detectCategory(t),
+      repeat: due ? repeat : null,
     })
   }
   return drafts

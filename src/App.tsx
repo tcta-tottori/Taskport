@@ -20,10 +20,11 @@ import { useShareTarget } from './ports/in/useShareTarget'
 import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
 import { voiceSupported } from './ports/in/useVoiceInput'
-import { dayKey } from './lib/date'
+import { dayKey, formatMD } from './lib/date'
 import { draftToTask, emptyDraft, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
+import { nextOccurrence, repeatLabel } from './lib/repeat'
 import { ulid } from './lib/ulid'
 import {
   DEFAULT_SETTINGS,
@@ -252,9 +253,17 @@ export default function App() {
         status: done ? 'open' : 'done',
         doneAt: done ? null : new Date().toISOString(),
       })
+      // 繰り返しのタスクを完了にしたら、次の1件だけをここで作る。
+      // 完了したほうは履歴として残し、触らない。
+      let next: Task | null = null
+      if (!done) {
+        next = nextOccurrence(task, today, settings.workHours.workDays)
+        if (next) await repository.add([next])
+      }
       await reload()
+      if (next) notify(`完了。次は ${formatMD(next.due ?? '')}（${repeatLabel(task.repeat)}）`)
     },
-    [reload],
+    [reload, today, settings.workHours.workDays, notify],
   )
 
   const saveEdit = useCallback(
@@ -268,6 +277,7 @@ export default function App() {
           estimateMin: draft.estimateMin,
           priority: draft.priority,
           category: draft.category.trim(),
+          repeat: draft.due ? draft.repeat : null,
         })
         notify('保存しました')
       } else {

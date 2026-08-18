@@ -1,5 +1,5 @@
 import { isDayKey, isTimeKey } from './date'
-import { PRIORITIES, type Priority, type Settings, type Source, type Task } from '../types'
+import { PRIORITIES, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Task } from '../types'
 
 /* =========================================================
  * JSON バックアップ（端末故障・キャッシュ削除への備え）
@@ -28,6 +28,22 @@ export function makeBackup(tasks: Task[], settings: Settings): string {
 }
 
 const SOURCES: Source[] = ['voice', 'text', 'form', 'share', 'calendar']
+const REPEAT_KINDS: RepeatUnit[] = ['day', 'workday', 'week', 'month', 'monthEnd']
+
+/** 取り込んだ繰り返し設定。形が合わなければ捨てる（誤って毎日増え続けるより安全） */
+function toRepeat(raw: unknown): Repeat | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const o = raw as Record<string, unknown>
+  if (!REPEAT_KINDS.includes(o.unit as RepeatUnit)) return null
+  const weekdays = Array.isArray(o.weekdays)
+    ? o.weekdays.filter((d): d is number => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6)
+    : []
+  return {
+    unit: o.unit as RepeatUnit,
+    weekdays,
+    until: isDayKey(o.until) ? o.until : null,
+  }
+}
 
 function toTask(raw: unknown): Task | null {
   if (typeof raw !== 'object' || raw === null) return null
@@ -45,6 +61,7 @@ function toTask(raw: unknown): Task | null {
     estimateMin: typeof o.estimateMin === 'number' && o.estimateMin > 0 ? Math.round(o.estimateMin) : null,
     priority: PRIORITIES.includes(o.priority as Priority) ? (o.priority as Priority) : 'mid',
     category: typeof o.category === 'string' ? o.category : '',
+    repeat: isDayKey(o.due) ? toRepeat(o.repeat) : null,
     status: o.status === 'done' ? 'done' : 'open',
     source: SOURCES.includes(o.source as Source) ? (o.source as Source) : 'form',
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : now,

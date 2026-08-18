@@ -1,6 +1,8 @@
 import { Icon } from '../components/Icon'
-import { PRIORITIES, PRIORITY_LABEL, type Draft } from '../types'
+import { PRIORITIES, PRIORITY_LABEL, type Draft, type RepeatUnit } from '../types'
 import { CATEGORY_MASTER } from '../lib/workCategories'
+import { emptyRepeat, REPEAT_UNITS } from '../lib/repeat'
+import { weekdayOf } from '../lib/date'
 
 /**
  * Draft 1件ぶんの編集フォーム。
@@ -16,6 +18,20 @@ export function DraftFields({
   onChange: (patch: Partial<Draft>) => void
   idPrefix: string
 }) {
+  const repeat = draft.repeat
+  const WEEK = ['日', '月', '火', '水', '木', '金', '土']
+
+  const setUnit = (unit: RepeatUnit | null) => {
+    if (!unit) return onChange({ repeat: null })
+    const weekdays =
+      unit === 'week' && repeat?.weekdays.length
+        ? repeat.weekdays
+        : unit === 'week' && draft.due
+          ? [weekdayOf(draft.due)]
+          : []
+    onChange({ repeat: { ...emptyRepeat(unit), weekdays, until: repeat?.until ?? null } })
+  }
+
   return (
     <div className="tp-fields">
       <label className="tp-field">
@@ -103,6 +119,88 @@ export function DraftFields({
           ))}
         </datalist>
       </label>
+
+      <div className="tp-field">
+        <span className="tp-label">
+          繰り返し <Icon name="repeat" size={12} />
+        </span>
+        <div className="tp-chips" role="group" aria-label="繰り返し">
+          <button
+            type="button"
+            className={`tp-fchip${!repeat ? ' is-on' : ''}`}
+            aria-pressed={!repeat}
+            onClick={() => setUnit(null)}
+          >
+            しない
+          </button>
+          {REPEAT_UNITS.map((u) => (
+            <button
+              key={u.key}
+              type="button"
+              className={`tp-fchip${repeat?.unit === u.key ? ' is-on' : ''}`}
+              aria-pressed={repeat?.unit === u.key}
+              disabled={!draft.due}
+              onClick={() => setUnit(u.key)}
+            >
+              {u.label}
+            </button>
+          ))}
+        </div>
+
+        {repeat?.unit === 'week' && (
+          <div className="tp-chips" role="group" aria-label="繰り返す曜日">
+            {WEEK.map((w, i) => (
+              <button
+                key={w}
+                type="button"
+                className={`tp-fchip tp-fchip-day${repeat.weekdays.includes(i) ? ' is-on' : ''}`}
+                aria-pressed={repeat.weekdays.includes(i)}
+                aria-label={`${w}曜日`}
+                onClick={() =>
+                  onChange({
+                    repeat: {
+                      ...repeat,
+                      weekdays: repeat.weekdays.includes(i)
+                        ? repeat.weekdays.filter((d) => d !== i)
+                        : [...repeat.weekdays, i],
+                    },
+                  })
+                }
+              >
+                {w}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {repeat && (
+          <label className="tp-repeat-until">
+            <span>いつまで</span>
+            <input
+              type="date"
+              value={repeat.until ?? ''}
+              onChange={(e) => onChange({ repeat: { ...repeat, until: e.target.value || null } })}
+            />
+            {repeat.until && (
+              <button
+                type="button"
+                className="tp-link-quiet"
+                onClick={() => onChange({ repeat: { ...repeat, until: null } })}
+              >
+                終わりなしに戻す
+              </button>
+            )}
+          </label>
+        )}
+
+        <p className="tp-hint">
+          {!draft.due
+            ? '期限を入れると繰り返しを設定できます。'
+            : repeat
+              ? '完了にしたとき、次の1件だけを作ります。先の分をまとめては作りません。'
+              : '日報・週次会議・棚卸のような定例に使います。'}
+        </p>
+      </div>
 
       <label className="tp-field">
         <span className="tp-label">

@@ -18,6 +18,7 @@ export function emptyDraft(source: Source = 'form'): Draft {
     estimateMin: null,
     priority: 'mid',
     category: '',
+    repeat: null,
     source,
   }
 }
@@ -35,6 +36,8 @@ export function draftToTask(draft: Draft): Task {
       typeof draft.estimateMin === 'number' && draft.estimateMin > 0 ? draft.estimateMin : null,
     priority: draft.priority,
     category: draft.category.trim(),
+    // 期限が無いと次回の日が決まらないので、繰り返しは落とす
+    repeat: draft.due && draft.repeat ? draft.repeat : null,
     status: 'open',
     source: draft.source,
     createdAt: now,
@@ -53,6 +56,7 @@ export function taskToDraft(task: Task): Draft {
     estimateMin: task.estimateMin,
     priority: task.priority,
     category: task.category,
+    repeat: task.repeat,
     source: task.source,
   }
 }

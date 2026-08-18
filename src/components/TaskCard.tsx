@@ -1,5 +1,6 @@
 import { dueLabel } from '../lib/date'
 import { overdueDays } from '../lib/tasks'
+import { repeatLabel } from '../lib/repeat'
 import { durationLabel } from '../lib/date'
 import { Icon } from './Icon'
 import { PRIORITY_LABEL, type Task } from '../types'
@@ -48,6 +49,11 @@ export function TaskCard({
             </span>
           )}
           {task.estimateMin && <span className="tp-chip-est">{durationLabel(task.estimateMin)}</span>}
+          {task.repeat && (
+            <span className="tp-chip-rep">
+              <Icon name="repeat" size={11} /> {repeatLabel(task.repeat)}
+            </span>
+          )}
           {task.category && <span className="tp-chip-cat">{task.category}</span>}
           <span className="tp-pri-tag">{PRIORITY_LABEL[task.priority]}</span>
         </span>

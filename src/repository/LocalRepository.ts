@@ -218,6 +218,7 @@ function normalizeTask(raw: Task): Task {
     estimateMin: typeof raw.estimateMin === 'number' ? raw.estimateMin : null,
     priority: raw.priority ?? 'mid',
     category: raw.category ?? '',
+    repeat: raw.repeat ?? null,
     status: raw.status ?? 'open',
     source: raw.source ?? 'form',
     doneAt: raw.doneAt ?? null,

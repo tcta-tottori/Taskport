@@ -10,6 +10,35 @@ export type Priority = 'high' | 'mid' | 'low'
 export type Status = 'open' | 'done'
 export type Source = 'voice' | 'text' | 'form' | 'share' | 'calendar'
 
+/* ---------------------------------------------------------
+ * 繰り返し
+ * ------------------------------------------------------- */
+
+/**
+ * 繰り返しの単位。
+ * 「2週おき」のような間隔は持たない。日報・週次会議・棚卸・月初集計という
+ * 実際の定例がこの5つで足りるため（design.md §10.1）。
+ */
+export type RepeatUnit =
+  /** 毎日 */
+  | 'day'
+  /** 稼働曜日ごと（設定の workDays に従う） */
+  | 'workday'
+  /** 毎週。曜日は weekdays で指定 */
+  | 'week'
+  /** 毎月おなじ日。無い日（31日など）はその月の末日に寄せる */
+  | 'month'
+  /** 毎月末 */
+  | 'monthEnd'
+
+export interface Repeat {
+  unit: RepeatUnit
+  /** unit==='week' の曜日（0=日 〜 6=土）。空なら期限の曜日を使う */
+  weekdays: number[]
+  /** この日を過ぎたら次を作らない "YYYY-MM-DD"。null は終わりなし */
+  until: string | null
+}
+
 export interface Task {
   /** ULID（時系列にソート可能なID） */
   id: string
@@ -32,6 +61,12 @@ export interface Task {
   status: Status
   /** どの入口から入ったか（どの入口を育てるかの判断に使う） */
   source: Source
+  /**
+   * 繰り返しの設定。null は繰り返さない。
+   * 完了にした時点で次回ぶんを別のタスクとして作る（自動で溜め込まない）。
+   * 期限が無いタスクには付けられない（次回の日が決まらないため）。
+   */
+  repeat: Repeat | null
   /** ISO 8601 */
   createdAt: string
   updatedAt: string
