@@ -311,13 +311,13 @@ export function CalendarView({
                     {t.status === 'open' && (
                       <button
                         type="button"
-                        className={`tp-run${live ? ' is-on' : ''}`}
+                        className={`tp-run tp-run-i${live ? ' is-on' : ''}`}
                         aria-pressed={live}
                         aria-label={live ? `${t.title} の手を止める` : `${t.title} を始める`}
+                        title={live ? '止める' : '始める'}
                         onClick={() => runBox.toggleTask(t)}
                       >
-                        <Icon name={live ? 'pause' : 'play'} size={14} />
-                        {live ? '止める' : '始める'}
+                        <Icon name={live ? 'pause' : 'play'} size={16} />
                       </button>
                     )}
                   </li>

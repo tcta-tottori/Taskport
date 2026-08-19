@@ -2130,6 +2130,9 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   font-size: 12px; font-weight: 700; border: 1px solid var(--line-strong);
   background: var(--surface-2); color: var(--muted); transition: .16s;
 }
+.tp-run-btn { width: 44px; }
+/* 言葉は出さない。タスクの「始める」（.tp-run-i）と同じ行に並ぶので、
+   片方だけ言葉があると行が折れて、押す物の大きさも揃わない。 */
 .tp-run-btn > span { display: none; }
 .tp-run-start { color: var(--go); border-color: color-mix(in srgb, var(--go) 35%, var(--line)); }
 .tp-run-start:hover { background: color-mix(in srgb, var(--go) 12%, transparent); }
@@ -2151,11 +2154,6 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   animation: tpRunPulse 1.6s ease-in-out infinite;
 }
 @keyframes tpRunPulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
-
-/* 名前を出す余裕がある画面では、記号の横に言葉も出す */
-@media (min-width: 520px) {
-  .tp-run-btn > span { display: inline; }
-}
 
 /* 予定ぶんの実行は、タスクの行と同じ形にしつつ色で見分ける
    （台帳に入らない記録なので、赤ではなくブランド色で出す） */
@@ -2231,6 +2229,14 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   transition: border-color .15s, color .15s, background .15s;
 }
 .tp-run:hover { border-color: var(--brand1); color: var(--brand1); }
+/* 一覧の行に置くぶんは記号だけにする（✓ の丸と並ぶので、言葉が混ざると行が折れる）。
+   言葉は aria-label と title に持たせてあるので、読み上げと長押しでは出る。 */
+.tp-run-i {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; padding: 0; color: var(--go);
+}
+.tp-run-i:hover { border-color: var(--go); color: var(--go); background: color-mix(in srgb, var(--go) 10%, transparent); }
+.tp-run-i.is-on { color: var(--rec); }
 .tp-run.is-on {
   background: color-mix(in srgb, var(--rec) 12%, transparent);
   border-color: color-mix(in srgb, var(--rec) 55%, transparent); color: var(--rec);

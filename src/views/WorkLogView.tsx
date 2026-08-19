@@ -320,9 +320,16 @@ export function WorkLogView({
                         {durationLabel(taskMinutes(t, settings.defaultEstimateMin))}
                       </span>
                     </button>
-                    <button type="button" className="tp-run" onClick={() => onToggleRunning(t)}>
-                      <Icon name="play" size={14} />
-                      始める
+                    {/* ✓ の丸と並ぶ行なので、こちらも記号だけにする。
+                        言葉は aria-label と title に持たせる（読み上げと長押しで出る）。 */}
+                    <button
+                      type="button"
+                      className="tp-run tp-run-i"
+                      aria-label={`${t.title} を始める`}
+                      title="始める"
+                      onClick={() => onToggleRunning(t)}
+                    >
+                      <Icon name="play" size={16} />
                     </button>
                   </li>
                 ))}
@@ -405,9 +412,14 @@ export function WorkLogView({
                       {formatMDShort(t.due as string)}（あと{diffDays(t.due as string, today)}日）
                     </span>
                   </button>
-                  <button type="button" className="tp-run" onClick={() => onToggleRunning(t)}>
-                    <Icon name="play" size={14} />
-                    始める
+                  <button
+                    type="button"
+                    className="tp-run tp-run-i"
+                    aria-label={`${t.title} を始める`}
+                    title="始める"
+                    onClick={() => onToggleRunning(t)}
+                  >
+                    <Icon name="play" size={16} />
                   </button>
                 </li>
               ))}
