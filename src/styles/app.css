@@ -418,11 +418,13 @@ body::before {
 }
 
 /* ---------- ＋から開く扇（作り方を選ぶ） ----------
-   ＋を押す／長押しすると、真上から左横までの 1/4 円に4つ並ぶ。
-   真上＝手描き、左へ 記憶・文章・マイク（利用者のスケッチのとおり）。
+   ＋を押す／長押しすると、真上から左横までの 1/4 円に5つ並ぶ。
+   真上＝予定、左へ 手描き・記憶・文章・マイク。
    位置は「向き（--fx/--fy）×半径（--fan-r）」で出し、
-   半径だけを画面幅で変える。 */
-.tp-quick { --fan-r: 136px; --fan-label-r: 50px; }
+   半径だけを画面幅で変える。
+   5つに増えたぶん間隔は 22.5°。そのままだと丸が重なるので半径を広げた
+   （136 → 172px。円弧の間隔は 172×22.5° ≒ 68px で、丸の 60px より広い）。 */
+.tp-quick { --fan-r: 172px; --fan-label-r: 50px; }
 .tp-fan { position: relative; }
 
 .tp-fan-backdrop {
@@ -444,10 +446,10 @@ body::before {
   animation: tpFanIn .42s cubic-bezier(.2, 1.35, .3, 1) backwards;
   animation-delay: calc(var(--i) * 45ms);
 }
-/* 閉じるとき: 外側から順に＋へ吸い込まれる */
+/* 閉じるとき: 外側から順に＋へ吸い込まれる（4 は最後の番号＝5つ目） */
 .tp-fan-item.is-out {
   animation: tpFanOut .22s cubic-bezier(.5, 0, .75, 0) forwards;
-  animation-delay: calc((3 - var(--i)) * 30ms);
+  animation-delay: calc((4 - var(--i)) * 30ms);
 }
 .tp-fan-btn {
   width: 60px; height: 60px; border-radius: 50%;
@@ -462,6 +464,13 @@ body::before {
   background: var(--brand1); color: var(--on-brand); border-color: var(--brand1);
   transform: scale(1.12);
   box-shadow: 0 10px 24px color-mix(in srgb, var(--brand1) 40%, transparent);
+}
+/* 予定はタスクの作り方ではないので、同じ形のまま色だけ分ける */
+.tp-fan-btn.is-plan { color: var(--brand3); border-color: color-mix(in srgb, var(--brand3) 40%, var(--line-strong)); }
+.tp-fan-btn.is-plan:hover { border-color: var(--brand3); }
+.tp-fan-btn.is-plan.is-hot {
+  background: var(--brand3); border-color: var(--brand3); color: var(--on-brand);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--brand3) 40%, transparent);
 }
 .tp-fan-btn:active { transform: scale(.94); }
 .tp-fan-btn:disabled { opacity: .45; cursor: default; }
@@ -918,7 +927,8 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-about { grid-template-columns: 1fr; gap: 2px; }
   .tp-about dd { margin-bottom: 8px; }
   .tp-quick-btn { width: 56px; height: 56px; }
-  .tp-quick { --fan-r: 116px; --fan-label-r: 46px; }
+  /* 54px の丸が 22.5° 間隔で重ならない半径（150×22.5° ≒ 59px） */
+  .tp-quick { --fan-r: 150px; --fan-label-r: 46px; }
   .tp-fan-item { width: 54px; height: 54px; margin: -27px 0 0 -27px; }
   .tp-fan-btn { width: 54px; height: 54px; }
   .tp-hero-num { font-size: 34px; }

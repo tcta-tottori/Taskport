@@ -20,7 +20,7 @@ import type { SavedFilter, Settings, Task, TaskFilter } from '../types'
 const EMPTY: Record<ListTab, { head: string; body: string }> = {
   today: {
     head: '今日締めのタスクはありません',
-    body: '右下の ＋ を押すと、手描き・記憶・文章・マイクの4つから選べます。',
+    body: '右下の ＋ を押すと、予定・手描き・記憶・文章・マイクの5つから選べます。',
   },
   week: {
     head: '今週の期限はまだ空いています',
@@ -28,7 +28,7 @@ const EMPTY: Record<ListTab, { head: string; body: string }> = {
   },
   all: {
     head: 'まだタスクがありません',
-    body: '右下の ＋ から、歩きながらならマイク、机の前なら手描き。どれも同じ場所に貯まります。',
+    body: '右下の ＋ から、歩きながらならマイク、机の前なら手描き。打合せは予定として入れられます。',
   },
   done: {
     head: '完了したタスクはまだありません',

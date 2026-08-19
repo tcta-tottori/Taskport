@@ -7,9 +7,13 @@ import { Icon, type IconName } from './Icon'
  * 右下の ＋ だけ。録音もこの中（扇のマイク）から始める。
  *
  * ＋を押す（または長押しする）と、＋の周り 1/4 の円に沿って
- * 4つの入口が開く。真上から左へ順に
- *   手描き（自分で書く）→ 記憶（控えから呼び出す）→ 文章（自然文）→ マイク
- * 並びは利用者のスケッチのとおり。親指の届く扇に収める。
+ * 5つの入口が開く。真上から左へ順に
+ *   予定（その時間そこにいるもの）→ 手描き（自分で書く）→ 記憶（控えから呼び出す）
+ *   → 文章（自然文）→ マイク
+ * タスクの作り方4つは利用者のスケッチどおりの並びのまま。**予定は種類が違う**ので
+ * 端（真上）に置き、いちばん指の届く左端はマイクに残してある
+ * （長押しのまま左へ滑らせて録音、が v1.12.1 からの手癖）。
+ * 5つに増えたぶん、間隔は 22.5° に詰めて半径を広げた。
  *
  * **長押しはそのまま滑らせて選べる。** 指を置いたまま扇が開き、
  * 目当てのアイコンまで滑らせて離すと、そこが動く。指を離す位置で決まるので、
@@ -22,17 +26,21 @@ import { Icon, type IconName } from './Icon'
  * どちらを押したのか分からなくなるうえ、マイクは扇の中にもう1つある。
  * =======================================================*/
 
-/** ＋から開く入口。どれもタスクを作る道で、開く先が違うだけ。 */
-export type MakeMode = 'form' | 'memory' | 'text' | 'voice'
+/** ＋から開く入口。4つはタスクの作り方、1つ（plan）は予定を入れる道。 */
+export type MakeMode = 'form' | 'memory' | 'text' | 'voice' | 'plan'
+
+/** タスクを作る画面を開く3つ（マイクと予定は別の道なので外してある） */
+export type SheetMode = 'form' | 'memory' | 'text'
 
 /**
  * 扇の並び。角度は数学の向き（90°＝真上、180°＝真横の左）。
- * 30°ずつ空けて 1/4 円に4つ置く。
+ * 22.5°ずつ空けて 1/4 円に5つ置く（半径は CSS の --fan-r で広げてある）。
  */
 const ITEMS: { mode: MakeMode; label: string; icon: IconName; angle: number; hint: string }[] = [
-  { mode: 'form', label: '手描き', icon: 'pencil', angle: 90, hint: '自分で書いて1件作る' },
-  { mode: 'memory', label: '記憶', icon: 'checklist', angle: 120, hint: '記憶したタスクから呼び出す' },
-  { mode: 'text', label: '文章', icon: 'sparkle', angle: 150, hint: '文章からまとめて作る' },
+  { mode: 'plan', label: '予定', icon: 'calendar', angle: 90, hint: '打合せなど、その時間そこにいるものを入れる' },
+  { mode: 'form', label: '手描き', icon: 'pencil', angle: 112.5, hint: '自分で書いて1件作る' },
+  { mode: 'memory', label: '記憶', icon: 'checklist', angle: 135, hint: '記憶したタスクから呼び出す' },
+  { mode: 'text', label: '文章', icon: 'sparkle', angle: 157.5, hint: '文章からまとめて作る' },
   { mode: 'voice', label: 'マイク', icon: 'mic', angle: 180, hint: '話してタスクにする' },
 ]
 
@@ -44,13 +52,16 @@ const CLOSE_MS = 320
 export function QuickBar({
   onStartVoice,
   onCreate,
+  onAddPlan,
   busy,
   voiceSupported,
 }: {
   /** 録音を始める（画面は App 側の録音オーバーレイに切り替わる） */
   onStartVoice: () => void
   /** タスクを作る画面を、選んだ入口で開く */
-  onCreate: (mode: Exclude<MakeMode, 'voice'>) => void
+  onCreate: (mode: SheetMode) => void
+  /** 予定を入れる画面を開く（今日を下敷きにする） */
+  onAddPlan: () => void
   busy: boolean
   voiceSupported: boolean
 }) {
@@ -130,6 +141,7 @@ export function QuickBar({
     close()
     setHover(null)
     if (mode === 'voice') onStartVoice()
+    else if (mode === 'plan') onAddPlan()
     else onCreate(mode)
   }
 
@@ -173,7 +185,9 @@ export function QuickBar({
               >
                 <button
                   type="button"
-                  className={`tp-fan-btn${hot === it.mode ? ' is-hot' : ''}`}
+                  className={`tp-fan-btn${it.mode === 'plan' ? ' is-plan' : ''}${
+                    hot === it.mode ? ' is-hot' : ''
+                  }`}
                   data-mode={it.mode}
                   disabled={disabled}
                   aria-label={`${it.label}：${it.hint}`}

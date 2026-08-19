@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon, type IconName } from './components/Icon'
-import { QuickBar, type MakeMode } from './components/QuickBar'
+import { QuickBar, type SheetMode } from './components/QuickBar'
 import { Toast, type ToastMessage } from './components/Toast'
 import { TapWave } from './components/TapWave'
 import { ListView } from './views/ListView'
@@ -166,7 +166,7 @@ export default function App() {
    *   form … 手描き（フォーム）／ memory … 記憶の一覧 ／ text … 文章の欄
    * v1.13.0 でこの3つを独立した画面にした（前はフォームの中に同居していた）。
    */
-  const [creating, setCreating] = useState<Exclude<MakeMode, 'voice'> | false>(false)
+  const [creating, setCreating] = useState<SheetMode | false>(false)
   /** 記憶から呼び出したときの下敷き。フォームを開くときに使う */
   const [seed, setSeed] = useState<Draft | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -1402,13 +1402,14 @@ export default function App() {
         )}
       </main>
 
-      {/* 右下の ＋ だけ。押すと4つの入口（手描き・記憶・文章・マイク）が扇に開く。 */}
+      {/* 右下の ＋ だけ。押すと5つの入口（予定・手描き・記憶・文章・マイク）が扇に開く。 */}
       {view !== 'settings' && !session.recording && (
         <QuickBar
           busy={busy}
           voiceSupported={voiceSupported()}
           onStartVoice={() => void session.start()}
           onCreate={(mode) => setCreating(mode)}
+          onAddPlan={() => openNewPlan(today)}
         />
       )}
 
