@@ -1,7 +1,7 @@
 import { Icon } from './Icon'
 import { clockLabel } from '../lib/date'
 import { runSeconds } from '../lib/runs'
-import type { WorkRun } from '../types'
+import type { PlanRun } from '../types'
 
 /* =========================================================
  * 実行の操作（開始・一時停止・終了）
@@ -25,7 +25,7 @@ export function RunControl({
   showTime = true,
 }: {
   /** その対象の記録。まだ一度も始めていなければ null */
-  run: WorkRun | null
+  run: PlanRun | null
   nowMs: number
   /** 読み上げ用。「◯◯ を開始」の◯◯ */
   title: string

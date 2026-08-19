@@ -1,8 +1,10 @@
-import { dayKey, formatMD, formatMDShort, fromMinutes, toMinutes } from '../../lib/date'
+import { dayKey, dayOfIso, formatMD, formatMDShort, fromMinutes, toMinutes } from '../../lib/date'
 import { sortTasks } from '../../lib/tasks'
 import { trim, workSegments } from '../../lib/workday'
 import { primaryCategory } from '../../lib/workCategories'
-import type { Task, WorkHours } from '../../types'
+import { loggedMinutes, logStartTime, ofDay } from '../../lib/worklog'
+import { planMinutes, planSpan } from '../../lib/plans'
+import type { PlanOccurrence, Task, WorkHours } from '../../types'
 
 /* =========================================================
  * 出口: 日報・朝会用のプレーンテキスト
@@ -20,8 +22,13 @@ import type { Task, WorkHours } from '../../types'
  *   【翌日以降】
  *   ・8/20 サンプル物流へ納期回答
  */
-export function toDailyReport(tasks: Task[], today = dayKey()): string {
-  const doneToday = tasks.filter((t) => t.status === 'done' && (t.doneAt ?? '').slice(0, 10) === today)
+export function toDailyReport(
+  tasks: Task[],
+  today = dayKey(),
+  /** その日の予定（打合せ・固定の業務）。台帳とは別に持っているので引数で受け取る */
+  plans: PlanOccurrence[] = [],
+): string {
+  const doneToday = tasks.filter((t) => t.status === 'done' && dayOfIso(t.doneAt) === today)
   const openToday = sortTasks(tasks.filter((t) => t.status === 'open' && t.due === today))
   const ahead = sortTasks(tasks.filter((t) => t.status === 'open' && !!t.due && t.due > today))
   const overdue = sortTasks(tasks.filter((t) => t.status === 'open' && !!t.due && t.due < today))
@@ -30,7 +37,11 @@ export function toDailyReport(tasks: Task[], today = dayKey()): string {
 
   const line = (t: Task, suffix = ''): string => `・${t.title}${suffix}`
 
+  // 予定はタスクではないので完了の印を付けない。時間を添えて、実施の面に並べる
   const todaySection = [
+    ...plans
+      .filter((o) => o.day === today)
+      .map((o) => `・${planSpan(o.plan)} ${o.plan.title}（予定）`),
     ...doneToday.map((t) => line(t, ' → 完了')),
     ...openToday.map((t) => line(t)),
   ]
@@ -84,6 +95,14 @@ export function toBulletList(tasks: Task[]): string {
  * 枠は勤務時間の設定から作る（小休憩と昼休憩は枠を作らない）。
  * 時刻の入っているタスクをその枠に置き、時刻なしのタスクは空き枠へ
  * 上から詰める。埋まらなかった枠は空欄のままにする（勝手に埋めない）。
+ *
+ * 拾うのは**その日の記録**（`worklog.ofDay`）。完了した日で見るので、
+ * 昨日ぶんを今朝片づけた1件も今日の日報に出る。長さは実績があれば実績、
+ * 無ければ見込みを使う。
+ *
+ * 予定（打合せ・固定の業務）は台帳の外にあるが、**日報には出す**
+ * （出た会議が日報に載らないと、その時間だけ空欄になる）。時間が決まって
+ * いるので枠取りはいちばん先。台帳には混ぜず、引数で受け取るだけにする。
  * =======================================================*/
 
 /** 30分枠を作る。休憩は挟まない。 */
@@ -118,6 +137,8 @@ export function toWorkLogRows(
   day: string,
   wh: WorkHours,
   defaultEstimateMin: number,
+  /** その日の予定。時間が決まっているので、タスクより先に枠を取る */
+  plans: PlanOccurrence[] = [],
 ): WorkLogRow[] {
   const slots = workSlots(wh)
   const rows: WorkLogRow[] = slots.map((s) => ({
@@ -126,28 +147,41 @@ export function toWorkLogRows(
     detail: '',
   }))
 
-  const ofDay = tasks.filter((t) => t.due === day)
-  const timed = ofDay.filter((t) => t.dueTime !== null)
-  const untimed = sortTasks(ofDay.filter((t) => t.dueTime === null))
+  const mine = ofDay(tasks, day)
+  const timed = mine.filter((t) => logStartTime(t) !== null)
+  const untimed = sortTasks(mine.filter((t) => logStartTime(t) === null))
 
-  const fill = (index: number, task: Task) => {
+  const put = (index: number, category: string, detail: string) => {
     if (index < 0 || index >= rows.length || rows[index].detail) return false
-    rows[index] = {
-      time: rows[index].time,
-      // 日報の1行に入るのは1つだけ。主区分（先頭）を書く
-      category: primaryCategory(task.categories),
-      detail: task.note ? `${task.title}（${task.note}）` : task.title,
-    }
+    rows[index] = { time: rows[index].time, category, detail }
     return true
+  }
+
+  const fill = (index: number, task: Task) =>
+    // 日報の1行に入るのは1つだけ。主区分（先頭）を書く
+    put(index, primaryCategory(task.categories), task.note ? `${task.title}（${task.note}）` : task.title)
+
+  // 予定を先に置く。時間が決まっているので、ここが動かせない枠になる。
+  for (const o of plans) {
+    if (o.day !== day || o.plan.allDay || !o.plan.startTime) continue
+    const from = toMinutes(o.plan.startTime)
+    if (from === null) continue
+    const start = slots.findIndex((s) => from >= s.from && from < s.to)
+    if (start < 0) continue
+    const span = Math.max(1, Math.ceil(planMinutes(o.plan) / 30))
+    const detail = o.plan.place ? `${o.plan.title}（${o.plan.place}）` : o.plan.title
+    for (let i = 0; i < span; i++) {
+      put(start + i, primaryCategory(o.plan.categories), i === 0 ? detail : `${o.plan.title}（続き）`)
+    }
   }
 
   // 時刻のあるものを先に置く。長いタスクは続く枠も埋める。
   for (const t of timed) {
-    const from = toMinutes(t.dueTime as string)
+    const from = toMinutes(logStartTime(t) as string)
     if (from === null) continue
     const start = slots.findIndex((s) => from >= s.from && from < s.to)
     if (start < 0) continue
-    const span = Math.max(1, Math.ceil((t.estimateMin && t.estimateMin > 0 ? t.estimateMin : defaultEstimateMin) / 30))
+    const span = Math.max(1, Math.ceil(loggedMinutes(t, defaultEstimateMin) / 30))
     for (let i = 0; i < span; i++) fill(start + i, t)
   }
   // 時刻なしは空いている枠へ上から詰める
@@ -166,8 +200,9 @@ export function toWorkLogTsv(
   day: string,
   wh: WorkHours,
   defaultEstimateMin: number,
+  plans: PlanOccurrence[] = [],
 ): string {
-  return toWorkLogRows(tasks, day, wh, defaultEstimateMin)
+  return toWorkLogRows(tasks, day, wh, defaultEstimateMin, plans)
     .map((r) => [r.time, r.category, r.detail].join('\t'))
     .join('\n')
 }

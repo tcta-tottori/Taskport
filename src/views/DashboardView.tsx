@@ -143,7 +143,7 @@ export function DashboardView({
           </div>
           {spent.total === 0 ? (
             <p className="tp-empty-body">
-              完了したタスクがまだありません。区分と見込み時間を入れて完了にすると、
+              完了したタスクがまだありません。区分と時間を入れて完了にすると、
               日報と同じ形で時間の配分が見えます。
             </p>
           ) : (
@@ -183,8 +183,15 @@ export function DashboardView({
                 </div>
               ))}
               <p className="tp-muted tp-small">
-                合計 {durationLabel(spent.total)}。
-                これは<b>完了したタスクの見込み時間</b>の集計で、実際にかかった時間ではありません。
+                合計 {durationLabel(spent.total)}。うち<b>実績が {durationLabel(spent.actual)}</b>
+                （{Math.round((spent.actual / spent.total) * 100)}%）。
+                {spent.actual < spent.total && (
+                  <>
+                    {' '}
+                    残りは<b>見込み時間</b>で埋めた数字で、実際にかかった時間ではありません。
+                    実績は「実績」の画面か、カードの「始める」から入ります。
+                  </>
+                )}{' '}
                 区分を複数付けたタスクは、先頭の区分にだけ積んでいます。
               </p>
             </>

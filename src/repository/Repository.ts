@@ -1,4 +1,4 @@
-import type { Plan, Recording, Settings, Task, TaskTemplate, WorkRun } from '../types'
+import type { Plan, Recording, Settings, Task, TaskTemplate, PlanRun } from '../types'
 
 /**
  * 保存層の境界。
@@ -64,15 +64,15 @@ export interface Repository {
   /** バックアップの取り込み用。丸ごと入れ替える */
   replaceAllPlans(plans: Plan[]): Promise<void>
 
-  /* --- 実行ログ（開始・一時停止・終了） ---
-     実績なので、記録は書き換えず積むだけにする。
-     古い日のぶんは起動時に捨てる（端末に無限に溜めない）。 */
+  /* --- 予定の実行ログ（開始・一時停止・終了） ---
+     タスクの実績は台帳（Task.startedAt / actualMin）が持つ。ここは予定ぶんだけ。
+     実績なので記録は書き換えず積むだけにし、古い日のぶんは起動時に捨てる。 */
 
   /** @param fromDay これ以降の日のぶんだけ返す（省略すると全部） */
-  listRuns(fromDay?: string): Promise<WorkRun[]>
-  saveRun(run: WorkRun): Promise<void>
+  listRuns(fromDay?: string): Promise<PlanRun[]>
+  saveRun(run: PlanRun): Promise<void>
   /** まとめて保存する（自動計上で複数が同時に動くため） */
-  saveRuns(runs: WorkRun[]): Promise<void>
+  saveRuns(runs: PlanRun[]): Promise<void>
   removeRun(id: string): Promise<void>
   /** 指定の日より前の記録を捨てる。戻り値は捨てた件数 */
   pruneRuns(beforeDay: string): Promise<number>

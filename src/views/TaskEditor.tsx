@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
 import { taskToDraft } from '../lib/tasks'
+import { dayOfIso } from '../lib/date'
 import { SOURCE_LABEL, type CategoryGroup, type Draft, type Task, type WorkHours } from '../types'
 
 /* =========================================================
@@ -62,8 +63,8 @@ export function TaskEditor({
           />
           {task && (
             <p className="tp-edit-meta">
-              入口: {SOURCE_LABEL[task.source]} ／ 登録 {task.createdAt.slice(0, 10)}
-              {task.doneAt && ` ／ 完了 ${task.doneAt.slice(0, 10)}`}
+              入口: {SOURCE_LABEL[task.source]} ／ 登録 {dayOfIso(task.createdAt)}
+              {task.doneAt && ` ／ 完了 ${dayOfIso(task.doneAt)}`}
             </p>
           )}
           {task && onDelete && (

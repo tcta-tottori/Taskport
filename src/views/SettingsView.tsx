@@ -19,6 +19,8 @@ import {
 import { APP_VERSION, buildLabel } from '../version'
 import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
 import { askPermission, leadLabel, notificationsUsable, triggersSupported } from '../lib/reminder'
+import { WHISPER_MODELS, whisperSupported } from '../lib/whisper'
+import { GEMINI_MODELS, isLikelyKey, keyShape, loadKey, saveKey } from '../lib/gemini'
 
 /* =========================================================
  * 設定
@@ -85,6 +87,9 @@ export function SettingsView({
   const [connecting, setConnecting] = useState(false)
   const [clearingRemote, setClearingRemote] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  /** GeminiのAPIキー。設定（同期に乗る）ではなく端末内にだけ置く */
+  const [geminiKey, setGeminiKey] = useState(() => loadKey())
+  const [keySaved, setKeySaved] = useState(false)
   const [editingCats, setEditingCats] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const whError = validateWorkHours(draft.workHours)
@@ -305,6 +310,33 @@ export function SettingsView({
               onChange={(e) => setDraft({ ...draft, keepAudio: e.target.checked })}
             />
           </label>
+          {/* あとから高精度で取り直すときのモデル。端末の中だけで走る。 */}
+          {whisperSupported() && (
+            <div className="tp-field">
+              <span className="tp-label">高精度で取り直すときのモデル</span>
+              <div className="tp-chips" role="group" aria-label="端末内で使うモデル">
+                {WHISPER_MODELS.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`tp-fchip${draft.whisperModel === m.key ? ' is-on' : ''}`}
+                    aria-pressed={draft.whisperModel === m.key}
+                    onClick={() => setDraft({ ...draft, whisperModel: m.key })}
+                  >
+                    {m.label}
+                    <small className="tp-fchip-sub tp-mono">{m.size}</small>
+                  </button>
+                ))}
+              </div>
+              <p className="tp-hint">
+                {WHISPER_MODELS.find((m) => m.key === draft.whisperModel)?.note}。
+                録音中の文字起こしは今までどおりその場に出ます。こちらは
+                <b>確認画面か録音履歴で押したときだけ</b>、保存してある音声を
+                <b>端末の中だけで</b>聞き直して作り直すものです。音声は外へ出ません。
+                初回だけ、仕組みとモデルをインターネットから取り込みます（以後は端末に残ります）。
+              </p>
+            </div>
+          )}
           <label className="tp-switch">
             <span>
               <b>録音中は画面を点けたままにする</b>
@@ -335,7 +367,128 @@ export function SettingsView({
 
       <Reveal>
         <section className="tp-panel">
-          <h2 className="tp-panel-title">予定と実行</h2>
+          <h2 className="tp-panel-title">Gemini（文字起こし・タスク化）</h2>
+          <p className="tp-note">
+            自分の Gemini APIキーを入れると、<b>録音した音声</b>と<b>解析にかける文章</b>を
+            Google へ送って、精度の高い文字起こしとタスク化ができます。
+            <b>入れなければ何も送りません。</b>端末内だけで済ませたいときは、
+            録音は「端末内で取り直す」、文章はそのままで使えます。
+          </p>
+          <p className="tp-note tp-note-warn">
+            <Icon name="alert" size={14} />
+            {/* 文字は1つの塊にして渡す。分けると flex の子が増えて段組みに割れる */}
+            <span>
+              送る中身には取引先名・品番・数量が入ります。社内で扱ってよいか確かめてから使ってください。
+              キーは<b>この端末内にだけ</b>保存し、同期にも書き出しにも乗せません。
+            </span>
+          </p>
+
+          <label className="tp-field">
+            <span className="tp-label">APIキー</span>
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={geminiKey}
+              placeholder="AIza… または AQ.…"
+              onChange={(e) => {
+                setGeminiKey(e.target.value)
+                setKeySaved(false)
+              }}
+            />
+          </label>
+          <p className="tp-hint">
+            {geminiKey && !isLikelyKey(geminiKey.trim())
+              ? 'キーの形が違うようです。AI Studio の画面から、省略されていない全体をそのまま貼ってください。'
+              : keySaved
+                ? `保存しました（${keyShape()}）。`
+                : loadKey()
+                  ? `いま保存されているキー: ${keyShape()}`
+                  : 'Google AI Studio（aistudio.google.com/apikey）で無料のキーを作れます。'}
+          </p>
+          <div className="tp-row-end">
+            {loadKey() && (
+              <button
+                type="button"
+                className="tp-btn-ghost"
+                onClick={() => {
+                  saveKey('')
+                  setGeminiKey('')
+                  setKeySaved(false)
+                  onSave({ ...draft, geminiEnabled: false })
+                  onNotify('キーを消し、Geminiを使わない設定に戻しました')
+                }}
+              >
+                <Icon name="trash" size={15} />
+                キーを消す
+              </button>
+            )}
+            <button
+              type="button"
+              className="tp-btn-primary"
+              disabled={!geminiKey.trim()}
+              onClick={() => {
+                saveKey(geminiKey)
+                setKeySaved(true)
+                onNotify('キーを保存しました')
+              }}
+            >
+              <Icon name="check" size={16} />
+              キーを保存
+            </button>
+          </div>
+
+          <label className="tp-switch">
+            <span>
+              <b>文章の解析にGeminiを使う</b>
+              <small>
+                音声・文章・共有された本文をタスクにするとき、Gemini に読ませます。
+                <b>文章が Google へ出ます。</b>切ってあるあいだは端末内だけで読みます。
+                録音の「Geminiで取り直す」は、この切り替えとは関係なく押したときだけ動きます。
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.geminiEnabled}
+              disabled={!loadKey()}
+              onChange={(e) => setDraft({ ...draft, geminiEnabled: e.target.checked })}
+            />
+          </label>
+
+          <div className="tp-field">
+            <span className="tp-label">モデル</span>
+            <div className="tp-chips" role="group" aria-label="Geminiのモデル">
+              {GEMINI_MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`tp-fchip${draft.geminiModel === m.id ? ' is-on' : ''}`}
+                  aria-pressed={draft.geminiModel === m.id}
+                  onClick={() => setDraft({ ...draft, geminiModel: m.id })}
+                >
+                  {m.label}
+                  <small className="tp-fchip-sub">{m.note}</small>
+                </button>
+              ))}
+            </div>
+            <p className="tp-hint">
+              使えないモデルを選んでいたときは、自動でもう一方に切り替えて試します。
+              無料枠を使い切ると断られるので、そのときは時間をおいてください。
+            </p>
+          </div>
+
+          <div className="tp-row-end">
+            <button type="button" className="tp-btn-primary" onClick={() => onSave(draft)}>
+              <Icon name="check" size={16} />
+              保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">予定の計上</h2>
           <p className="tp-note">
             予定（打合せ・固定の業務）は、時刻になったら実行の時間を自動で数えられます。
             ここで決めるのは<b>新しく入れる予定の既定</b>で、予定ごとにあとから切り替えられます。
@@ -356,8 +509,9 @@ export function SettingsView({
             />
           </label>
           <p className="tp-note">
-            実行の記録は<b>この端末の中だけ</b>に残ります。同期にも書き出しにも乗せません。
+            予定の実行の記録は<b>この端末の中だけ</b>に残ります。同期にも書き出しにも乗せません。
             {RUN_KEEP_DAYS}日より古いぶんは起動時に捨てます。
+            タスクのほうの実績（かかった時間）は台帳に入るので、書き出しにも同期にも乗ります。
           </p>
           <div className="tp-row-end">
             <button
@@ -747,7 +901,7 @@ export function SettingsView({
           <p className="tp-note">
             タスクと予定は端末の中だけに保存されます。端末の故障やブラウザのデータ削除に備えて、
             ときどき書き出しておいてください。
-            <b>実行の記録（開始・終了）は書き出しません。</b>その端末で動かした実績なので、
+            <b>予定の実行の記録は書き出しません。</b>その端末で動かした実績なので、
             移すと同じ時間が二重に立ちます。
           </p>
           <div className="tp-row-end">

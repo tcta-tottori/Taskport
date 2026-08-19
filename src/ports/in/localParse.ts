@@ -206,10 +206,10 @@ export function localParse(
   const drafts: Draft[] = []
   for (const sentence of sentences) {
     const repeat = extractRepeat(sentence)
-    // 「毎日」「毎営業日」のように回りかたしか言っていない文は、
-    // 初回を今日として置く。日付を推測しているのではなく、
-    // 繰り返しの起点が要るため（確認画面で必ず目に入る）。
-    const due = extractDue(sentence, today) ?? (repeat ? today : null)
+    // 期限の言及が無ければ null のまま。「毎日」「毎営業日」のように
+    // 回りかたしか言っていない文でも、今日の日付を入れて埋めたりしない
+    // （v1.14.0 で繰り返しは期限なしでも持てるようになった）。
+    const due = extractDue(sentence, today)
     const dueTime = extractTime(sentence)
     const title = cleanTitle(sentence)
     if (title.length < 2) continue
@@ -222,15 +222,14 @@ export function localParse(
       dueTime,
       priority: detectPriority(sentence, due, today),
       categories: detectCategories(sentence, groups),
-      // 繰り返しは期限が決まっているときだけ付ける（次回の日が出せないため）
-      repeat: due ? repeat : null,
+      repeat,
     })
   }
   // 1件も取れなかったときは、入力そのものを1件の候補にする（捨てない）
   if (drafts.length === 0 && text.trim()) {
     const t = text.trim()
     const repeat = extractRepeat(t)
-    const due = extractDue(t, today) ?? (repeat ? today : null)
+    const due = extractDue(t, today)
     drafts.push({
       ...emptyDraft(source),
       title: t.slice(0, 80),
@@ -239,7 +238,7 @@ export function localParse(
       dueTime: extractTime(t),
       priority: detectPriority(t, due, today),
       categories: detectCategories(t, groups),
-      repeat: due ? repeat : null,
+      repeat,
     })
   }
   return drafts

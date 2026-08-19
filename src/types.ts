@@ -115,6 +115,18 @@ export interface Task {
    * スケジュールビューの帯の長さと、勤務時間に対する積み上げ量の計算に使う。
    */
   estimateMin: number | null
+  /**
+   * 実際に手を付けた時刻（ISO 8601）。null は手つかず。
+   * 未完了でこれが入っていれば **実行中**。完了したあとは
+   * 「その日いつから始めたか」の記録として残り、日報の枠決めに使う。
+   */
+  startedAt: string | null
+  /**
+   * 実際にかかった時間（分）。null は測っていない。
+   * `estimateMin`（見込み）とは別物で、**混ぜて数えない**。
+   * 日報と「区分ごとの時間」は、これが入っていればこちらを使う。
+   */
+  actualMin: number | null
   priority: Priority
   /**
    * 業務分類。複数選べる（1つの作業が発注と納期確認の両方にまたがることがある）。
@@ -137,7 +149,9 @@ export interface Task {
   /**
    * 繰り返しの設定。null は繰り返さない。
    * 完了にした時点で次回ぶんを別のタスクとして作る（自動で溜め込まない）。
-   * 期限が無いタスクには付けられない（次回の日が決まらないため）。
+   *
+   * **期限が無くても持てる**（v1.14.0）。その場合は済ませた日を起点にして
+   * 次回の日を決め、次回ぶんには期限が入る（`lib/repeat.ts`）。
    */
   repeat: Repeat | null
   /** ISO 8601 */
@@ -356,8 +370,22 @@ export interface Settings {
   voiceEnabled: boolean
   /** 録音した音声を端末内に残すか */
   keepAudio: boolean
+  /**
+   * あとから高精度で取り直すときに使う端末内モデル（`lib/whisper.ts` の鍵）。
+   * 初回だけ取り込みが要る。大きいほど精度は上がり、そのぶん遅い。
+   */
+  whisperModel: string
   /** 録音中に画面を点けたままにするか */
   keepAwake: boolean
+  /**
+   * 文章の解析に Gemini を使うか。
+   * **入れると、解析にかける文章が Google のサーバへ出る。**
+   * 既定は切。APIキー（端末内の localStorage にのみ置く）が無ければ、
+   * 入れてあっても端末内の解析を使う。
+   */
+  geminiEnabled: boolean
+  /** Gemini のモデル（`lib/gemini.ts` の一覧から選ぶ） */
+  geminiModel: string
   /** Googleカレンダー連携のクライアントID（利用者が自分の Google Cloud で作る） */
   googleClientId: string
   /** 読み込むカレンダーID。既定は primary */
@@ -391,7 +419,11 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultEstimateMin: 30,
   voiceEnabled: true,
   keepAudio: true,
+  whisperModel: 'base',
   keepAwake: false,
+  // Gemini は既定で使わない。キーを入れて、ここを入れたときだけ文章が外へ出る
+  geminiEnabled: false,
+  geminiModel: 'gemini-3.5-flash',
   googleClientId: '',
   googleCalendarId: 'primary',
   savedFilters: [],
@@ -487,18 +519,18 @@ export interface PlanOccurrence {
 }
 
 /* ---------------------------------------------------------
- * 実行ログ（開始・一時停止・終了）
+ * 予定の実行ログ（開始・一時停止・終了）
  *
- * 「何を、いつからいつまでやったか」を区間の並びで持つ。
- * 一時停止は区間を閉じるだけで、再開すると次の区間が開く。
- * 見込み時間（estimateMin）とは別物で、**こちらは実績**。
+ * **タスクの実績は台帳（Task.startedAt / Task.actualMin）が持つ。**
+ * ここにあるのは予定ぶんだけ。予定はタスクではないので台帳に置けないが、
+ * 「その会議に何分いたか」は実績として要る、という理由でこちらに持つ。
  *
- * 何本でも同時に走らせられる（電話を受けながら伝票を打つ、が実際に起きる）。
- * 走っているものを画面の一番上に出し、次にやるものをその下に出す。
+ * 区間の並びで持つので、一時停止は区間を閉じるだけ、再開は次の区間を開くだけ。
+ * 記録は**書き換えない**（止めた区間の時刻を後から動かすと、実績が実績で
+ * なくなる。消したいときは記録ごと消す）。
+ *
+ * タスクと予定を同時に動かせる。電話を受けながら伝票を打つ、が実際に起きる。
  * ------------------------------------------------------- */
-
-/** 実行の対象。タスクか、予定の1回ぶんか */
-export type RunKind = 'task' | 'plan'
 
 export type RunState =
   /** 動いている（開いた区間がある） */
@@ -515,13 +547,12 @@ export interface RunSegment {
   end: string | null
 }
 
-export interface WorkRun {
+export interface PlanRun {
   /** ULID */
   id: string
-  kind: RunKind
-  /** タスクなら task.id、予定なら `${plan.id}:${day}`（PlanOccurrence.key） */
-  targetId: string
-  /** 記録として残す件名。対象を消しても、何をやったかは読めるようにする */
+  /** どの回のものか。`${plan.id}:${day}`（PlanOccurrence.key） */
+  planKey: string
+  /** 記録として残す件名。予定を消しても、何をやったかは読めるようにする */
   title: string
   /** 記録した時点の区分（先頭が主区分） */
   categories: string[]
@@ -530,11 +561,11 @@ export interface WorkRun {
   /** 開始順の区間。一時停止のたびに増える */
   segments: RunSegment[]
   state: RunState
-  /** 予定の自動計上で始まったか。手で押したものと見分けて画面に出す */
+  /** 自動計上で始まったか。手で押したものと見分けて画面に出す */
   auto: boolean
   createdAt: string
   updatedAt: string
 }
 
-/** 端末に残す実行ログの日数。これより古い日のぶんは起動時に捨てる。 */
+/** 端末に残す予定の実行ログの日数。これより古い日のぶんは起動時に捨てる。 */
 export const RUN_KEEP_DAYS = 90

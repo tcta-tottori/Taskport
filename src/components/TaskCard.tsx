@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { dueLabel } from '../lib/date'
 import { overdueDays } from '../lib/tasks'
 import { repeatLabel } from '../lib/repeat'
+import { isRunning, runningMin } from '../lib/worklog'
 import { timeboxLabel } from '../lib/timebox'
 import { durationLabel } from '../lib/date'
 import { Icon } from './Icon'
@@ -23,6 +24,7 @@ export function TaskCard({
   onToggle,
   onEdit,
   onToggleSubtask,
+  onToggleRunning,
   workHours,
   categoryGroups,
 }: {
@@ -36,6 +38,8 @@ export function TaskCard({
   onEdit: (task: Task) => void
   /** 手順1つの済／未了を切り替える */
   onToggleSubtask?: (task: Task, subtaskId: string) => void
+  /** いま手を付ける／手を止める。渡さなければボタンを出さない */
+  onToggleRunning?: (task: Task) => void
 }) {
   const over = overdueDays(task, today)
   const done = task.status === 'done'
@@ -43,9 +47,10 @@ export function TaskCard({
   const subDone = subs.filter((s) => s.done).length
   const [openSubs, setOpenSubs] = useState(false)
   const box = workHours && task.timebox ? timeboxLabel(task.timebox, workHours) : ''
+  const live = isRunning(task)
 
   return (
-    <li className={`tp-card tp-pri-${task.priority}${done ? ' is-done' : ''}`}>
+    <li className={`tp-card tp-pri-${task.priority}${done ? ' is-done' : ''}${live ? ' is-live' : ''}`}>
       <div className="tp-card-main">
         <button
           type="button"
@@ -69,6 +74,12 @@ export function TaskCard({
                 <Icon name="clock" size={12} /> {task.dueTime}
               </span>
             )}
+            {live && (
+              <span className="tp-chip-live tp-mono">実行中 {durationLabel(runningMin(task))}</span>
+            )}
+            {task.actualMin !== null && (
+              <span className="tp-chip-act">実績 {durationLabel(task.actualMin)}</span>
+            )}
             {task.estimateMin && <span className="tp-chip-est">{durationLabel(task.estimateMin)}</span>}
             {box && <span className="tp-chip-box">{box}</span>}
             {task.repeat && (
@@ -82,6 +93,19 @@ export function TaskCard({
             <span className="tp-pri-tag">{PRIORITY_LABEL[task.priority]}</span>
           </span>
         </button>
+
+        {/* いま手を動かしているものを1タップで残す。押した時刻から数えるだけ。 */}
+        {onToggleRunning && !done && (
+          <button
+            type="button"
+            className={`tp-run${live ? ' is-on' : ''}`}
+            aria-pressed={live}
+            aria-label={live ? `${task.title} の手を止める` : `${task.title} を始める`}
+            onClick={() => onToggleRunning(task)}
+          >
+            {live ? '止める' : '始める'}
+          </button>
+        )}
       </div>
 
       {subs.length > 0 && (

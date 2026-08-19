@@ -15,6 +15,7 @@ import {
 import { groupByDue, sortTasks } from '../lib/tasks'
 import { bookedMinutes, groupOccurrences, occurrencesInRange, planSpan } from '../lib/plans'
 import { runOf, type RunBox } from '../lib/runs'
+import { isRunning, runningMin } from '../lib/worklog'
 import { colorOf, primaryCategory } from '../lib/workCategories'
 import { dayLoad, isWorkDay, taskMinutes } from '../lib/workday'
 import { PRIORITY_LABEL, type Plan, type PlanOccurrence, type Settings, type Task } from '../types'
@@ -281,7 +282,7 @@ export function CalendarView({
           ) : (
             <ul className="tp-daylist">
               {dayTasks.map((t) => {
-                const run = runOf(runBox.runs, t.id)
+                const live = isRunning(t)
                 return (
                   <li key={t.id} className="tp-dayrow">
                     <button
@@ -297,22 +298,27 @@ export function CalendarView({
                       onClick={() => onEditTask(t)}
                     >
                       <span>{t.title}</span>
-                      <span className="tp-mono">
-                        {t.dueTime ?? PRIORITY_LABEL[t.priority]} ／{' '}
-                        {durationLabel(taskMinutes(t, settings.defaultEstimateMin))}
+                      <span className={`tp-mono${live ? ' tp-live-meta' : ''}`}>
+                        {live
+                          ? `動いています（${durationLabel(runningMin(t))}）`
+                          : `${t.dueTime ?? PRIORITY_LABEL[t.priority]} ／ ${durationLabel(
+                              taskMinutes(t, settings.defaultEstimateMin),
+                            )}`}
                       </span>
                     </button>
+                    {/* タスクの実績は台帳が持つ（startedAt / actualMin）。
+                        予定と違って区間は持たないので、押すのは始める／止めるの2つだけ。 */}
                     {t.status === 'open' && (
-                      <RunControl
-                        run={run}
-                        nowMs={runBox.nowMs}
-                        title={t.title}
-                        showTime={!!run}
-                        onStart={() => runBox.startTask(t)}
-                        onPause={() => run && runBox.pause(run)}
-                        onResume={() => run && runBox.resume(run)}
-                        onFinish={() => run && runBox.finish(run)}
-                      />
+                      <button
+                        type="button"
+                        className={`tp-run${live ? ' is-on' : ''}`}
+                        aria-pressed={live}
+                        aria-label={live ? `${t.title} の手を止める` : `${t.title} を始める`}
+                        onClick={() => runBox.toggleTask(t)}
+                      >
+                        <Icon name={live ? 'pause' : 'play'} size={14} />
+                        {live ? '止める' : '始める'}
+                      </button>
                     )}
                   </li>
                 )

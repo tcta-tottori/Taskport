@@ -29,6 +29,35 @@ export function parseDayKey(key: string): Date {
   return new Date(y, m - 1, d, 12, 0, 0, 0)
 }
 
+/**
+ * ISO 8601 の瞬間を、**端末のローカル日付** "YYYY-MM-DD" にする。
+ *
+ * `iso.slice(0, 10)` で済ませてはいけない。ISO は UTC なので、日本時間の
+ * 朝 8:20 に完了したタスクは "…T23:20:00Z"（前日）になり、その日の記録から
+ * 消える。日付として使うときは必ずここを通す。
+ */
+export function dayOfIso(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? null : dayKey(d)
+}
+
+/** ISO 8601 の瞬間を、端末のローカル時刻 "HH:mm" にする。 */
+export function timeOfIso(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? null : timeKey(d)
+}
+
+/** "YYYY-MM-DD" と "HH:mm" から、その瞬間の ISO を作る（ローカル時刻として解釈する） */
+export function isoAt(day: string, hhmm: string, addMin = 0): string {
+  const d = parseDayKey(day)
+  const min = (toMinutes(hhmm) ?? 0) + addMin
+  d.setHours(0, 0, 0, 0)
+  d.setMinutes(min)
+  return d.toISOString()
+}
+
 export function isDayKey(v: unknown): v is string {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 }
@@ -168,27 +197,6 @@ export function monthGrid(month: string): string[] {
 /** その日付が month（"YYYY-MM"）の中か */
 export function inMonth(key: string, month: string): boolean {
   return key.startsWith(month)
-}
-
-/* ---------------------------------------------------------
- * 日付＋時刻 → ISO
- * ------------------------------------------------------- */
-
-/**
- * "YYYY-MM-DD" と "HH:mm" をローカル時刻の ISO 8601 にする。
- * 実行ログの区間を後から埋めるとき（アプリを閉じている間に
- * 予定の時間が過ぎていた場合）に使う。
- */
-export function isoAt(day: string, hhmm: string): string {
-  const [y, m, d] = day.split('-').map(Number)
-  const [h, mi] = hhmm.split(':').map(Number)
-  return new Date(y, m - 1, d, h, mi, 0, 0).toISOString()
-}
-
-/** ISO 8601 → "HH:mm"（ローカル時刻） */
-export function isoTime(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '—' : timeKey(d)
 }
 
 /** 秒数を「1:23:45」の形にする（動いている実行の経過を出す） */

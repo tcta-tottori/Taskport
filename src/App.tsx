@@ -6,7 +6,6 @@ import { TapWave } from './components/TapWave'
 import { ListView } from './views/ListView'
 import { ScheduleView } from './views/ScheduleView'
 import { CalendarView } from './views/CalendarView'
-import { RunView } from './views/RunView'
 import { PlanSheet } from './views/PlanSheet'
 import { DashboardView } from './views/DashboardView'
 import { SettingsView } from './views/SettingsView'
@@ -17,6 +16,7 @@ import { TemplateSheet } from './views/TemplateSheet'
 import { TextSheet } from './views/TextSheet'
 import { TriageSheet, type TriageAction } from './views/TriageSheet'
 import { WrapUpSheet } from './views/WrapUpSheet'
+import { WorkLogView, type LogEntry } from './views/WorkLogView'
 import { WorkCalendarSheet } from './views/WorkCalendarSheet'
 import { RecordingOverlay } from './views/RecordingOverlay'
 import { RecordingsView } from './views/RecordingsView'
@@ -24,7 +24,7 @@ import { repository } from './repository'
 import { DbOpenError, onDbStatus, type DbStatus } from './repository/LocalRepository'
 import { APP_VERSION, buildLabel } from './version'
 import { checkForUpdate } from './lib/updater'
-import { parseToTasks } from './ports/in/parseToTasks'
+import { parseToTasks, type ParseEngine } from './ports/in/parseToTasks'
 import { useShareTarget } from './ports/in/useShareTarget'
 import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
@@ -33,17 +33,17 @@ import { addDaysKey, dayKey, diffDays, durationLabel, formatMD, timeKey, toMinut
 import { cleanPlan, emptyPlan, occurrencesOn } from './lib/plans'
 import {
   autoTrack,
+  beginRun,
   finishRun,
   pauseRun,
   resumeRun,
-  runForPlan,
-  runForTask,
   runMinutes,
   runOf,
   type RunBox,
 } from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
+import { isRunning, logToTask, runningMin } from './lib/worklog'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { clearRemote, syncOnce } from './lib/driveSync'
 import { isConnected } from './lib/googleAuth'
@@ -57,6 +57,15 @@ import {
 import { ulid } from './lib/ulid'
 import { applyTemplate, forget, remember, touch } from './lib/templates'
 import { cleanCategories } from './lib/workCategories'
+import { hasKey as hasGeminiKey, transcribeAudio } from './lib/gemini'
+import {
+  cancelTranscribe,
+  modelOf,
+  transcribe,
+  WhisperCancelled,
+  whisperSupported,
+  type WhisperProgress,
+} from './lib/whisper'
 import {
   DEFAULT_SETTINGS,
   RUN_KEEP_DAYS,
@@ -71,7 +80,7 @@ import {
   type Task,
   type TaskFilter,
   type TaskTemplate,
-  type WorkRun,
+  type PlanRun,
 } from './types'
 
 /* =========================================================
@@ -81,17 +90,21 @@ import {
  * 自然文はどの入口から来ても parseToTasks を通り、必ず確認画面に出る。
  * =======================================================*/
 
-type ViewKey = 'list' | 'run' | 'calendar' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
+type ViewKey = 'list' | 'worklog' | 'calendar' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
 
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   { key: 'list', label: '一覧', icon: 'list' },
-  { key: 'run', label: '実行', icon: 'play' },
+  // 「実行」＝いま動かす面と、その日の記録。同じ仕事なので1つの画面にまとめてある
+  { key: 'worklog', label: '実行', icon: 'play' },
   { key: 'calendar', label: 'カレンダー', icon: 'grid' },
   { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
   { key: 'dashboard', label: '分析', icon: 'chart' },
   { key: 'recordings', label: '録音', icon: 'mic' },
   { key: 'settings', label: '設定', icon: 'gear' },
 ]
+
+/** 録音を取り直すときの相手。端末内で聞き直すか、Gemini へ送るか。 */
+export type RefineEngine = 'local' | 'gemini'
 
 interface Pending {
   drafts: Draft[]
@@ -100,6 +113,10 @@ interface Pending {
   hint?: string
   /** 音声から来た場合、確定後にタスクIDを紐づける録音 */
   recordingId?: string
+  /** すでに取り直したか（二度押しの案内を変える） */
+  refined?: boolean
+  /** どの読み手が出した候補か */
+  engine?: ParseEngine
 }
 
 export default function App() {
@@ -107,7 +124,7 @@ export default function App() {
   /** 予定（打合せ・固定の業務）。台帳とは別に持つ */
   const [plans, setPlans] = useState<Plan[]>([])
   /** 実行ログ（開始・一時停止・終了）。新しい日ぶんだけ手元に置く */
-  const [runs, setRuns] = useState<WorkRun[]>([])
+  const [runs, setRuns] = useState<PlanRun[]>([])
   /** 直している予定。existing が false なら新しく入れるところ */
   const [planEditing, setPlanEditing] = useState<{ plan: Plan; existing: boolean } | null>(null)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
@@ -153,13 +170,17 @@ export default function App() {
   /** 記憶から呼び出したときの下敷き。フォームを開くときに使う */
   const [seed, setSeed] = useState<Draft | null>(null)
   const [exporting, setExporting] = useState(false)
+  /** 録音から高精度で取り直している最中の進み具合。null なら走っていない */
+  const [refining, setRefining] = useState<WhisperProgress | null>(null)
+  /** 外へ問い合わせている最中の一行（Gemini）。空なら出さない */
+  const [stage, setStage] = useState('')
   const [toast, setToast] = useState<ToastMessage | null>(null)
   /** 記憶したタスク（定型）。登録するたびに控え、直接入力から呼び出す */
   const [templates, setTemplates] = useState<TaskTemplate[]>([])
   /** 続けて登録したときに控えを取りこぼさないよう、いまの控えを常に持っておく */
   const templatesRef = useRef<TaskTemplate[]>([])
   /** いまの台帳と設定。あとから走る処理（同期・リマインド）が古い値を掴まないようにする */
-  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS, runs: [] as WorkRun[] })
+  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS, runs: [] as PlanRun[] })
   liveRef.current = { tasks, settings, runs }
   const [today, setToday] = useState(dayKey())
   const [checking, setChecking] = useState(false)
@@ -353,33 +374,122 @@ export default function App() {
     return () => window.clearInterval(id)
   }, [])
 
-  /** 自然文 → 候補（必ず確認画面へ）。ここ以外に登録の経路を作らない。 */
+  /**
+   * 自然文 → 候補（必ず確認画面へ）。ここ以外に登録の経路を作らない。
+   *
+   * 読み手は端末内か Gemini。Gemini を通るのは、キーが入っていて
+   * 設定で入れてあるときだけで、どちらで読んだかは確認画面に出す。
+   */
   const runParse = useCallback(
-    (text: string, source: Source, recordingId?: string) => {
+    async (text: string, source: Source, recordingId?: string) => {
       setBusy(true)
       try {
-        const result = parseToTasks(text, source, {
+        const s = liveRef.current.settings
+        const result = await parseToTasks(text, source, {
           today,
-          categoryGroups: settings.categoryGroups,
+          categoryGroups: s.categoryGroups,
+          useGemini: s.geminiEnabled,
+          geminiModel: s.geminiModel,
+          onStage: (m) => setStage(m),
         })
+        if (result.warning) notify(result.warning, 'error')
         if (result.drafts.length === 0) {
           notify('タスクを取り出せませんでした。用件をもう少しはっきり書いてください。', 'error')
           return
         }
-        setPending({ drafts: result.drafts, sourceText: text, recordingId })
+        setPending({
+          drafts: result.drafts,
+          sourceText: text,
+          recordingId,
+          engine: result.engine,
+        })
       } finally {
+        setStage('')
         setBusy(false)
       }
     },
-    [today, notify, settings.categoryGroups],
+    [today, notify],
   )
+
+  /**
+   * 録音から高精度で取り直す。
+   *
+   * 録音中に出ているのは Web Speech の文字で、速いかわりに取りこぼす。
+   * ここでは**保存してある音声そのもの**を端末内の Whisper に通して、
+   * 精度の高い文字に置き換え、そのまま候補を作り直す。
+   *
+   * 音声は端末から出ない。外へ取りに行くのは仕組みとモデルだけ。
+   * 時間がかかるので、押されたときだけ走らせる（自動にしない）。
+   */
+  const refineFromRecording = useCallback(
+    async (recordingId: string, engine: RefineEngine = 'local') => {
+      if (refining) return
+      setRefining({ stage: 'decode', percent: null, message: '録音を読み込んでいます…' })
+      try {
+        const audio = await repository.getRecordingAudio(recordingId)
+        if (!audio) {
+          notify('この録音の音声が残っていません。設定で「音声を残す」を入れると次から使えます。', 'error')
+          return
+        }
+        const s = liveRef.current.settings
+        // 端末内で聞き直すか、Gemini へ音声を送るか。押した側が決める。
+        const text = (
+          engine === 'gemini'
+            ? await transcribeAudio(audio, s.geminiModel, (m) =>
+                setRefining({ stage: 'run', percent: null, message: m }),
+              )
+            : await transcribe(audio, s.whisperModel, setRefining)
+        ).trim()
+        if (!text) {
+          notify('音声から文字を取れませんでした。もう少し近くではっきり話してみてください。', 'error')
+          return
+        }
+        // 取り直した文字を録音の履歴にも残す（次からはこちらが正）
+        await repository.updateRecording(recordingId, { transcript: text })
+        const result = await parseToTasks(text, 'voice', {
+          today,
+          categoryGroups: s.categoryGroups,
+          useGemini: s.geminiEnabled,
+          geminiModel: s.geminiModel,
+          onStage: (m) => setRefining({ stage: 'run', percent: null, message: m }),
+        })
+        if (result.drafts.length === 0) {
+          notify('取り直しましたが、タスクを取り出せませんでした。', 'error')
+          return
+        }
+        setPending({
+          drafts: result.drafts,
+          sourceText: text,
+          recordingId,
+          refined: true,
+          engine: result.engine,
+          hint:
+            engine === 'gemini'
+              ? '録音を Gemini に送って取り直しました。件名を確認してください。'
+              : '録音から端末内で取り直しました。件名を確認してください。',
+        })
+      } catch (err) {
+        if (err instanceof WhisperCancelled) return
+        // 文言は whisper.ts 側が持っている（何が起きて次に何をすればよいかまで）
+        notify(err instanceof Error ? err.message : String(err), 'error')
+      } finally {
+        setRefining(null)
+      }
+    },
+    [refining, notify, today],
+  )
+
+  const stopRefine = useCallback(() => {
+    cancelTranscribe()
+    setRefining(null)
+  }, [])
 
   // 他アプリから共有されてきた本文も同じパイプラインへ流す
   useEffect(() => {
     if (!share.sharedText || loading) return
     const body = share.sharedText
     share.consume()
-    runParse(body, 'share')
+    void runParse(body, 'share')
   }, [share, loading, runParse])
 
   /**
@@ -417,7 +527,7 @@ export default function App() {
       notify('音声を聞き取れませんでした。もう一度話すか、キーボード入力をお使いください。', 'error')
       return
     }
-    runParse(text, 'voice', recordingId)
+    void runParse(text, 'voice', recordingId)
   }, [session, settings.keepAudio, runParse, notify])
 
   /** 録音を捨ててやめる。音声も残さない。 */
@@ -471,9 +581,14 @@ export default function App() {
   const toggleDone = useCallback(
     async (task: Task) => {
       const done = task.status === 'done'
+      // 実行中のまま完了にしたら、着手からの経過を実績として残す。
+      // すでに実績が入っているときは触らない（人が入れた値を上書きしない）。
+      const measured =
+        !done && isRunning(task) && task.actualMin === null ? runningMin(task) : null
       await repository.update(task.id, {
         status: done ? 'open' : 'done',
         doneAt: done ? null : new Date().toISOString(),
+        ...(measured !== null && measured > 0 ? { actualMin: measured } : {}),
       })
       // 繰り返しのタスクを完了にしたら、次の1件だけをここで作る。
       // 完了したほうは履歴として残し、触らない。
@@ -486,6 +601,50 @@ export default function App() {
       if (next) notify(`完了。次は ${formatMD(next.due ?? '')}（${repeatLabel(task.repeat)}）`)
     },
     [reload, today, settings.workHours, settings.workCalendar, notify],
+  )
+
+  /**
+   * いま手を付ける／手を止める。
+   * 押した時刻を残すだけで、タイマーは持たない（画面を閉じても続く）。
+   */
+  const toggleRunning = useCallback(
+    async (task: Task) => {
+      if (isRunning(task)) {
+        // 止めるときは、測れた経過を実績に足す。始めたのが無かったことにはしない。
+        const spent = runningMin(task)
+        await repository.update(task.id, {
+          startedAt: null,
+          actualMin: spent > 0 ? (task.actualMin ?? 0) + spent : task.actualMin,
+        })
+        notify(spent > 0 ? `手を止めました（${durationLabel(spent)}を記録）` : '手を止めました')
+      } else {
+        await repository.update(task.id, { startedAt: new Date().toISOString() })
+        notify('始めました')
+      }
+      await reload()
+    },
+    [reload, notify],
+  )
+
+  /** 実績を直す（かかった時間・開始時刻）。実績の画面からその場で使う。 */
+  const patchTask = useCallback(
+    async (task: Task, patch: Partial<Task>) => {
+      await repository.update(task.id, patch)
+      await reload()
+    },
+    [reload],
+  )
+
+  /** やった業務を1件、完了済みとして足す。確認画面は通さない（人が自分で書いた1件） */
+  const addLog = useCallback(
+    async (entry: LogEntry) => {
+      const created = logToTask(entry.draft, entry.day, entry.start, entry.minutes)
+      await repository.add([created])
+      await rememberAll([created])
+      await reload()
+      notify('記録しました')
+    },
+    [reload, notify, rememberAll],
   )
 
   /** 手順1つの済／未了。カードから直接切り替えられるようにする。 */
@@ -512,7 +671,7 @@ export default function App() {
           categories: cleanCategories(draft.categories),
           subtasks: draft.subtasks.filter((t) => t.title.trim()).map((t) => ({ ...t, title: t.title.trim() })),
           timebox: draft.timebox,
-          repeat: draft.due ? draft.repeat : null,
+          repeat: draft.repeat,
         })
         notify('保存しました')
       } else {
@@ -584,25 +743,14 @@ export default function App() {
     [reloadWork, notify],
   )
 
-  /* --- 実行（開始・一時停止・終了） ---
-     実績なので記録は書き換えず、区間を足していく。
-     同時に何本でも走らせられる（電話を受けながら伝票を打つ、が実際に起きる）。 */
-
-  const startTask = useCallback(
-    async (task: Task) => {
-      const existing = runOf(liveRef.current.runs, task.id)
-      const next = existing ? resumeRun(existing) : runForTask(task, today)
-      await repository.saveRun(next)
-      await reloadWork()
-      notify(`「${task.title}」を始めました`)
-    },
-    [today, reloadWork, notify],
-  )
+  /* --- 予定の実行（開始・一時停止・終了） ---
+     タスクの実績は台帳（startedAt / actualMin）が持つので、ここは予定ぶんだけ。
+     どちらも同時に動かせる（電話を受けながら伝票を打つ、が実際に起きる）。 */
 
   const startPlan = useCallback(
     async (occ: PlanOccurrence) => {
       const existing = runOf(liveRef.current.runs, occ.key)
-      const next = existing ? resumeRun(existing) : runForPlan(occ, { auto: false })
+      const next = existing ? resumeRun(existing) : beginRun(occ, { auto: false })
       await repository.saveRun(next)
       await reloadWork()
       notify(`「${occ.plan.title}」を始めました`)
@@ -611,7 +759,7 @@ export default function App() {
   )
 
   const pauseRunning = useCallback(
-    async (run: WorkRun) => {
+    async (run: PlanRun) => {
       const next = pauseRun(run)
       await repository.saveRun(next)
       await reloadWork()
@@ -621,7 +769,7 @@ export default function App() {
   )
 
   const resumeRunning = useCallback(
-    async (run: WorkRun) => {
+    async (run: PlanRun) => {
       await repository.saveRun(resumeRun(run))
       await reloadWork()
     },
@@ -629,14 +777,11 @@ export default function App() {
   )
 
   const finishRunning = useCallback(
-    async (run: WorkRun) => {
+    async (run: PlanRun) => {
       const next = finishRun(run)
       await repository.saveRun(next)
       await reloadWork()
-      notify(
-        `「${run.title}」を終えました（${durationLabel(runMinutes(next))}）。` +
-          (run.kind === 'task' ? '完了にするときは丸を押してください。' : ''),
-      )
+      notify(`「${run.title}」を終えました（${durationLabel(runMinutes(next))}）`)
     },
     [reloadWork, notify],
   )
@@ -644,6 +789,7 @@ export default function App() {
   /**
    * 区分から1件立てる。飛び込みの作業を、台帳に無くてもその場で数え始めるための口。
    * 件名は区分の名前。**確認画面は挟まない**（AIの解釈ではなく、人が押した1語なので）。
+   * 始めるときは台帳の `startedAt` を入れる（タスクの実績はそちらが持つ）。
    */
   const quickTask = useCallback(
     async (category: string, start: boolean) => {
@@ -653,16 +799,13 @@ export default function App() {
         categories: [category],
         due: today,
       })
+      if (start) created.startedAt = new Date().toISOString()
       await repository.add([created])
       await rememberAll([created])
       await reload()
-      if (start) {
-        await repository.saveRun(runForTask(created, today))
-        await reloadWork()
-      }
       notify(start ? `「${category}」を立てて始めました` : `「${category}」を立てました`)
     },
-    [today, reload, reloadWork, rememberAll, notify],
+    [today, reload, rememberAll, notify],
   )
 
   /** 実行の操作をまとめて画面へ渡す。画面ごとに名前が変わらないようにする。 */
@@ -670,13 +813,13 @@ export default function App() {
     () => ({
       runs,
       nowMs,
-      startTask: (t) => void guard(() => startTask(t)),
       startPlan: (o) => void guard(() => startPlan(o)),
       pause: (r) => void guard(() => pauseRunning(r)),
       resume: (r) => void guard(() => resumeRunning(r)),
       finish: (r) => void guard(() => finishRunning(r)),
+      toggleTask: (t) => void guard(() => toggleRunning(t)),
     }),
-    [runs, nowMs, guard, startTask, startPlan, pauseRunning, resumeRunning, finishRunning],
+    [runs, nowMs, guard, startPlan, pauseRunning, resumeRunning, finishRunning, toggleRunning],
   )
 
   /* --- 予定の自動計上 ---
@@ -947,15 +1090,23 @@ export default function App() {
   )
 
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
-  /** いま動かしている本数。止め忘れに気づけるよう、引き出しにも出す */
-  const runningCount = useMemo(() => runs.filter((r) => r.state === 'running').length, [runs])
+  /**
+   * いま動かしている本数（タスク＋予定）。止め忘れに気づけるよう引き出しにも出す。
+   * タスクは台帳の startedAt、予定は実行の記録。数え方が2つに割れないよう、ここで足す。
+   */
+  const runningCount = useMemo(
+    () => tasks.filter(isRunning).length + runs.filter((r) => r.state === 'running').length,
+    [tasks, runs],
+  )
 
   // 起動時のクエリ（PWAショートカット）
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const v = params.get('view')
-    if (
-      v === 'run' ||
+    // 「実行」は ?view=run でも開ける（v1.14 のショートカットを残してある）
+    if (v === 'run') setView('worklog')
+    else if (
+      v === 'worklog' ||
       v === 'calendar' ||
       v === 'schedule' ||
       v === 'dashboard' ||
@@ -1034,7 +1185,7 @@ export default function App() {
             <span>{n.label}</span>
             {n.key === 'list' && ov.overdue > 0 && <b className="tp-drawer-n">{ov.overdue}</b>}
             {/* 動かしたまま忘れないよう、実行中の本数は引き出しにも出す */}
-            {n.key === 'run' && runningCount > 0 && (
+            {n.key === 'worklog' && runningCount > 0 && (
               <b className="tp-drawer-n is-running">{runningCount}</b>
             )}
           </button>
@@ -1161,6 +1312,7 @@ export default function App() {
             onToggle={(t) => void guard(() => toggleDone(t))}
             onEdit={setEditing}
             onToggleSubtask={(t, id) => void guard(() => toggleSubtask(t, id))}
+            onToggleRunning={(t) => void guard(() => toggleRunning(t))}
             filter={filter}
             onFilterChange={setFilter}
             saved={settings.savedFilters}
@@ -1169,20 +1321,6 @@ export default function App() {
             nowMin={nowMin}
             onTriage={() => setTriaging(true)}
             onWrapUp={() => setWrappingUp(true)}
-          />
-        ) : view === 'run' ? (
-          <RunView
-            tasks={tasks}
-            plans={plans}
-            today={today}
-            settings={settings}
-            nowMin={nowMin}
-            runBox={runBox}
-            onEditTask={setEditing}
-            onToggleTask={(t) => void guard(() => toggleDone(t))}
-            onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
-            onTogglePlanAuto={(p) => void guard(() => togglePlanAuto(p))}
-            onQuickTask={(c, start) => void guard(() => quickTask(c, start))}
           />
         ) : view === 'calendar' ? (
           <CalendarView
@@ -1206,6 +1344,7 @@ export default function App() {
             plans={plans}
             today={today}
             settings={settings}
+            nowMin={nowMin}
             runBox={runBox}
             onEdit={setEditing}
             onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
@@ -1213,10 +1352,39 @@ export default function App() {
             onImportEvent={importEvent}
             onNotify={notify}
           />
+        ) : view === 'worklog' ? (
+          <WorkLogView
+            tasks={tasks}
+            plans={plans}
+            today={today}
+            settings={settings}
+            templates={templates}
+            nowMin={nowMin}
+            runBox={runBox}
+            onEdit={setEditing}
+            onToggle={(t) => void guard(() => toggleDone(t))}
+            onToggleRunning={(t) => void guard(() => toggleRunning(t))}
+            onPatch={(t, p) => void guard(() => patchTask(t, p))}
+            onAddLog={(e) => void guard(() => addLog(e))}
+            onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
+            onTogglePlanAuto={(p) => void guard(() => togglePlanAuto(p))}
+            onQuickTask={(c, start) => void guard(() => quickTask(c, start))}
+            onChangeCategoryGroups={saveCategoryGroups}
+            onNotify={notify}
+          />
         ) : view === 'dashboard' ? (
           <DashboardView tasks={tasks} today={today} settings={settings} />
         ) : view === 'recordings' ? (
-          <RecordingsView onNotify={notify} />
+          <RecordingsView
+            onNotify={notify}
+            refining={refining}
+            canRefine={whisperSupported()}
+            canGemini={hasGeminiKey()}
+            modelLabel={modelOf(settings.whisperModel).size}
+            onRefine={(id) => void refineFromRecording(id)}
+            onRefineGemini={(id) => void refineFromRecording(id, 'gemini')}
+            onStopRefine={stopRefine}
+          />
         ) : (
           <SettingsView
             settings={settings}
@@ -1263,6 +1431,17 @@ export default function App() {
           onChangeCategoryGroups={saveCategoryGroups}
           onCommit={(d) => void guard(() => commitDrafts(d))}
           onCancel={() => setPending(null)}
+          canRefine={!!pending.recordingId && whisperSupported()}
+          canGemini={!!pending.recordingId && hasGeminiKey()}
+          engine={pending.engine}
+          refined={pending.refined === true}
+          refining={refining}
+          onRefine={() => pending.recordingId && void refineFromRecording(pending.recordingId)}
+          onRefineGemini={() =>
+            pending.recordingId && void refineFromRecording(pending.recordingId, 'gemini')
+          }
+          onStopRefine={stopRefine}
+          modelLabel={modelOf(settings.whisperModel).size}
         />
       )}
 
@@ -1301,7 +1480,7 @@ export default function App() {
           busy={busy}
           onParse={(text) => {
             setCreating(false)
-            runParse(text, 'text')
+            void runParse(text, 'text')
           }}
           onClose={() => setCreating(false)}
         />
@@ -1356,9 +1535,18 @@ export default function App() {
           tasks={tasks}
           today={today}
           settings={settings}
+          plans={plans}
           onClose={() => setExporting(false)}
           onNotify={notify}
         />
+      )}
+
+      {/* 外へ問い合わせている最中は、何をしているかを出す（黙って固まらせない） */}
+      {stage && (
+        <p className="tp-stage" role="status">
+          <span className="tp-spin" aria-hidden="true" />
+          {stage}
+        </p>
       )}
 
       <Toast message={toast} onDone={() => setToast(null)} />

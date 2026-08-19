@@ -17,6 +17,8 @@ export function emptyDraft(source: Source = 'form'): Draft {
     due: null,
     dueTime: null,
     estimateMin: null,
+    startedAt: null,
+    actualMin: null,
     priority: 'mid',
     categories: [],
     subtasks: [],
@@ -37,12 +39,15 @@ export function draftToTask(draft: Draft): Task {
     dueTime: isTimeKey(draft.dueTime) ? draft.dueTime : null,
     estimateMin:
       typeof draft.estimateMin === 'number' && draft.estimateMin > 0 ? draft.estimateMin : null,
+    startedAt: draft.startedAt,
+    actualMin:
+      typeof draft.actualMin === 'number' && draft.actualMin > 0 ? Math.round(draft.actualMin) : null,
     priority: draft.priority,
     categories: cleanCategories(draft.categories),
     subtasks: draft.subtasks.filter((s) => s.title.trim()).map((s) => ({ ...s, title: s.title.trim() })),
     timebox: draft.timebox,
-    // 期限が無いと次回の日が決まらないので、繰り返しは落とす
-    repeat: draft.due && draft.repeat ? draft.repeat : null,
+    // 期限が無くても持てる。起点は済ませた日になる（lib/repeat.ts）
+    repeat: draft.repeat,
     status: 'open',
     source: draft.source,
     createdAt: now,
@@ -59,6 +64,8 @@ export function taskToDraft(task: Task): Draft {
     due: task.due,
     dueTime: task.dueTime,
     estimateMin: task.estimateMin,
+    startedAt: task.startedAt,
+    actualMin: task.actualMin,
     priority: task.priority,
     categories: [...task.categories],
     subtasks: task.subtasks,

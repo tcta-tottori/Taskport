@@ -1,5 +1,6 @@
-import { addDaysKey, dayKey, lastNDays } from './date'
+import { addDaysKey, dayKey, dayOfIso, lastNDays } from './date'
 import { isWorkDay, taskMinutes, workMinutes } from './workday'
+import { loggedMinutes } from './worklog'
 import { groupOf, primaryCategory } from './workCategories'
 import {
   PRIORITIES,
@@ -37,10 +38,10 @@ export function dailyPoints(tasks: Task[], n: number, today = dayKey()): DayPoin
 
   for (const t of tasks) {
     if (t.doneAt) {
-      const k = t.doneAt.slice(0, 10)
+      const k = dayOfIso(t.doneAt) as string
       doneBy.set(k, (doneBy.get(k) ?? 0) + 1)
     }
-    const c = t.createdAt.slice(0, 10)
+    const c = dayOfIso(t.createdAt) ?? t.createdAt.slice(0, 10)
     addedBy.set(c, (addedBy.get(c) ?? 0) + 1)
     if (t.due) dueBy.set(t.due, (dueBy.get(t.due) ?? 0) + 1)
   }
@@ -118,7 +119,7 @@ export function sourceStats(tasks: Task[]): { source: Source; count: number }[] 
 
 /** 完了が1件以上ある日を連続で何日続けたか（今日が0件なら昨日までを数える） */
 export function computeStreak(tasks: Task[], today = dayKey()): number {
-  const days = new Set(tasks.filter((t) => t.doneAt).map((t) => (t.doneAt as string).slice(0, 10)))
+  const days = new Set(tasks.filter((t) => t.doneAt).map((t) => dayOfIso(t.doneAt) as string))
   let cur = days.has(today) ? today : addDaysKey(today, -1)
   let streak = 0
   while (days.has(cur)) {
@@ -200,9 +201,10 @@ export const PRIORITY_ORDER = PRIORITIES
  * 日報は 0.25H 刻みで作業内容ごとに時間を積み、大分類ごとの合計と
  * 全体に占める割合を出している。同じ見方を Taskport でも作る。
  *
- * ただし日報が「実際にかかった時間」なのに対し、こちらは
- * 「完了したタスクの見込み時間」である点が違う。数え方が違うので、
- * 画面でもそのように書く（実績と取り違えると判断を誤る）。
+ * 実績（actualMin）が入っていればそれを積み、入っていないものだけ
+ * 見込みで埋める（v1.14.0）。混ざるので、**実績で埋まっている割合**を
+ * 一緒に返し、画面はそれを注記に出す。全部が見込みのときに
+ * 「実績」と言い切らないための逃げ道であって、注記そのものは消さない。
  *
  * 区分を複数持つタスクは**先頭（主区分）にだけ**時間を積む。
  * ------------------------------------------------------- */
@@ -227,15 +229,18 @@ export function categoryMinutes(
   to: string,
   defaultEstimateMin: number,
   master: CategoryGroup[],
-): { groups: GroupMinutes[]; total: number } {
+): { groups: GroupMinutes[]; total: number; actual: number } {
   const byGroup = new Map<string, Map<string, number>>()
   let total = 0
+  let actual = 0
 
   for (const t of tasks) {
     if (t.status !== 'done' || !t.doneAt) continue
-    const day = t.doneAt.slice(0, 10)
+    const day = dayOfIso(t.doneAt) as string
     if (day < from || day > to) continue
-    const min = taskMinutes(t, defaultEstimateMin)
+    // 実績があれば実績。無いものだけ見込みで埋める
+    const min = loggedMinutes(t, defaultEstimateMin)
+    if (typeof t.actualMin === 'number' && t.actualMin > 0) actual += t.actualMin
     // 時間は主区分（先頭）にだけ積む。区分ごとに同じ時間を積むと
     // 合計が実際の勤務時間を超えて、稼働の判断が狂う。
     const primary = primaryCategory(t.categories)
@@ -261,5 +266,5 @@ export function categoryMinutes(
     })
     .sort((a, b) => b.minutes - a.minutes)
 
-  return { groups, total }
+  return { groups, total, actual }
 }

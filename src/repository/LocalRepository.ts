@@ -12,7 +12,7 @@ import {
   type Settings,
   type Task,
   type TaskTemplate,
-  type WorkRun,
+  type PlanRun,
 } from '../types'
 
 /* =========================================================
@@ -66,8 +66,8 @@ interface WorkDB extends DBSchema {
   }
   runs: {
     key: string
-    value: WorkRun
-    indexes: { by_day: string; by_target: string }
+    value: PlanRun
+    indexes: { by_day: string; by_plan: string }
   }
 }
 
@@ -371,7 +371,7 @@ function work(): Promise<IDBPDatabase<WorkDB>> {
         if (!d.objectStoreNames.contains('runs')) {
           const store = d.createObjectStore('runs', { keyPath: 'id' })
           store.createIndex('by_day', 'day')
-          store.createIndex('by_target', 'targetId')
+          store.createIndex('by_plan', 'planKey')
         }
       },
       () => {
@@ -407,6 +407,9 @@ function normalizeTask(raw: Task): Task {
     due: raw.due ?? null,
     dueTime: raw.dueTime ?? null,
     estimateMin: typeof raw.estimateMin === 'number' ? raw.estimateMin : null,
+    // v1.13 以前には無かった項目。欠けていても画面が壊れないようにする
+    startedAt: raw.startedAt ?? null,
+    actualMin: typeof raw.actualMin === 'number' ? raw.actualMin : null,
     priority: raw.priority ?? 'mid',
     // v1.10 以前は区分が1つ（category: string）だった。読むときにここで寄せる。
     categories: normalizeCategories(raw),
@@ -434,8 +437,8 @@ function normalizePlan(raw: Plan): Plan {
   }
 }
 
-/** 実行ログ。区間の形が壊れているものは落とす（実績を推測で埋めない）。 */
-function normalizeRun(raw: WorkRun): WorkRun {
+/** 予定の実行ログ。区間の形が壊れているものは落とす（実績を推測で埋めない）。 */
+function normalizeRun(raw: PlanRun): PlanRun {
   const segments = Array.isArray(raw.segments)
     ? raw.segments.filter((s) => s && typeof s.start === 'string')
     : []
@@ -599,20 +602,20 @@ export class LocalRepository implements Repository {
     await tx.done
   }
 
-  /* --- 実行ログ。積むだけで、後から時刻を書き換えない --- */
+  /* --- 予定の実行ログ。積むだけで、後から時刻を書き換えない --- */
 
-  async listRuns(fromDay?: string): Promise<WorkRun[]> {
+  async listRuns(fromDay?: string): Promise<PlanRun[]> {
     const all = await (await work()).getAll('runs')
     const list = all.map(normalizeRun).filter((r) => !fromDay || r.day >= fromDay)
     // ULID は時系列に並ぶので、古い順にするだけでよい
     return list.sort((a, b) => (a.id < b.id ? -1 : 1))
   }
 
-  async saveRun(run: WorkRun): Promise<void> {
+  async saveRun(run: PlanRun): Promise<void> {
     await (await work()).put('runs', run)
   }
 
-  async saveRuns(runs: WorkRun[]): Promise<void> {
+  async saveRuns(runs: PlanRun[]): Promise<void> {
     if (runs.length === 0) return
     const d = await work()
     const tx = d.transaction('runs', 'readwrite')

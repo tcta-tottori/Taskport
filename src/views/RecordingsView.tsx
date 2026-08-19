@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { Reveal } from '../components/Reveal'
-import { durationLabel } from '../lib/date'
+import { dayOfIso, durationLabel } from '../lib/date'
 import { repository } from '../repository'
 import { RECORDING_KEEP, type Recording } from '../types'
+import type { WhisperProgress } from '../lib/whisper'
 
 /* =========================================================
  * 録音履歴
@@ -26,7 +27,31 @@ function sizeLabel(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: 'ok' | 'error') => void }) {
+export function RecordingsView({
+  onNotify,
+  canRefine,
+  canGemini,
+  refining,
+  modelLabel,
+  onRefine,
+  onRefineGemini,
+  onStopRefine,
+}: {
+  onNotify: (text: string, tone?: 'ok' | 'error') => void
+  /** 端末内Whisperを動かせるか */
+  canRefine?: boolean
+  /** GeminiのAPIキーが入っているか */
+  canGemini?: boolean
+  /** 取り直しの進み具合。null なら走っていない */
+  refining?: WhisperProgress | null
+  /** 初回に取り込む量の目安（「約80MB」） */
+  modelLabel?: string
+  /** この録音から端末内で取り直し、確認画面へ渡す */
+  onRefine?: (recordingId: string) => void
+  /** この録音を Gemini へ送って取り直す */
+  onRefineGemini?: (recordingId: string) => void
+  onStopRefine?: () => void
+}) {
   const [items, setItems] = useState<Recording[]>([])
   const [loading, setLoading] = useState(true)
   const [playing, setPlaying] = useState<string | null>(null)
@@ -77,7 +102,7 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
     const a = document.createElement('a')
     const u = URL.createObjectURL(blob)
     a.href = u
-    a.download = `taskport-${rec.createdAt.slice(0, 10)}-${rec.id.slice(-6)}.${ext}`
+    a.download = `taskport-${dayOfIso(rec.createdAt)}-${rec.id.slice(-6)}.${ext}`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -116,6 +141,23 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
 
   return (
     <div className="tp-view">
+      {refining && (
+        <div className="tp-refine" role="status">
+          <p className="tp-refine-now">
+            <span className="tp-spin" aria-hidden="true" />
+            {refining.message}
+          </p>
+          {refining.percent !== null && (
+            <div className="tp-progress">
+              <span style={{ width: `${Math.min(100, refining.percent)}%` }} />
+            </div>
+          )}
+          <button type="button" className="tp-link-quiet" onClick={onStopRefine}>
+            やめる
+          </button>
+        </div>
+      )}
+
       {items.map((rec) => (
         <Reveal key={rec.id}>
           <section className="tp-panel tp-recitem">
@@ -164,6 +206,30 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
                 <Icon name="download" size={14} />
                 音声を保存
               </button>
+              {/* 音声が残っていれば、あとから聞き直して文字を作り直せる */}
+              {canRefine && (
+                <button
+                  type="button"
+                  className="tp-chip-btn"
+                  disabled={rec.bytes === 0 || !!refining}
+                  onClick={() => onRefine?.(rec.id)}
+                >
+                  <Icon name="sparkle" size={14} />
+                  端末内で取り直す
+                </button>
+              )}
+              {canGemini && (
+                <button
+                  type="button"
+                  className="tp-chip-btn"
+                  disabled={rec.bytes === 0 || !!refining}
+                  onClick={() => onRefineGemini?.(rec.id)}
+                  title="録音した音声そのものを Google へ送ります"
+                >
+                  <Icon name="share" size={14} />
+                  Geminiで取り直す
+                </button>
+              )}
               {confirmId === rec.id ? (
                 <>
                   <button type="button" className="tp-chip-btn" onClick={() => setConfirmId(null)}>
@@ -187,6 +253,9 @@ export function RecordingsView({ onNotify }: { onNotify: (text: string, tone?: '
 
       <p className="tp-list-foot">
         録音は新しい方から {RECORDING_KEEP} 本まで端末内に残します。古いものは自動で消えます。
+        {canRefine &&
+          `「端末内で取り直す」は、保存してある音声を端末の中だけで聞き直します。音声は外へ出ません。初回だけモデル（${modelLabel ?? ''}）を取り込みます。`}
+        {canGemini && '「Geminiで取り直す」は、録音した音声そのものを Google へ送ります。'}
       </p>
     </div>
   )

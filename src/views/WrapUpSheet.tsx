@@ -1,5 +1,5 @@
 import { Icon } from '../components/Icon'
-import { addDaysKey, diffDays, dueLabel, durationLabel, formatMD } from '../lib/date'
+import { addDaysKey, dayOfIso, diffDays, dueLabel, durationLabel, formatMD } from '../lib/date'
 import { sortTasks } from '../lib/tasks'
 import { taskMinutes, workMinutes } from '../lib/workday'
 import type { Settings, Task } from '../types'
@@ -34,7 +34,7 @@ export function WrapUpSheet({
   const open = tasks.filter((t) => t.status === 'open')
   const left = sortTasks(open.filter((t) => !!t.due && diffDays(t.due, today) <= 0))
   const next = sortTasks(open.filter((t) => t.due === tomorrow))
-  const doneToday = tasks.filter((t) => t.status === 'done' && (t.doneAt ?? '').slice(0, 10) === today)
+  const doneToday = tasks.filter((t) => t.status === 'done' && dayOfIso(t.doneAt) === today)
 
   const mins = (list: Task[]) =>
     list.reduce((s, t) => s + taskMinutes(t, settings.defaultEstimateMin), 0)

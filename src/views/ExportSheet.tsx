@@ -9,7 +9,8 @@ import { toGoogleCalendarUrl, toIcs, workHoursIcs } from '../ports/out/toCalenda
 import { pushTasks } from '../ports/out/toGoogleCalendar'
 import { copyText, downloadText } from '../ports/out/download'
 import { workHoursSummary } from '../lib/workday'
-import type { Settings, Task } from '../types'
+import { occurrencesOn } from '../lib/plans'
+import type { Plan, Settings, Task } from '../types'
 
 /* =========================================================
  * 出力形式の選択
@@ -32,12 +33,15 @@ export function ExportSheet({
   tasks,
   today,
   settings,
+  plans,
   onClose,
   onNotify,
 }: {
   tasks: Task[]
   today: string
   settings: Settings
+  /** その日の予定。日報の枠を先に取る（台帳には混ぜない） */
+  plans: Plan[]
   onClose: () => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
@@ -50,12 +54,21 @@ export function ExportSheet({
   const withDue = useMemo(() => open.filter((t) => !!t.due), [open])
   const selected = useMemo(() => withDue.filter((t) => picked.has(t.id)), [withDue, picked])
   const wh = workHoursSummary(settings.workHours)
+  // 予定はその日ぶんだけ展開する（繰り返しは持ち回らない）
+  const occurrences = useMemo(
+    () =>
+      occurrencesOn(plans, today, {
+        workHours: settings.workHours,
+        workCalendar: settings.workCalendar,
+      }),
+    [plans, today, settings.workHours, settings.workCalendar],
+  )
 
   const preview =
     form === 'worklog'
-      ? toWorkLogTsv(tasks, today, settings.workHours, settings.defaultEstimateMin)
+      ? toWorkLogTsv(tasks, today, settings.workHours, settings.defaultEstimateMin, occurrences)
       : form === 'report'
-        ? toDailyReport(tasks, today)
+        ? toDailyReport(tasks, today, occurrences)
         : form === 'standup'
           ? toStandupText(tasks, today)
           : toBulletList(open)

@@ -9,6 +9,7 @@ import { applyFilter, isFilterActive } from '../lib/taskFilter'
 import { diffDays, durationLabel } from '../lib/date'
 import { workloadOf } from '../lib/stats'
 import { isWorkDay, trim } from '../lib/workday'
+import { running } from '../lib/worklog'
 import type { SavedFilter, Settings, Task, TaskFilter } from '../types'
 
 /* =========================================================
@@ -44,6 +45,7 @@ export function ListView({
   onToggle,
   onEdit,
   onToggleSubtask,
+  onToggleRunning,
   filter,
   onFilterChange,
   saved,
@@ -61,6 +63,8 @@ export function ListView({
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
   onToggleSubtask: (task: Task, subtaskId: string) => void
+  /** いま手を付ける／手を止める */
+  onToggleRunning: (task: Task) => void
   filter: TaskFilter
   onFilterChange: (next: TaskFilter) => void
   saved: SavedFilter[]
@@ -91,6 +95,8 @@ export function ListView({
     [searching, found, tasks, tab, today],
   )
   const load = useMemo(() => workloadOf(tasks, today, settings), [tasks, today, settings])
+  // 手を付けているものは期限が今日とは限らないので、台帳の全件から探す
+  const live = useMemo(() => running(tasks)[0] ?? null, [tasks])
   const working = isWorkDay(today, settings.workHours, settings.workCalendar)
   const overdueCount = useMemo(
     () => tasks.filter((t) => t.status === 'open' && !!t.due && diffDays(t.due, today) < 0).length,
@@ -137,12 +143,14 @@ export function ListView({
       {!searching && tab === 'today' && (
         <TodayFlow
           tasks={load.tasks}
+          live={live}
           today={today}
           settings={settings}
           nowMin={nowMin}
           overdue={overdueCount}
           onToggle={onToggle}
           onEdit={onEdit}
+          onToggleRunning={onToggleRunning}
           onTriage={onTriage}
           onWrapUp={onWrapUp}
         />
@@ -200,6 +208,7 @@ export function ListView({
               onToggle={onToggle}
               onEdit={onEdit}
               onToggleSubtask={onToggleSubtask}
+              onToggleRunning={onToggleRunning}
               workHours={settings.workHours}
               categoryGroups={settings.categoryGroups}
             />
