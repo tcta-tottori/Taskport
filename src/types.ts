@@ -378,6 +378,12 @@ export interface Settings {
   /** 録音中に画面を点けたままにするか */
   keepAwake: boolean
   /**
+   * アプリを開いている間、画面を消さないか。
+   * 現場で端末を置いたまま使う（実行の画面を見ながら手を動かす）ので既定は入。
+   * 電池を使うので設定で切れる。裏へ回すと端末側で外れ、戻ると取り直す。
+   */
+  screenAwake: boolean
+  /**
    * 文章の解析に Gemini を使うか。
    * **入れると、解析にかける文章が Google のサーバへ出る。**
    * 既定は切。APIキー（端末内の localStorage にのみ置く）が無ければ、
@@ -421,6 +427,7 @@ export const DEFAULT_SETTINGS: Settings = {
   keepAudio: true,
   whisperModel: 'base',
   keepAwake: false,
+  screenAwake: true,
   // Gemini は既定で使わない。キーを入れて、ここを入れたときだけ文章が外へ出る
   geminiEnabled: false,
   geminiModel: 'gemini-3.5-flash',

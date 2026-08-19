@@ -10,9 +10,13 @@ const TP_NOTIF_ACTIONS = {
   resume: 'tp-resume-recording',
 };
 
+// リマインド（タスクの期限・予定の開始）の札。録音の常駐通知と見分ける。
+const TP_REMIND_TAGS = ['taskport-due-', 'taskport-plan-'];
+const tpIsRemind = (tag) => TP_REMIND_TAGS.some((p) => String(tag || '').startsWith(p));
+
 self.addEventListener('notificationclick', (event) => {
-  // 期限のリマインドは下のハンドラが受け持つ（二重に窓を開かないため）
-  if (String(event.notification.tag || '').startsWith('taskport-due-')) return;
+  // リマインドは下のハンドラが受け持つ（二重に窓を開かないため）
+  if (tpIsRemind(event.notification.tag)) return;
   const msgType = TP_NOTIF_ACTIONS[event.action] || '';
   // 一時停止・再開は通知を残したまま、画面も前面に出さない
   // （通知だけで操作できるようにするため）
@@ -34,10 +38,10 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// 期限のリマインドをタップしたらアプリを前面に出す。
-// tag が taskport-due- で始まるものがそれ。
+// リマインド（タスクの期限・予定の開始）をタップしたらアプリを前面に出す。
+// tag が taskport-due- / taskport-plan- で始まるものがそれ。
 self.addEventListener('notificationclick', (event) => {
-  if (!String(event.notification.tag || '').startsWith('taskport-due-')) return;
+  if (!tpIsRemind(event.notification.tag)) return;
   event.notification.close();
   event.waitUntil(
     (async () => {

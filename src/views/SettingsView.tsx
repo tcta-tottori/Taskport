@@ -19,6 +19,7 @@ import {
 import { APP_VERSION, buildLabel } from '../version'
 import { acquireToken, disconnect, isConnected } from '../lib/googleAuth'
 import { askPermission, leadLabel, notificationsUsable, triggersSupported } from '../lib/reminder'
+import { wakeLockSupported } from '../lib/keepAlive'
 import { WHISPER_MODELS, whisperSupported } from '../lib/whisper'
 import { GEMINI_MODELS, isLikelyKey, keyShape, loadKey, saveKey } from '../lib/gemini'
 
@@ -488,6 +489,38 @@ export function SettingsView({
 
       <Reveal>
         <section className="tp-panel">
+          <h2 className="tp-panel-title">画面</h2>
+          <p className="tp-note">
+            現場では端末を置いたまま実行の画面を見て手を動かすので、
+            <b>アプリを開いている間は画面を消さない</b>ようにしてあります。
+            電池を使うので、切ることもできます。
+          </p>
+          <label className="tp-switch">
+            <span>
+              <b>アプリを開いている間は画面を消さない</b>
+              <small>
+                {wakeLockSupported()
+                  ? '裏へ回すと端末側で解除され、戻ってくると点け直します。'
+                  : 'この端末（ブラウザ）は対応していないので、切り替えても効きません。'}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.screenAwake}
+              disabled={!wakeLockSupported()}
+              onChange={(e) => {
+                const next = { ...draft, screenAwake: e.target.checked }
+                setDraft(next)
+                // 画面の点灯はすぐ効かせたいので、この項目だけその場で保存する
+                onSave(next)
+              }}
+            />
+          </label>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
           <h2 className="tp-panel-title">予定の計上</h2>
           <p className="tp-note">
             予定（打合せ・固定の業務）は、時刻になったら実行の時間を自動で数えられます。
@@ -532,14 +565,15 @@ export function SettingsView({
 
       <Reveal>
         <section className="tp-panel">
-          <h2 className="tp-panel-title">期限のリマインド</h2>
+          <h2 className="tp-panel-title">リマインド</h2>
           <p className="tp-note">
-            <b>時刻を入れたタスク</b>だけが対象です。期限が日付だけのものは通知しません。
+            <b>時刻を入れたタスクの期限</b>と、<b>予定の開始</b>が対象です。
+            期限が日付だけのタスクと、終日の予定は通知しません。
           </p>
 
           <label className="tp-switch">
             <span>
-              <b>締め切り前に通知する</b>
+              <b>締め切り・予定の前に通知する</b>
               <small>
                 {triggersSupported()
                   ? 'この端末は予約に対応しています。アプリを閉じていても通知が出ます。'

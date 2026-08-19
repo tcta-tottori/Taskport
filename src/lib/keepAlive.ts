@@ -130,9 +130,22 @@ export function releaseKeepAlive(): void {
 
 let wakeLock: WakeLockSentinel | null = null
 
-export async function acquireWakeLock(): Promise<void> {
+/**
+ * いま画面を点けたままにしている理由の集まり。
+ * 録音中とアプリを開いている間の2つが同時に要ることがあり、
+ * 片方が終わったときにもう片方まで消さないよう、数えてから外す。
+ */
+const holders = new Set<string>()
+
+export function wakeLockSupported(): boolean {
+  return 'wakeLock' in navigator
+}
+
+/** @param reason 誰が要求しているか（'recording' / 'app'） */
+export async function acquireWakeLock(reason = 'recording'): Promise<void> {
+  holders.add(reason)
   if (wakeLock) return // 取り直すと前のロックを手放せなくなる
-  if (!('wakeLock' in navigator)) return
+  if (!wakeLockSupported()) return
   try {
     wakeLock = await navigator.wakeLock.request('screen')
     wakeLock.addEventListener('release', () => {
@@ -143,11 +156,31 @@ export async function acquireWakeLock(): Promise<void> {
   }
 }
 
-export async function releaseWakeLock(): Promise<void> {
+export async function releaseWakeLock(reason = 'recording'): Promise<void> {
+  holders.delete(reason)
+  if (holders.size > 0) return // まだ要る人がいる
   try {
     await wakeLock?.release()
   } catch {
     /* noop */
   }
   wakeLock = null
+}
+
+/**
+ * 画面が戻ってきたときに取り直す。
+ * 画面を消したりアプリを裏へ回したりすると、端末側でロックが外れる。
+ * 要求している人が残っていれば、戻った時点で取り直す。
+ */
+export async function refreshWakeLock(): Promise<void> {
+  if (holders.size === 0 || wakeLock) return
+  if (!wakeLockSupported()) return
+  try {
+    wakeLock = await navigator.wakeLock.request('screen')
+    wakeLock.addEventListener('release', () => {
+      wakeLock = null
+    })
+  } catch {
+    wakeLock = null
+  }
 }

@@ -1,4 +1,4 @@
-import { diffDays, isDayKey, isTimeKey, toMinutes } from './date'
+import { DEFAULT_TIME, diffDays, isDayKey, isTimeKey, toMinutes } from './date'
 import { trim } from './workday'
 import { stepDay, type WorkRule } from './repeat'
 import { ulid } from './ulid'
@@ -20,16 +20,29 @@ import type { Plan, PlanOccurrence, Settings } from '../types'
 /** 予定の既定の長さ（分）。時刻を入れて終わりを決めていないときに使う。 */
 export const DEFAULT_PLAN_MIN = 60
 
+/** 新しい予定の既定の時間帯。空欄から時刻を回させないための下敷き（10:00〜11:00）。 */
+function defaultSpan(): { start: string; end: string } {
+  const from = toMinutes(DEFAULT_TIME) ?? 600
+  const to = Math.min(23 * 60 + 59, from + DEFAULT_PLAN_MIN)
+  return {
+    start: DEFAULT_TIME,
+    end: `${String(Math.floor(to / 60)).padStart(2, '0')}:${String(to % 60).padStart(2, '0')}`,
+  }
+}
+
 export function emptyPlan(day: string, settings: Settings): Plan {
   const now = new Date().toISOString()
+  // 予定はほとんど時間の決まっているものなので、既定で 10:00〜11:00 を入れておく。
+  // 終日にするときは切り替えで外れる。
+  const span = defaultSpan()
   return {
     id: ulid(),
     title: '',
     note: '',
     place: '',
     day,
-    startTime: null,
-    endTime: null,
+    startTime: span.start,
+    endTime: span.end,
     allDay: false,
     categories: [],
     autoTrack: settings.planAutoTrack,

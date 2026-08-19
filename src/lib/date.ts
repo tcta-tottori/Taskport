@@ -62,6 +62,14 @@ export function isDayKey(v: unknown): v is string {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 }
 
+/**
+ * 時刻の欄を空のまま押したときに入れる既定値。
+ * 端末の選択画面は「いまの時刻」から始まるので、朝でも夜でも業務時間まで
+ * 回すことになっていた。実際に入れる時刻はほぼ勤務時間の中なので、
+ * 午前のいちばん使う時刻を既定にしてある。
+ */
+export const DEFAULT_TIME = '10:00'
+
 export function isTimeKey(v: unknown): v is string {
   return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v)
 }

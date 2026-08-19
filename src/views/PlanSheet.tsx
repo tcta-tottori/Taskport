@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { CategoryChip } from '../components/CategoryChip'
+import { TimeField } from '../components/TimeField'
 import { CategorySheet } from './CategorySheet'
-import { cleanPlan, planSpan } from '../lib/plans'
+import { cleanPlan, DEFAULT_PLAN_MIN, planSpan } from '../lib/plans'
 import { colorOf, detectCategories } from '../lib/workCategories'
 import { emptyRepeat, REPEAT_UNITS } from '../lib/repeat'
-import { weekdayOf } from '../lib/date'
+import { toMinutes, weekdayOf } from '../lib/date'
 import type { CategoryGroup, Plan, RepeatUnit } from '../types'
 
 /* =========================================================
@@ -19,6 +20,21 @@ import type { CategoryGroup, Plan, RepeatUnit } from '../types'
  * =======================================================*/
 
 const WEEK = ['日', '月', '火', '水', '木', '金', '土']
+
+/**
+ * 開始を動かしたときの終了。
+ * 終了が空、または開始より前になったら、既定の長さ（60分）ぶん後ろへ送る。
+ * 黙って捨てると「終わりの無い予定」になり、枠の埋まり具合が実際と合わなくなる。
+ */
+function followEnd(start: string | null, end: string | null): string | null {
+  if (!start) return end
+  const from = toMinutes(start)
+  const to = end ? toMinutes(end) : null
+  if (from === null) return end
+  if (to !== null && to > from) return end
+  const next = Math.min(23 * 60 + 59, from + DEFAULT_PLAN_MIN)
+  return `${String(Math.floor(next / 60)).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`
+}
 
 export function PlanSheet({
   plan,
@@ -108,24 +124,24 @@ export function PlanSheet({
                   onChange={(e) => e.target.value && change({ day: e.target.value })}
                 />
               </label>
-              <label className="tp-field">
+              <div className="tp-field">
                 <span className="tp-label">開始</span>
-                <input
-                  type="time"
-                  value={draft.startTime ?? ''}
+                <TimeField
+                  value={draft.startTime}
+                  ariaLabel="開始時刻"
                   disabled={draft.allDay}
-                  onChange={(e) => change({ startTime: e.target.value || null })}
+                  onChange={(startTime) => change({ startTime, endTime: followEnd(startTime, draft.endTime) })}
                 />
-              </label>
-              <label className="tp-field">
+              </div>
+              <div className="tp-field">
                 <span className="tp-label">終了</span>
-                <input
-                  type="time"
-                  value={draft.endTime ?? ''}
+                <TimeField
+                  value={draft.endTime}
+                  ariaLabel="終了時刻"
                   disabled={draft.allDay}
-                  onChange={(e) => change({ endTime: e.target.value || null })}
+                  onChange={(endTime) => change({ endTime })}
                 />
-              </label>
+              </div>
             </div>
 
             <label className="tp-switch">

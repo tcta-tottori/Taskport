@@ -30,7 +30,7 @@ import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
 import { voiceSupported } from './ports/in/useVoiceInput'
 import { addDaysKey, dayKey, diffDays, durationLabel, formatMD, timeKey, toMinutes } from './lib/date'
-import { cleanPlan, emptyPlan, occurrencesOn } from './lib/plans'
+import { cleanPlan, emptyPlan, occurrencesInRange, occurrencesOn } from './lib/plans'
 import {
   autoTrack,
   beginRun,
@@ -54,6 +54,7 @@ import {
   startForegroundReminders,
   type ForegroundReminders,
 } from './lib/reminder'
+import { acquireWakeLock, refreshWakeLock, releaseWakeLock } from './lib/keepAlive'
 import { ulid } from './lib/ulid'
 import { applyTemplate, forget, remember, touch } from './lib/templates'
 import { cleanCategories } from './lib/workCategories'
@@ -933,21 +934,56 @@ export default function App() {
     [reload, reloadWork, settings],
   )
 
-  /* --- 期限のリマインド ---
+  /* --- 画面を消さない ---
+     現場では端末を置いたまま実行の画面を見て手を動かすので、既定で点けたままにする。
+     裏へ回すと端末側でロックが外れるため、戻ってきたら取り直す。
+     録音中のロックとは別々に数えるので、録音が終わってもここは切れない。 */
+  useEffect(() => {
+    if (!settings.screenAwake) {
+      void releaseWakeLock('app')
+      return
+    }
+    void acquireWakeLock('app')
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshWakeLock()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      void releaseWakeLock('app')
+    }
+  }, [settings.screenAwake])
+
+  /* --- 期限と予定のリマインド ---
      予約に対応した端末では、7日先までのぶんを Service Worker に預ける。
      対応していない端末では、アプリを開いている間だけタイマーで出す。
-     どちらも端末内で完結し、予定を外へ送らない。 */
+     どちらも端末内で完結し、中身を外へ送らない（プッシュサーバは持たない）。 */
+
+  /** 通知に使う予定の展開。7日先まで（リマインドの見る範囲と同じ） */
+  const planHorizon = useMemo(
+    () =>
+      occurrencesInRange(plans, today, addDaysKey(today, 7), {
+        workHours: settings.workHours,
+        workCalendar: settings.workCalendar,
+      }),
+    [plans, today, settings.workHours, settings.workCalendar],
+  )
+  // あとから走るタイマーが古い予定を掴まないよう、いまの展開を持っておく
+  const planHorizonRef = useRef(planHorizon)
+  planHorizonRef.current = planHorizon
+
   useEffect(() => {
     if (loading) return
-    void rescheduleReminders(tasks, settings)
-  }, [tasks, settings, loading])
+    void rescheduleReminders(tasks, planHorizon, settings)
+  }, [tasks, planHorizon, settings, loading])
 
   const fgRef = useRef<ForegroundReminders | null>(null)
   useEffect(() => {
     const fg = startForegroundReminders(
       () => liveRef.current.tasks,
+      () => planHorizonRef.current,
       () => liveRef.current.settings,
-      (task) => void showDueNotification(task, liveRef.current.settings.reminderLeadMin),
+      (hit) => void showDueNotification(hit, liveRef.current.settings.reminderLeadMin),
     )
     fgRef.current = fg
     return () => {
@@ -955,10 +991,10 @@ export default function App() {
       fg.stop()
     }
   }, [])
-  // 台帳や設定が変わったら張り直す（起動直後の読み込み完了もここを通る）
+  // 台帳・予定・設定が変わったら張り直す（起動直後の読み込み完了もここを通る）
   useEffect(() => {
     fgRef.current?.refresh()
-  }, [tasks, settings])
+  }, [tasks, planHorizon, settings])
 
   /* --- 端末どうしの同期 ---
      置き場は Google Drive のアプリ専用フォルダ。1件ずつ更新時刻で

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { CategoryChip } from '../components/CategoryChip'
+import { TimeField } from '../components/TimeField'
 import { CategorySheet } from './CategorySheet'
 import {
   PRIORITIES,
@@ -105,14 +106,14 @@ export function DraftFields({
             onChange={(e) => onChange({ due: e.target.value || null })}
           />
         </label>
-        <label className="tp-field">
+        <div className="tp-field">
           <span className="tp-label">時刻</span>
-          <input
-            type="time"
-            value={draft.dueTime ?? ''}
-            onChange={(e) => onChange({ dueTime: e.target.value || null })}
+          <TimeField
+            value={draft.dueTime}
+            ariaLabel="時刻"
+            onChange={(dueTime) => onChange({ dueTime })}
           />
-        </label>
+        </div>
         <label className="tp-field tp-field-narrow">
           <span className="tp-label">見込み</span>
           <div className="tp-suffix">

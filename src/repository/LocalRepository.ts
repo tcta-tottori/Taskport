@@ -550,6 +550,8 @@ export class LocalRepository implements Repository {
       // 区分のマスタ。無い（v1.10 以前）なら既定を入れる
       categoryGroups: normalizeGroups(raw.categoryGroups),
       syncEnabled: raw.syncEnabled === true,
+      // 後から足した項目。古い保存には無いので既定（入）で埋める
+      screenAwake: raw.screenAwake !== false,
       reminderEnabled: raw.reminderEnabled === true,
       reminderLeadMin: typeof raw.reminderLeadMin === 'number' ? raw.reminderLeadMin : 10,
     }

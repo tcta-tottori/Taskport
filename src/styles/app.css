@@ -578,6 +578,16 @@ body::before {
 .tp-field input[type="date"], .tp-field input[type="time"], .tp-field input[type="number"] {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
 }
+/* 時刻の欄。入れた時刻は ✕ で消せる（時刻なしに戻す道を消さない） */
+.tp-timefield { position: relative; display: flex; align-items: center; min-width: 0; }
+.tp-timefield input { padding-right: 34px; }
+.tp-time-clear {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 50%; color: var(--faint); background: var(--surface);
+}
+.tp-time-clear:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
 .tp-suffix { position: relative; display: flex; align-items: center; }
 .tp-suffix input { padding-right: 34px; }
 .tp-suffix > span { position: absolute; right: 12px; font-size: 12px; color: var(--muted); pointer-events: none; }
