@@ -62,7 +62,13 @@ export interface WorkRule {
   workCalendar?: WorkCalendar | null
 }
 
-/** from の翌日以降で、条件に合う最初の日を1つ返す */
+/**
+ * from の翌日以降で、条件に合う最初の日を1つ返す。
+ *
+ * タスクは「完了にしたときに次の1件を作る」ので普段は `nextDue` から使うが、
+ * 予定（Plan）は作り置きせず画面に出すときに展開するため、
+ * 1回ぶんずつ進める道具としてそのまま外へ出してある（`stepDay`）。
+ */
 function step(from: string, repeat: Repeat, rule: WorkRule): string {
   switch (repeat.unit) {
     case 'day':
@@ -150,4 +156,12 @@ export function nextOccurrence(task: Task, today: string, rule: WorkRule): Task 
     createdAt: now,
     updatedAt: now,
   }
+}
+
+/**
+ * 繰り返しを1回ぶん進める。予定（Plan）の展開に使う。
+ * `nextDue` と違い「今日より後」までは送らない（過去の回も並べたいため）。
+ */
+export function stepDay(from: string, repeat: Repeat, rule: WorkRule): string {
+  return step(from, repeat, rule)
 }

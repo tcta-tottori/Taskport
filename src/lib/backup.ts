@@ -1,7 +1,7 @@
 import { isDayKey, isTimeKey } from './date'
 import { ulid } from './ulid'
 import { cleanCategories, normalizeGroups } from './workCategories'
-import { PRIORITIES, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task, type TimeboxKey } from '../types'
+import { PRIORITIES, type Plan, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task, type TimeboxKey } from '../types'
 
 /* =========================================================
  * JSON バックアップ（端末故障・キャッシュ削除への備え）
@@ -15,15 +15,23 @@ export interface BackupFile {
   version: 1
   exportedAt: string
   tasks: Task[]
+  /** 予定（打合せ・固定の業務）。v1.14.0 から。古いファイルには入っていない */
+  plans?: Plan[]
   settings?: Settings
 }
 
-export function makeBackup(tasks: Task[], settings: Settings): string {
+/**
+ * 書き出す中身。
+ * **実行ログ（開始・終了の記録）は入れない。** あれはその端末で動かした実績で、
+ * 別の端末へ移して意味のあるものではない（移すと同じ時間が二重に立つ）。
+ */
+export function makeBackup(tasks: Task[], settings: Settings, plans: Plan[] = []): string {
   const payload: BackupFile = {
     app: 'taskport',
     version: 1,
     exportedAt: new Date().toISOString(),
     tasks,
+    plans,
     settings,
   }
   return JSON.stringify(payload, null, 2)
@@ -94,8 +102,38 @@ function toTask(raw: unknown): Task | null {
   }
 }
 
+/** 取り込んだ予定。件名か日付が無いものは捨てる（日付が無いと展開できない） */
+function toPlan(raw: unknown): Plan | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const o = raw as Record<string, unknown>
+  const id = typeof o.id === 'string' ? o.id : ''
+  const title = typeof o.title === 'string' ? o.title.trim() : ''
+  if (!id || !title || !isDayKey(o.day)) return null
+  const now = new Date().toISOString()
+  const startTime = isTimeKey(o.startTime) ? o.startTime : null
+  return {
+    id,
+    title,
+    note: typeof o.note === 'string' ? o.note : '',
+    place: typeof o.place === 'string' ? o.place : '',
+    day: o.day,
+    startTime,
+    endTime: isTimeKey(o.endTime) ? o.endTime : null,
+    allDay: o.allDay === true || !startTime,
+    categories: Array.isArray(o.categories)
+      ? cleanCategories(o.categories.filter((c): c is string => typeof c === 'string'))
+      : [],
+    autoTrack: o.autoTrack !== false,
+    repeat: toRepeat(o.repeat),
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : now,
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : now,
+  }
+}
+
 export interface RestoreResult {
   tasks: Task[]
+  /** 予定。古いファイルには入っていないので空になる */
+  plans: Plan[]
   settings: Partial<Settings> | null
   /** 形が合わずに取り込めなかった件数 */
   skipped: number
@@ -124,6 +162,14 @@ export function readBackup(json: string): RestoreResult {
     if (t) tasks.push(t)
     else skipped++
   }
+  const plans: Plan[] = []
+  if (typeof data === 'object' && data !== null && Array.isArray((data as BackupFile).plans)) {
+    for (const item of (data as BackupFile).plans as unknown[]) {
+      const p = toPlan(item)
+      if (p) plans.push(p)
+      else skipped++
+    }
+  }
   const raw =
     typeof data === 'object' && data !== null && typeof (data as BackupFile).settings === 'object'
       ? ((data as BackupFile).settings as Partial<Settings>)
@@ -132,5 +178,5 @@ export function readBackup(json: string): RestoreResult {
   const settings = raw
     ? { ...raw, categoryGroups: normalizeGroups(raw.categoryGroups) }
     : null
-  return { tasks, settings, skipped }
+  return { tasks, plans, settings, skipped }
 }

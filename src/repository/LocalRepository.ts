@@ -7,10 +7,12 @@ import {
   DEFAULT_WORK_HOURS,
   RECORDING_KEEP,
   TEMPLATE_KEEP,
+  type Plan,
   type Recording,
   type Settings,
   type Task,
   type TaskTemplate,
+  type WorkRun,
 } from '../types'
 
 /* =========================================================
@@ -34,6 +36,12 @@ const TOMBSTONE_KEY = 'tombstones'
 /** meta ストアの中で「記憶したタスク」を置くキー */
 const TEMPLATE_KEY = 'templates'
 const MEDIA_DB = 'taskport-media'
+/**
+ * 予定と実行ログ。**台帳とは別のDB**にする。
+ * 保存先が増えるたびに台帳の版を上げると、古い版を掴んだタブがあるだけで
+ * アップグレード待ちで固まる（v1.2.0 の不具合）。DBを足すぶんには何も起きない。
+ */
+const WORK_DB = 'taskport-work'
 
 /** 開けなかったときに諦めるまでの回数（端末が寝起きのときは1回目だけ落ちることがある） */
 const OPEN_TRIES = 3
@@ -47,6 +55,19 @@ interface MainDB extends DBSchema {
   meta: {
     key: string
     value: unknown
+  }
+}
+
+interface WorkDB extends DBSchema {
+  plans: {
+    key: string
+    value: Plan
+    indexes: { by_day: string }
+  }
+  runs: {
+    key: string
+    value: WorkRun
+    indexes: { by_day: string; by_target: string }
   }
 }
 
@@ -334,6 +355,36 @@ function media(): Promise<IDBPDatabase<MediaDB>> {
   return mediaPromise
 }
 
+let workPromise: Promise<IDBPDatabase<WorkDB>> | null = null
+
+/** 予定と実行ログ。ここが開けなくても、台帳（タスク）は読める。 */
+function work(): Promise<IDBPDatabase<WorkDB>> {
+  if (!workPromise) {
+    workPromise = openWithRetry<WorkDB>(
+      WORK_DB,
+      1,
+      (d) => {
+        if (!d.objectStoreNames.contains('plans')) {
+          const store = d.createObjectStore('plans', { keyPath: 'id' })
+          store.createIndex('by_day', 'day')
+        }
+        if (!d.objectStoreNames.contains('runs')) {
+          const store = d.createObjectStore('runs', { keyPath: 'id' })
+          store.createIndex('by_day', 'day')
+          store.createIndex('by_target', 'targetId')
+        }
+      },
+      () => {
+        workPromise = null
+      },
+    ).catch((err) => {
+      workPromise = null
+      throw err
+    })
+  }
+  return workPromise
+}
+
 /** 区分。v1.10 以前の1つだけの形（category: string）も読めるようにする。 */
 function normalizeCategories(raw: Task & { category?: unknown }): string[] {
   if (Array.isArray(raw.categories)) {
@@ -365,6 +416,35 @@ function normalizeTask(raw: Task): Task {
     status: raw.status ?? 'open',
     source: raw.source ?? 'form',
     doneAt: raw.doneAt ?? null,
+  }
+}
+
+/** 予定。後から足した項目が欠けていても画面が壊れないようにする。 */
+function normalizePlan(raw: Plan): Plan {
+  return {
+    ...raw,
+    note: raw.note ?? '',
+    place: raw.place ?? '',
+    startTime: raw.startTime ?? null,
+    endTime: raw.endTime ?? null,
+    allDay: raw.allDay === true || !raw.startTime,
+    categories: Array.isArray(raw.categories) ? cleanCategories(raw.categories) : [],
+    autoTrack: raw.autoTrack !== false,
+    repeat: raw.repeat ?? null,
+  }
+}
+
+/** 実行ログ。区間の形が壊れているものは落とす（実績を推測で埋めない）。 */
+function normalizeRun(raw: WorkRun): WorkRun {
+  const segments = Array.isArray(raw.segments)
+    ? raw.segments.filter((s) => s && typeof s.start === 'string')
+    : []
+  return {
+    ...raw,
+    categories: Array.isArray(raw.categories) ? raw.categories : [],
+    segments,
+    state: raw.state === 'running' || raw.state === 'paused' ? raw.state : 'done',
+    auto: raw.auto === true,
   }
 }
 
@@ -490,6 +570,68 @@ export class LocalRepository implements Repository {
 
   async saveTemplates(list: TaskTemplate[]): Promise<void> {
     await (await main()).put('meta', list.slice(0, TEMPLATE_KEEP), TEMPLATE_KEY)
+  }
+
+  /* --- 予定。台帳とは別のDBなので、ここが開けなくてもタスクは読める --- */
+
+  async listPlans(): Promise<Plan[]> {
+    const all = await (await work()).getAll('plans')
+    return all.map(normalizePlan)
+  }
+
+  async savePlan(plan: Plan): Promise<void> {
+    await (await work()).put('plans', plan)
+  }
+
+  /**
+   * 予定を消す。**実行の記録は消さない。**
+   * あれは「実際にその時間動いた」という実績で、予定を取り下げても起きたことは変わらない。
+   */
+  async removePlan(id: string): Promise<void> {
+    await (await work()).delete('plans', id)
+  }
+
+  async replaceAllPlans(plans: Plan[]): Promise<void> {
+    const d = await work()
+    const tx = d.transaction('plans', 'readwrite')
+    await tx.store.clear()
+    await Promise.all(plans.map((p) => tx.store.put(normalizePlan(p))))
+    await tx.done
+  }
+
+  /* --- 実行ログ。積むだけで、後から時刻を書き換えない --- */
+
+  async listRuns(fromDay?: string): Promise<WorkRun[]> {
+    const all = await (await work()).getAll('runs')
+    const list = all.map(normalizeRun).filter((r) => !fromDay || r.day >= fromDay)
+    // ULID は時系列に並ぶので、古い順にするだけでよい
+    return list.sort((a, b) => (a.id < b.id ? -1 : 1))
+  }
+
+  async saveRun(run: WorkRun): Promise<void> {
+    await (await work()).put('runs', run)
+  }
+
+  async saveRuns(runs: WorkRun[]): Promise<void> {
+    if (runs.length === 0) return
+    const d = await work()
+    const tx = d.transaction('runs', 'readwrite')
+    await Promise.all(runs.map((r) => tx.store.put(r)))
+    await tx.done
+  }
+
+  async removeRun(id: string): Promise<void> {
+    await (await work()).delete('runs', id)
+  }
+
+  async pruneRuns(beforeDay: string): Promise<number> {
+    const d = await work()
+    const tx = d.transaction('runs', 'readwrite')
+    const all = await tx.store.getAll()
+    const old = all.filter((r) => typeof r.day === 'string' && r.day < beforeDay)
+    for (const r of old) await tx.store.delete(r.id)
+    await tx.done
+    return old.length
   }
 
   /* --- 録音。開けなくても台帳の操作は続けられるようにする --- */

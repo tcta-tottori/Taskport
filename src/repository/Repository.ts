@@ -1,4 +1,4 @@
-import type { Recording, Settings, Task, TaskTemplate } from '../types'
+import type { Plan, Recording, Settings, Task, TaskTemplate, WorkRun } from '../types'
 
 /**
  * 保存層の境界。
@@ -53,6 +53,29 @@ export interface Repository {
   listTemplates(): Promise<TaskTemplate[]>
   /** 丸ごと置き換える（件数が少なく、1件ずつ更新する利点が無い） */
   saveTemplates(list: TaskTemplate[]): Promise<void>
+
+  /* --- 予定（打合せ・固定の業務）。台帳とは別のDBに置く ---
+     タスクと混ぜないのは、完了の丸が付いてしまうのと、
+     見込み時間の積み上げが二重になるため（design.md §10.1）。 */
+
+  listPlans(): Promise<Plan[]>
+  savePlan(plan: Plan): Promise<void>
+  removePlan(id: string): Promise<void>
+  /** バックアップの取り込み用。丸ごと入れ替える */
+  replaceAllPlans(plans: Plan[]): Promise<void>
+
+  /* --- 実行ログ（開始・一時停止・終了） ---
+     実績なので、記録は書き換えず積むだけにする。
+     古い日のぶんは起動時に捨てる（端末に無限に溜めない）。 */
+
+  /** @param fromDay これ以降の日のぶんだけ返す（省略すると全部） */
+  listRuns(fromDay?: string): Promise<WorkRun[]>
+  saveRun(run: WorkRun): Promise<void>
+  /** まとめて保存する（自動計上で複数が同時に動くため） */
+  saveRuns(runs: WorkRun[]): Promise<void>
+  removeRun(id: string): Promise<void>
+  /** 指定の日より前の記録を捨てる。戻り値は捨てた件数 */
+  pruneRuns(beforeDay: string): Promise<number>
 
   /* --- 録音。音声は端末内にのみ置く --- */
   listRecordings(): Promise<Recording[]>

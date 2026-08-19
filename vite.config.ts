@@ -52,6 +52,7 @@ export default defineConfig({
         },
         shortcuts: [
           { name: '音声で追加', short_name: '音声', url: `${BASE}?dock=voice` },
+          { name: 'いま動かす', short_name: '実行', url: `${BASE}?view=run` },
           { name: '今日の予定', short_name: '今日', url: `${BASE}?view=schedule` },
         ],
       },

@@ -5,6 +5,9 @@ import { Toast, type ToastMessage } from './components/Toast'
 import { TapWave } from './components/TapWave'
 import { ListView } from './views/ListView'
 import { ScheduleView } from './views/ScheduleView'
+import { CalendarView } from './views/CalendarView'
+import { RunView } from './views/RunView'
+import { PlanSheet } from './views/PlanSheet'
 import { DashboardView } from './views/DashboardView'
 import { SettingsView } from './views/SettingsView'
 import { ExportSheet } from './views/ExportSheet'
@@ -26,7 +29,19 @@ import { useShareTarget } from './ports/in/useShareTarget'
 import { eventToDraft } from './ports/in/fromCalendar'
 import { useRecordingSession } from './ports/in/useRecordingSession'
 import { voiceSupported } from './ports/in/useVoiceInput'
-import { addDaysKey, dayKey, diffDays, formatMD, timeKey, toMinutes } from './lib/date'
+import { addDaysKey, dayKey, diffDays, durationLabel, formatMD, timeKey, toMinutes } from './lib/date'
+import { cleanPlan, emptyPlan, occurrencesOn } from './lib/plans'
+import {
+  autoTrack,
+  finishRun,
+  pauseRun,
+  resumeRun,
+  runForPlan,
+  runForTask,
+  runMinutes,
+  runOf,
+  type RunBox,
+} from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
@@ -44,15 +59,19 @@ import { applyTemplate, forget, remember, touch } from './lib/templates'
 import { cleanCategories } from './lib/workCategories'
 import {
   DEFAULT_SETTINGS,
+  RUN_KEEP_DAYS,
   type CalendarEvent,
   type CategoryGroup,
   type Draft,
+  type Plan,
+  type PlanOccurrence,
   type Recording,
   type Settings,
   type Source,
   type Task,
   type TaskFilter,
   type TaskTemplate,
+  type WorkRun,
 } from './types'
 
 /* =========================================================
@@ -62,10 +81,12 @@ import {
  * 自然文はどの入口から来ても parseToTasks を通り、必ず確認画面に出る。
  * =======================================================*/
 
-type ViewKey = 'list' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
+type ViewKey = 'list' | 'run' | 'calendar' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
 
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   { key: 'list', label: '一覧', icon: 'list' },
+  { key: 'run', label: '実行', icon: 'play' },
+  { key: 'calendar', label: 'カレンダー', icon: 'grid' },
   { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
   { key: 'dashboard', label: '分析', icon: 'chart' },
   { key: 'recordings', label: '録音', icon: 'mic' },
@@ -83,6 +104,12 @@ interface Pending {
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
+  /** 予定（打合せ・固定の業務）。台帳とは別に持つ */
+  const [plans, setPlans] = useState<Plan[]>([])
+  /** 実行ログ（開始・一時停止・終了）。新しい日ぶんだけ手元に置く */
+  const [runs, setRuns] = useState<WorkRun[]>([])
+  /** 直している予定。existing が false なら新しく入れるところ */
+  const [planEditing, setPlanEditing] = useState<{ plan: Plan; existing: boolean } | null>(null)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
   /** 保存データを開けなかったときの案内。null なら正常。 */
@@ -96,6 +123,8 @@ export default function App() {
   const [editingCalendar, setEditingCalendar] = useState(false)
   /** いまの時刻（0時からの分）。1分ごとに更新する */
   const [nowMin, setNowMin] = useState(() => toMinutes(timeKey()) ?? 0)
+  /** いまの時刻（ミリ秒）。実行の経過時間に使う。秒を刻むのは実行の画面だけ。 */
+  const [nowMs, setNowMs] = useState(() => Date.now())
   /**
    * キーボードが主な端末か。
    * 幅だけで決めない（タブレットは広くても指で触る）。
@@ -130,8 +159,8 @@ export default function App() {
   /** 続けて登録したときに控えを取りこぼさないよう、いまの控えを常に持っておく */
   const templatesRef = useRef<TaskTemplate[]>([])
   /** いまの台帳と設定。あとから走る処理（同期・リマインド）が古い値を掴まないようにする */
-  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS })
-  liveRef.current = { tasks, settings }
+  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS, runs: [] as WorkRun[] })
+  liveRef.current = { tasks, settings, runs }
   const [today, setToday] = useState(dayKey())
   const [checking, setChecking] = useState(false)
 
@@ -148,6 +177,19 @@ export default function App() {
   const reload = useCallback(async () => {
     const list = await repository.list()
     setTasks(list)
+  }, [])
+
+  /**
+   * 予定と実行ログを読み直す。台帳とは別のDBなので、
+   * ここが開けなくてもタスクの操作は続けられる（黙って落とさず、知らせるだけ）。
+   */
+  const reloadWork = useCallback(async () => {
+    const [p, r] = await Promise.all([
+      repository.listPlans(),
+      repository.listRuns(addDaysKey(dayKey(), -RUN_KEEP_DAYS)),
+    ])
+    setPlans(p)
+    setRuns(r)
   }, [])
 
   /**
@@ -168,6 +210,17 @@ export default function App() {
       setSettings(s)
       setTemplates(tpl)
       templatesRef.current = tpl
+      // 予定と実行ログは別のDB。読めなくても台帳は使えるので、ここで握って知らせる。
+      try {
+        await reloadWork()
+        void repository.pruneRuns(addDaysKey(dayKey(), -RUN_KEEP_DAYS)).catch(() => {
+          /* 古い記録が残るだけ。画面は止めない */
+        })
+      } catch {
+        setPlans([])
+        setRuns([])
+        notify('予定と実行の記録を開けませんでした。タスクの操作は続けられます。', 'error')
+      }
     } catch (err) {
       setTasks([])
       setLoadError({
@@ -180,7 +233,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [reloadWork, notify])
 
   /**
    * 保存データが開けないときの最後の手段。**台帳の中身は消える。**
@@ -246,6 +299,7 @@ export default function App() {
         setTriaging(false)
         setWrappingUp(false)
         setEditingCalendar(false)
+        setPlanEditing(null)
         return
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return
@@ -294,6 +348,7 @@ export default function App() {
       const k = dayKey()
       setToday((prev) => (prev === k ? prev : k))
       setNowMin(toMinutes(timeKey()) ?? 0)
+      setNowMs(Date.now())
     }, 60_000)
     return () => window.clearInterval(id)
   }, [])
@@ -489,6 +544,175 @@ export default function App() {
     await repository.saveSettings(next)
   }, [])
 
+  /* --- 予定（打合せ・固定の業務） ---
+     タスクとは別の台帳。完了の丸は付かず、時間だけが埋まる。
+     繰り返しは作り置きせず、画面に出すときに展開する（design.md §10.1）。 */
+
+  const openNewPlan = useCallback(
+    (day: string) => setPlanEditing({ plan: emptyPlan(day, liveRef.current.settings), existing: false }),
+    [],
+  )
+
+  const savePlan = useCallback(
+    async (plan: Plan, existing: boolean) => {
+      await repository.savePlan(cleanPlan(plan))
+      await reloadWork()
+      setPlanEditing(null)
+      notify(existing ? '予定を直しました' : '予定を入れました')
+    },
+    [reloadWork, notify],
+  )
+
+  const removePlan = useCallback(
+    async (plan: Plan) => {
+      await repository.removePlan(plan.id)
+      await reloadWork()
+      setPlanEditing(null)
+      notify('予定を消しました')
+    },
+    [reloadWork, notify],
+  )
+
+  /** 自動で計上するかを切り替える。実行の画面からその場で押せる。 */
+  const togglePlanAuto = useCallback(
+    async (plan: Plan) => {
+      const next: Plan = { ...plan, autoTrack: !plan.autoTrack, updatedAt: new Date().toISOString() }
+      await repository.savePlan(next)
+      await reloadWork()
+      notify(next.autoTrack ? '時間を自動で計上します' : '開始と終了を手で押します')
+    },
+    [reloadWork, notify],
+  )
+
+  /* --- 実行（開始・一時停止・終了） ---
+     実績なので記録は書き換えず、区間を足していく。
+     同時に何本でも走らせられる（電話を受けながら伝票を打つ、が実際に起きる）。 */
+
+  const startTask = useCallback(
+    async (task: Task) => {
+      const existing = runOf(liveRef.current.runs, task.id)
+      const next = existing ? resumeRun(existing) : runForTask(task, today)
+      await repository.saveRun(next)
+      await reloadWork()
+      notify(`「${task.title}」を始めました`)
+    },
+    [today, reloadWork, notify],
+  )
+
+  const startPlan = useCallback(
+    async (occ: PlanOccurrence) => {
+      const existing = runOf(liveRef.current.runs, occ.key)
+      const next = existing ? resumeRun(existing) : runForPlan(occ, { auto: false })
+      await repository.saveRun(next)
+      await reloadWork()
+      notify(`「${occ.plan.title}」を始めました`)
+    },
+    [reloadWork, notify],
+  )
+
+  const pauseRunning = useCallback(
+    async (run: WorkRun) => {
+      const next = pauseRun(run)
+      await repository.saveRun(next)
+      await reloadWork()
+      notify(`「${run.title}」を止めました（${durationLabel(runMinutes(next))}）`)
+    },
+    [reloadWork, notify],
+  )
+
+  const resumeRunning = useCallback(
+    async (run: WorkRun) => {
+      await repository.saveRun(resumeRun(run))
+      await reloadWork()
+    },
+    [reloadWork],
+  )
+
+  const finishRunning = useCallback(
+    async (run: WorkRun) => {
+      const next = finishRun(run)
+      await repository.saveRun(next)
+      await reloadWork()
+      notify(
+        `「${run.title}」を終えました（${durationLabel(runMinutes(next))}）。` +
+          (run.kind === 'task' ? '完了にするときは丸を押してください。' : ''),
+      )
+    },
+    [reloadWork, notify],
+  )
+
+  /**
+   * 区分から1件立てる。飛び込みの作業を、台帳に無くてもその場で数え始めるための口。
+   * 件名は区分の名前。**確認画面は挟まない**（AIの解釈ではなく、人が押した1語なので）。
+   */
+  const quickTask = useCallback(
+    async (category: string, start: boolean) => {
+      const created = draftToTask({
+        ...emptyDraft('form'),
+        title: category,
+        categories: [category],
+        due: today,
+      })
+      await repository.add([created])
+      await rememberAll([created])
+      await reload()
+      if (start) {
+        await repository.saveRun(runForTask(created, today))
+        await reloadWork()
+      }
+      notify(start ? `「${category}」を立てて始めました` : `「${category}」を立てました`)
+    },
+    [today, reload, reloadWork, rememberAll, notify],
+  )
+
+  /** 実行の操作をまとめて画面へ渡す。画面ごとに名前が変わらないようにする。 */
+  const runBox: RunBox = useMemo(
+    () => ({
+      runs,
+      nowMs,
+      startTask: (t) => void guard(() => startTask(t)),
+      startPlan: (o) => void guard(() => startPlan(o)),
+      pause: (r) => void guard(() => pauseRunning(r)),
+      resume: (r) => void guard(() => resumeRunning(r)),
+      finish: (r) => void guard(() => finishRunning(r)),
+    }),
+    [runs, nowMs, guard, startTask, startPlan, pauseRunning, resumeRunning, finishRunning],
+  )
+
+  /* --- 予定の自動計上 ---
+     「自動」にした予定は、開始時刻で始まり終了時刻で終わる。
+     アプリを閉じている間に過ぎていたぶんは、その日ぶんだけ埋める。
+     手で止めた記録・終えた記録には触らない（人の操作が常に優先）。 */
+  useEffect(() => {
+    if (loading || loadError) return
+    const occ = occurrencesOn(plans, today, {
+      workHours: settings.workHours,
+      workCalendar: settings.workCalendar,
+    })
+    const { save, notes } = autoTrack(occ, runs, today, nowMin)
+    if (save.length === 0) return
+    void (async () => {
+      try {
+        await repository.saveRuns(save)
+        await reloadWork()
+        if (notes.length > 0) notify(notes.join(' / '))
+      } catch {
+        notify('予定の時間を記録できませんでした。実行の画面から手で開始できます。', 'error')
+      }
+    })()
+  }, [
+    plans,
+    runs,
+    today,
+    nowMin,
+    loading,
+    loadError,
+    settings.workHours,
+    settings.workCalendar,
+    reloadWork,
+    notify,
+  ])
+
   /** 記憶したタスクを呼び出してフォームへ流し込む */
   const useTemplate = useCallback((t: TaskTemplate) => {
     setSeed(applyTemplate(emptyDraft('form'), t))
@@ -551,16 +775,19 @@ export default function App() {
   )
 
   const restore = useCallback(
-    async (next: Task[], nextSettings: Partial<Settings> | null) => {
+    async (next: Task[], nextPlans: Plan[], nextSettings: Partial<Settings> | null) => {
       await repository.replaceAll(next)
+      // 予定は別のDB。取り込んだファイルに入っていないとき（v1.13 以前の書き出し）は触らない
+      if (nextPlans.length > 0) await repository.replaceAllPlans(nextPlans)
       if (nextSettings) {
         const merged = { ...settings, ...nextSettings }
         setSettings(merged)
         await repository.saveSettings(merged)
       }
       await reload()
+      await reloadWork()
     },
-    [reload, settings],
+    [reload, reloadWork, settings],
   )
 
   /* --- 期限のリマインド ---
@@ -720,12 +947,23 @@ export default function App() {
   )
 
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
+  /** いま動かしている本数。止め忘れに気づけるよう、引き出しにも出す */
+  const runningCount = useMemo(() => runs.filter((r) => r.state === 'running').length, [runs])
 
   // 起動時のクエリ（PWAショートカット）
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const v = params.get('view')
-    if (v === 'schedule' || v === 'dashboard' || v === 'recordings' || v === 'settings') setView(v)
+    if (
+      v === 'run' ||
+      v === 'calendar' ||
+      v === 'schedule' ||
+      v === 'dashboard' ||
+      v === 'recordings' ||
+      v === 'settings'
+    ) {
+      setView(v)
+    }
     // ?dock=voice で開いたときはそのまま録音を始める
     if (params.get('dock') === 'voice' && voiceSupported()) void session.start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -795,6 +1033,10 @@ export default function App() {
             <Icon name={n.icon} size={19} />
             <span>{n.label}</span>
             {n.key === 'list' && ov.overdue > 0 && <b className="tp-drawer-n">{ov.overdue}</b>}
+            {/* 動かしたまま忘れないよう、実行中の本数は引き出しにも出す */}
+            {n.key === 'run' && runningCount > 0 && (
+              <b className="tp-drawer-n is-running">{runningCount}</b>
+            )}
           </button>
         ))}
         <button type="button" className="tp-drawer-item" onClick={() => { setExporting(true); setDrawer(false) }}>
@@ -928,12 +1170,46 @@ export default function App() {
             onTriage={() => setTriaging(true)}
             onWrapUp={() => setWrappingUp(true)}
           />
+        ) : view === 'run' ? (
+          <RunView
+            tasks={tasks}
+            plans={plans}
+            today={today}
+            settings={settings}
+            nowMin={nowMin}
+            runBox={runBox}
+            onEditTask={setEditing}
+            onToggleTask={(t) => void guard(() => toggleDone(t))}
+            onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
+            onTogglePlanAuto={(p) => void guard(() => togglePlanAuto(p))}
+            onQuickTask={(c, start) => void guard(() => quickTask(c, start))}
+          />
+        ) : view === 'calendar' ? (
+          <CalendarView
+            tasks={tasks}
+            plans={plans}
+            today={today}
+            settings={settings}
+            runBox={runBox}
+            onEditTask={setEditing}
+            onToggleTask={(t) => void guard(() => toggleDone(t))}
+            onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
+            onAddPlan={openNewPlan}
+            onAddTask={(day) => {
+              setSeed({ ...emptyDraft('form'), due: day })
+              setCreating('form')
+            }}
+          />
         ) : view === 'schedule' ? (
           <ScheduleView
             tasks={tasks}
+            plans={plans}
             today={today}
             settings={settings}
+            runBox={runBox}
             onEdit={setEditing}
+            onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
+            onAddPlan={openNewPlan}
             onImportEvent={importEvent}
             onNotify={notify}
           />
@@ -945,6 +1221,7 @@ export default function App() {
           <SettingsView
             settings={settings}
             tasks={tasks}
+            plans={plans}
             onSave={(s) => void guard(() => saveSettings(s))}
             onChangeCategoryGroups={saveCategoryGroups}
             sync={sync}
@@ -1027,6 +1304,19 @@ export default function App() {
             runParse(text, 'text')
           }}
           onClose={() => setCreating(false)}
+        />
+      )}
+
+      {/* 予定を入れる・直す。タスクとは別の画面にして、完了の丸を持たせない */}
+      {planEditing && (
+        <PlanSheet
+          plan={planEditing.plan}
+          existing={planEditing.existing}
+          categoryGroups={settings.categoryGroups}
+          onChangeCategoryGroups={saveCategoryGroups}
+          onSave={(p) => void guard(() => savePlan(p, planEditing.existing))}
+          onDelete={(p) => void guard(() => removePlan(p))}
+          onClose={() => setPlanEditing(null)}
         />
       )}
 

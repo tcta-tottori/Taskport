@@ -9,7 +9,9 @@ import { makeBackup, readBackup } from '../lib/backup'
 import { downloadText } from '../ports/out/download'
 import {
   DEFAULT_WORK_HOURS,
+  RUN_KEEP_DAYS,
   type CategoryGroup,
+  type Plan,
   type Settings,
   type Task,
   type WorkHours,
@@ -51,6 +53,7 @@ function validateWorkHours(wh: WorkHours): string | null {
 export function SettingsView({
   settings,
   tasks,
+  plans,
   onSave,
   onRestore,
   onNotify,
@@ -62,8 +65,10 @@ export function SettingsView({
 }: {
   settings: Settings
   tasks: Task[]
+  /** 予定。書き出しに一緒に入れる（端末が変わっても定例が消えないように） */
+  plans: Plan[]
   onSave: (s: Settings) => void
-  onRestore: (tasks: Task[], settings: Partial<Settings> | null) => Promise<void>
+  onRestore: (tasks: Task[], plans: Plan[], settings: Partial<Settings> | null) => Promise<void>
   onNotify: (text: string, tone?: 'ok' | 'error') => void
   /** 同期の様子 */
   sync: { state: 'off' | 'idle' | 'running' | 'ok' | 'error'; at: string | null; message: string }
@@ -100,12 +105,12 @@ export function SettingsView({
     try {
       const text = await file.text()
       const result = readBackup(text)
-      await onRestore(result.tasks, result.settings)
+      await onRestore(result.tasks, result.plans, result.settings)
       if (result.settings) setDraft((d) => ({ ...d, ...result.settings }))
       onNotify(
         result.skipped > 0
-          ? `${result.tasks.length}件を取り込みました（${result.skipped}件は形が合わず取り込めませんでした）`
-          : `${result.tasks.length}件を取り込みました`,
+          ? `タスク${result.tasks.length}件・予定${result.plans.length}件を取り込みました（${result.skipped}件は形が合わず取り込めませんでした）`
+          : `タスク${result.tasks.length}件・予定${result.plans.length}件を取り込みました`,
       )
     } catch (err) {
       onNotify(err instanceof Error ? err.message : '取り込みに失敗しました', 'error')
@@ -311,6 +316,49 @@ export function SettingsView({
               onChange={(e) => setDraft({ ...draft, keepAwake: e.target.checked })}
             />
           </label>
+          <div className="tp-row-end">
+            <button
+              type="button"
+              className="tp-btn-primary"
+              disabled={!dirty}
+              onClick={() => {
+                onSave(draft)
+                onNotify('設定を保存しました')
+              }}
+            >
+              <Icon name="check" size={16} />
+              保存
+            </button>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="tp-panel">
+          <h2 className="tp-panel-title">予定と実行</h2>
+          <p className="tp-note">
+            予定（打合せ・固定の業務）は、時刻になったら実行の時間を自動で数えられます。
+            ここで決めるのは<b>新しく入れる予定の既定</b>で、予定ごとにあとから切り替えられます。
+          </p>
+          <label className="tp-switch">
+            <span>
+              <b>予定の時間を自動で計上する</b>
+              <small>
+                {draft.planAutoTrack
+                  ? '開始時刻になったら実行が始まり、終了時刻で終わります。閉じている間に過ぎたぶんは、その日ぶんだけ後から埋めます。'
+                  : '「開始」「終了」を自分で押します。予定どおりに始まらない仕事が多いときはこちら。'}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={draft.planAutoTrack}
+              onChange={(e) => setDraft({ ...draft, planAutoTrack: e.target.checked })}
+            />
+          </label>
+          <p className="tp-note">
+            実行の記録は<b>この端末の中だけ</b>に残ります。同期にも書き出しにも乗せません。
+            {RUN_KEEP_DAYS}日より古いぶんは起動時に捨てます。
+          </p>
           <div className="tp-row-end">
             <button
               type="button"
@@ -697,8 +745,10 @@ export function SettingsView({
         <section className="tp-panel">
           <h2 className="tp-panel-title">バックアップ</h2>
           <p className="tp-note">
-            タスクは端末の中だけに保存されます。端末の故障やブラウザのデータ削除に備えて、
+            タスクと予定は端末の中だけに保存されます。端末の故障やブラウザのデータ削除に備えて、
             ときどき書き出しておいてください。
+            <b>実行の記録（開始・終了）は書き出しません。</b>その端末で動かした実績なので、
+            移すと同じ時間が二重に立ちます。
           </p>
           <div className="tp-row-end">
             <button
@@ -713,8 +763,12 @@ export function SettingsView({
               type="button"
               className="tp-btn-primary"
               onClick={() => {
-                downloadText(`taskport-backup-${dayKey()}.json`, makeBackup(tasks, settings), 'application/json')
-                onNotify(`${tasks.length}件を書き出しました`)
+                downloadText(
+                  `taskport-backup-${dayKey()}.json`,
+                  makeBackup(tasks, settings, plans),
+                  'application/json',
+                )
+                onNotify(`タスク${tasks.length}件・予定${plans.length}件を書き出しました`)
               }}
             >
               <Icon name="download" size={16} />

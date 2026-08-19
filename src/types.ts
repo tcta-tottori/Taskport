@@ -374,6 +374,12 @@ export interface Settings {
   reminderEnabled: boolean
   /** 何分前に出すか。0 は時刻ちょうど */
   reminderLeadMin: number
+  /**
+   * 新しく作る予定を「自動で計上する」にするか。
+   * 入れておくと、開始時刻になったら実行が始まり、終了時刻で終わる。
+   * 予定ごとに切り替えられる（ここは既定値だけを決める）。
+   */
+  planAutoTrack: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -392,6 +398,7 @@ export const DEFAULT_SETTINGS: Settings = {
   syncEnabled: false,
   reminderEnabled: false,
   reminderLeadMin: 10,
+  planAutoTrack: true,
 }
 
 /* ---------------------------------------------------------
@@ -418,3 +425,116 @@ export interface CalendarEvent {
   /** Googleカレンダー上のURL */
   htmlLink: string
 }
+
+/* ---------------------------------------------------------
+ * 予定（Plan）
+ *
+ * タスクとは別に持つ。**タスクは「やること」、予定は「その時間そこにいること」**。
+ * 打合せ・来客・棚卸の立ち会いのように、済ませて消えるのではなく、
+ * 時間そのものが埋まるものをここに入れる。
+ *
+ * 台帳（Task）に混ぜないのは、
+ *   - 完了の丸が付いてしまい、出ていない会議が「未完了」として残る
+ *   - 見込み時間の積み上げと二重になる（予定の時間はもともと埋まっている）
+ * ため。稼働の計算では「予定で埋まっている時間」として別に数える。
+ *
+ * Googleカレンダーから読む CalendarEvent とも別物。あちらは読むだけ、
+ * こちらは端末の中で作って直せる。
+ * ------------------------------------------------------- */
+
+export interface Plan {
+  /** ULID */
+  id: string
+  title: string
+  /** 議題・持ち物・背景などの補足 */
+  note: string
+  /** 場所（会議室・客先）。空でよい */
+  place: string
+  /** 起点の日 "YYYY-MM-DD"。繰り返しはこの日から先へ展開する */
+  day: string
+  /** "HH:mm"。終日は null */
+  startTime: string | null
+  endTime: string | null
+  allDay: boolean
+  /** 区分。タスクと同じく**先頭が主区分** */
+  categories: string[]
+  /**
+   * 実行の計上を自動でやるか。
+   *   true  … 開始時刻になったら実行が始まり、終了時刻で終わる
+   *   false … 「開始」「終了」を手で押す
+   * 既定は Settings.planAutoTrack。予定ごとに切り替えられる。
+   */
+  autoTrack: boolean
+  /**
+   * 繰り返し。**次回ぶんを作り置きしない**。
+   * 画面に出すときに day から先へ展開する（週次の定例で台帳が埋まらない）。
+   */
+  repeat: Repeat | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 繰り返しを展開した1回ぶん。保存はしない（画面に出すときだけ作る）。
+ * `key` は実行ログと突き合わせる鍵で、予定IDと日付から決まる。
+ */
+export interface PlanOccurrence {
+  plan: Plan
+  /** "YYYY-MM-DD" */
+  day: string
+  /** `${plan.id}:${day}` */
+  key: string
+}
+
+/* ---------------------------------------------------------
+ * 実行ログ（開始・一時停止・終了）
+ *
+ * 「何を、いつからいつまでやったか」を区間の並びで持つ。
+ * 一時停止は区間を閉じるだけで、再開すると次の区間が開く。
+ * 見込み時間（estimateMin）とは別物で、**こちらは実績**。
+ *
+ * 何本でも同時に走らせられる（電話を受けながら伝票を打つ、が実際に起きる）。
+ * 走っているものを画面の一番上に出し、次にやるものをその下に出す。
+ * ------------------------------------------------------- */
+
+/** 実行の対象。タスクか、予定の1回ぶんか */
+export type RunKind = 'task' | 'plan'
+
+export type RunState =
+  /** 動いている（開いた区間がある） */
+  | 'running'
+  /** 止めてある（あとで再開できる） */
+  | 'paused'
+  /** 終えた */
+  | 'done'
+
+/** 実行の1区間。end が null なら、いまも動いている */
+export interface RunSegment {
+  /** ISO 8601 */
+  start: string
+  end: string | null
+}
+
+export interface WorkRun {
+  /** ULID */
+  id: string
+  kind: RunKind
+  /** タスクなら task.id、予定なら `${plan.id}:${day}`（PlanOccurrence.key） */
+  targetId: string
+  /** 記録として残す件名。対象を消しても、何をやったかは読めるようにする */
+  title: string
+  /** 記録した時点の区分（先頭が主区分） */
+  categories: string[]
+  /** 実行した日 "YYYY-MM-DD" */
+  day: string
+  /** 開始順の区間。一時停止のたびに増える */
+  segments: RunSegment[]
+  state: RunState
+  /** 予定の自動計上で始まったか。手で押したものと見分けて画面に出す */
+  auto: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** 端末に残す実行ログの日数。これより古い日のぶんは起動時に捨てる。 */
+export const RUN_KEEP_DAYS = 90

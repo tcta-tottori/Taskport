@@ -119,3 +119,84 @@ export function lastNDays(today: string, n: number): string[] {
   for (let i = n - 1; i >= 0; i--) out.push(addDaysKey(today, -i))
   return out
 }
+
+/* ---------------------------------------------------------
+ * 月（カレンダーの月表示で使う）
+ *
+ * 月も文字列 "YYYY-MM" で持つ。Date を外へ出さない方針は同じ。
+ * ------------------------------------------------------- */
+
+/** "YYYY-MM-DD" → "YYYY-MM" */
+export function monthKey(key: string = dayKey()): string {
+  return key.slice(0, 7)
+}
+
+/** "YYYY-MM" に月数を足す */
+export function addMonths(month: string, n: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + n, 1, 12, 0, 0, 0)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** 「2026年8月」 */
+export function monthLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  return `${y}年${m}月`
+}
+
+/** その月の日付をすべて（1日〜末日） */
+export function monthDays(month: string): string[] {
+  const [y, m] = month.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  const out: string[] = []
+  for (let d = 1; d <= last; d++) out.push(`${month}-${String(d).padStart(2, '0')}`)
+  return out
+}
+
+/**
+ * 月表示の升目。日曜始まりで6週（42日）ぶんを返す。
+ * 常に同じ数にしておくと、月を送っても升目の高さが動かない。
+ */
+export function monthGrid(month: string): string[] {
+  const first = `${month}-01`
+  const start = addDaysKey(first, -weekdayOf(first))
+  const out: string[] = []
+  for (let i = 0; i < 42; i++) out.push(addDaysKey(start, i))
+  return out
+}
+
+/** その日付が month（"YYYY-MM"）の中か */
+export function inMonth(key: string, month: string): boolean {
+  return key.startsWith(month)
+}
+
+/* ---------------------------------------------------------
+ * 日付＋時刻 → ISO
+ * ------------------------------------------------------- */
+
+/**
+ * "YYYY-MM-DD" と "HH:mm" をローカル時刻の ISO 8601 にする。
+ * 実行ログの区間を後から埋めるとき（アプリを閉じている間に
+ * 予定の時間が過ぎていた場合）に使う。
+ */
+export function isoAt(day: string, hhmm: string): string {
+  const [y, m, d] = day.split('-').map(Number)
+  const [h, mi] = hhmm.split(':').map(Number)
+  return new Date(y, m - 1, d, h, mi, 0, 0).toISOString()
+}
+
+/** ISO 8601 → "HH:mm"（ローカル時刻） */
+export function isoTime(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '—' : timeKey(d)
+}
+
+/** 秒数を「1:23:45」の形にする（動いている実行の経過を出す） */
+export function clockLabel(sec: number): string {
+  const v = Math.max(0, Math.floor(sec))
+  const h = Math.floor(v / 3600)
+  const m = Math.floor((v % 3600) / 60)
+  const s = v % 60
+  const p = (n: number) => String(n).padStart(2, '0')
+  return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`
+}

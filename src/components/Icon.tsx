@@ -34,6 +34,10 @@ export type IconName =
   | 'repeat'
   | 'bell'
   | 'checklist'
+  | 'play'
+  | 'pause'
+  | 'stop'
+  | 'grid'
 
 const PATHS: Record<IconName, ReactElement> = {
   list: (
@@ -171,6 +175,23 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M3.5 6.5 5 8l2.5-3" />
       <path d="M3.5 16.5 5 18l2.5-3" />
       <path d="M11 7h9.5M11 17h9.5" />
+    </>
+  ),
+  /* 実行の3つ。塗りにして、線のアイコンの中で「操作」だと分かるようにする */
+  play: <path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none" />,
+  pause: (
+    <>
+      <rect x="7" y="5.5" width="3.6" height="13" rx="1" fill="currentColor" stroke="none" />
+      <rect x="13.4" y="5.5" width="3.6" height="13" rx="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  stop: <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" />,
+  grid: (
+    <>
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
     </>
   ),
 }

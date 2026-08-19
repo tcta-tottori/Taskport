@@ -24,7 +24,19 @@ import {
 } from '../lib/workday'
 import { fetchEvents } from '../ports/in/fromCalendar'
 import { isConnected } from '../lib/googleAuth'
-import { PRIORITY_LABEL, type CalendarEvent, type Settings, type Task } from '../types'
+import { PlanRow } from './CalendarView'
+import { catStyle } from '../components/CategoryChip'
+import { colorOf, primaryCategory } from '../lib/workCategories'
+import { bookedMinutes, groupOccurrences, occurrencesInRange, planEnd, planSpan } from '../lib/plans'
+import type { RunBox } from '../lib/runs'
+import {
+  PRIORITY_LABEL,
+  type CalendarEvent,
+  type Plan,
+  type PlanOccurrence,
+  type Settings,
+  type Task,
+} from '../types'
 
 /* =========================================================
  * スケジュールビュー
@@ -33,9 +45,12 @@ import { PRIORITY_LABEL, type CalendarEvent, type Settings, type Task } from '..
  *     （始業・昼休憩・終業が目盛りとして常に見える）
  * 下: 2週間ぶんの日付軸。「いつ何が固まっているか」を面で見る。
  *
- * Googleカレンダーを繋いでいるときは、その日の予定を帯の右側に重ねる。
- * 予定はタスクとは別物として扱い、台帳には混ぜない
- * （取り込みたいものだけ、確認画面を通してタスクにする）。
+ * 自分で入れた予定（打合せ・固定の業務）は、帯の上に色の面として敷く。
+ * タスクはその上に載る。予定は「その時間そこにいること」なので、
+ * 時間そのものが埋まっていることが面で見えるほうが正しい。
+ *
+ * Googleカレンダーを繋いでいるときは、そちらの予定を帯の右側に細く重ねる。
+ * どちらも台帳には混ぜない（取り込みたいものだけ、確認画面を通してタスクにする）。
  * =======================================================*/
 
 /** 1分あたりの高さ(px)。1日の勤務がスクロールなしで収まる程度に取る。 */
@@ -44,14 +59,19 @@ const PX_PER_MIN = 0.9
 function DayTimeline({
   tasks,
   events,
+  occurrences,
   settings,
   onEdit,
+  onEditPlan,
   onImportEvent,
 }: {
   tasks: Task[]
   events: CalendarEvent[]
+  /** 自分で入れた予定（その日ぶん） */
+  occurrences: PlanOccurrence[]
   settings: Settings
   onEdit: (task: Task) => void
+  onEditPlan: (plan: Plan) => void
   onImportEvent: (ev: CalendarEvent) => void
 }) {
   const wh = settings.workHours
@@ -76,8 +96,25 @@ function DayTimeline({
     const b = e.endTime ? toMinutes(e.endTime) : null
     return [a, b].filter((v): v is number => v !== null)
   })
-  const from = Math.min(workFrom - 30, ...placed.map((p) => p.from - 15), ...evMins.map((m) => m - 15))
-  const to = Math.max(workTo + 30, ...placed.map((p) => p.to + 15), ...evMins.map((m) => m + 15))
+  const timedPlans = occurrences.filter((o) => !o.plan.allDay && o.plan.startTime)
+  const planMins = timedPlans.flatMap((o) => {
+    const a = toMinutes(o.plan.startTime as string)
+    const end = planEnd(o.plan)
+    const b = end ? toMinutes(end) : null
+    return [a, b].filter((v): v is number => v !== null)
+  })
+  const from = Math.min(
+    workFrom - 30,
+    ...placed.map((p) => p.from - 15),
+    ...evMins.map((m) => m - 15),
+    ...planMins.map((m) => m - 15),
+  )
+  const to = Math.max(
+    workTo + 30,
+    ...placed.map((p) => p.to + 15),
+    ...evMins.map((m) => m + 15),
+    ...planMins.map((m) => m + 15),
+  )
   const height = (to - from) * PX_PER_MIN
   const y = (min: number) => (min - from) * PX_PER_MIN
 
@@ -96,7 +133,7 @@ function DayTimeline({
 
         {segs.map((s) => (
           <div
-            key={s.label}
+            key={`${s.from}-${s.to}`}
             className="tp-tl-work"
             style={{ top: y(s.from), height: (s.to - s.from) * PX_PER_MIN }}
           />
@@ -127,6 +164,29 @@ function DayTimeline({
         <div className="tp-tl-edge" style={{ top: y(workTo) }}>
           <span>終業 {trim(wh.end)}</span>
         </div>
+
+        {/* 自分で入れた予定。時間そのものが埋まるので、面として敷く。
+            タスクはこの上に載る（重なっても件名が隠れない）。 */}
+        {timedPlans.map((o) => {
+          const a = toMinutes(o.plan.startTime as string)
+          if (a === null) return null
+          const end = planEnd(o.plan)
+          const b = end ? toMinutes(end) : null
+          const h = Math.max(22, ((b ?? a + 60) - a) * PX_PER_MIN - 2)
+          return (
+            <button
+              key={o.key}
+              type="button"
+              className="tp-tl-plan"
+              style={{ top: y(a), height: h, ...catStyle(colorOf(settings.categoryGroups, primaryCategory(o.plan.categories))) }}
+              title={`${o.plan.title}（予定）`}
+              onClick={() => onEditPlan(o.plan)}
+            >
+              <b>{o.plan.title}</b>
+              <span className="tp-mono">{planSpan(o.plan)}</span>
+            </button>
+          )
+        })}
 
         {/* Googleカレンダーの予定。タスクの帯とぶつからないよう右側に細く重ねる。 */}
         {timedEvents.map((ev) => {
@@ -177,10 +237,25 @@ function DayTimeline({
         })}
       </div>
 
-      {events.some((e) => e.allDay) && (
+      {(events.some((e) => e.allDay) || occurrences.some((o) => o.plan.allDay)) && (
         <div className="tp-tl-allday">
           <p className="tp-label">終日の予定</p>
           <ul>
+            {occurrences
+              .filter((o) => o.plan.allDay)
+              .map((o) => (
+                <li key={o.key}>
+                  <button
+                    type="button"
+                    className="tp-mini tp-mini-plan"
+                    style={catStyle(colorOf(settings.categoryGroups, primaryCategory(o.plan.categories)))}
+                    onClick={() => onEditPlan(o.plan)}
+                  >
+                    <span>{o.plan.title}</span>
+                    <span className="tp-mono">終日</span>
+                  </button>
+                </li>
+              ))}
             {events
               .filter((e) => e.allDay)
               .map((ev) => (
@@ -216,17 +291,27 @@ function DayTimeline({
 
 export function ScheduleView({
   tasks,
+  plans,
   today,
   settings,
+  runBox,
   onEdit,
+  onEditPlan,
+  onAddPlan,
   onImportEvent,
   onNotify,
 }: {
   tasks: Task[]
+  /** 自分で入れた予定。繰り返しはここで展開する（作り置きしない） */
+  plans: Plan[]
   today: string
   settings: Settings
+  runBox: RunBox
   onEdit: (task: Task) => void
-  /** 予定をタスク候補にする（確認画面を通す） */
+  onEditPlan: (plan: Plan) => void
+  /** その日に予定を入れる */
+  onAddPlan: (day: string) => void
+  /** Googleカレンダーの予定をタスク候補にする（確認画面を通す） */
   onImportEvent: (ev: CalendarEvent) => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
@@ -269,6 +354,17 @@ export function ScheduleView({
     return m
   }, [events])
 
+  // 予定は昨日から2週間先までを展開する（日付の帯と同じ範囲）
+  const occurrences = useMemo(
+    () =>
+      occurrencesInRange(plans, addDaysKey(today, -1), addDaysKey(today, 13), {
+        workHours: settings.workHours,
+        workCalendar: settings.workCalendar,
+      }),
+    [plans, today, settings.workHours, settings.workCalendar],
+  )
+  const plansByDay = useMemo(() => groupOccurrences(occurrences), [occurrences])
+
   const open = useMemo(() => tasks.filter((t) => t.status === 'open'), [tasks])
   const byDue = useMemo(() => groupByDue(tasks), [tasks])
   const dayTasks = useMemo(
@@ -282,6 +378,8 @@ export function ScheduleView({
     day,
     settings.workCalendar,
   )
+  const dayPlans = plansByDay.get(day) ?? []
+  const dayBooked = bookedMinutes(dayPlans)
   const noDue = useMemo(() => sortTasks(open.filter((t) => !t.due)), [open])
 
   // 2週間ぶん。過ぎた期限は先頭にまとめて出す。
@@ -304,9 +402,15 @@ export function ScheduleView({
         <section className="tp-panel">
           <div className="tp-panel-head">
             <h2>{formatMD(day)}</h2>
-            <span className={`tp-badge${load.over > 0 ? ' is-over' : ''}`}>
-              {durationLabel(load.planned)} / {durationLabel(load.capacity)}
-            </span>
+            <div className="tp-head-acts">
+              <span className={`tp-badge${load.over > 0 ? ' is-over' : ''}`}>
+                {durationLabel(load.planned + dayBooked)} / {durationLabel(load.capacity)}
+              </span>
+              <button type="button" className="tp-btn-ghost tp-btn-sm" onClick={() => onAddPlan(day)}>
+                <Icon name="calendar" size={15} />
+                予定を入れる
+              </button>
+            </div>
           </div>
 
           {calendarReady && (
@@ -322,7 +426,9 @@ export function ScheduleView({
 
           <div className="tp-daystrip" role="tablist" aria-label="表示する日">
             {strip.map((d) => {
-              const n = (byDue.get(d) ?? []).filter((t) => t.status === 'open').length
+              const n =
+                (byDue.get(d) ?? []).filter((t) => t.status === 'open').length +
+                (plansByDay.get(d) ?? []).length
               const off = !isWorkDay(d, settings.workHours, settings.workCalendar)
               return (
                 <button
@@ -351,10 +457,32 @@ export function ScheduleView({
           <DayTimeline
             tasks={dayTasks}
             events={eventsByDay.get(day) ?? []}
+            occurrences={dayPlans}
             settings={settings}
             onEdit={onEdit}
+            onEditPlan={onEditPlan}
             onImportEvent={onImportEvent}
           />
+
+          {/* 予定は開始・終了をここからも押せる。実行の画面まで行かずに済む。 */}
+          {dayPlans.length > 0 && (
+            <div className="tp-tl-plans">
+              <p className="tp-label">
+                予定 {dayPlans.length}件 ／ {durationLabel(dayBooked)}
+              </p>
+              <ul className="tp-daylist">
+                {dayPlans.map((o) => (
+                  <PlanRow
+                    key={o.key}
+                    occ={o}
+                    settings={settings}
+                    runBox={runBox}
+                    onEdit={() => onEditPlan(o.plan)}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       </Reveal>
 
@@ -387,6 +515,7 @@ export function ScheduleView({
           <ol className="tp-fortnight">
             {fortnight.map((d) => {
               const list = (byDue.get(d) ?? []).filter((t) => t.status === 'open')
+              const dayPlanList = plansByDay.get(d) ?? []
               const off = !isWorkDay(d, settings.workHours, settings.workCalendar)
               const l = dayLoad(list, settings.workHours, settings.defaultEstimateMin, d, settings.workCalendar)
               return (
@@ -396,8 +525,27 @@ export function ScheduleView({
                     <span className="tp-fn-wd">{weekdayLabel(d)}</span>
                   </button>
                   <div className="tp-fn-body">
+                    {dayPlanList.length > 0 && (
+                      <ul className="tp-fn-plans">
+                        {dayPlanList.map((o) => (
+                          <li key={o.key}>
+                            <button
+                              type="button"
+                              className="tp-mini tp-mini-plan"
+                              style={catStyle(
+                                colorOf(settings.categoryGroups, primaryCategory(o.plan.categories)),
+                              )}
+                              onClick={() => onEditPlan(o.plan)}
+                            >
+                              <span>{o.plan.title}</span>
+                              <span className="tp-mono">{planSpan(o.plan)}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {list.length === 0 ? (
-                      <span className="tp-fn-none">—</span>
+                      dayPlanList.length === 0 && <span className="tp-fn-none">—</span>
                     ) : (
                       <>
                         <div className="tp-fn-bar" aria-hidden="true">
