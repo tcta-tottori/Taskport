@@ -24,6 +24,14 @@ export function isRunning(task: Task): boolean {
   return task.status === 'open' && !!task.startedAt
 }
 
+/** 着手してからいままでの経過秒。実行中でなければ 0（実行中の表示は秒まで出す） */
+export function runningSec(task: Task, now = Date.now()): number {
+  if (!task.startedAt) return 0
+  const from = new Date(task.startedAt).getTime()
+  if (Number.isNaN(from)) return 0
+  return Math.max(0, Math.floor((now - from) / 1000))
+}
+
 /** 着手してからいままでの経過分。実行中でなければ 0 */
 export function runningMin(task: Task, now = Date.now()): number {
   if (!task.startedAt) return 0

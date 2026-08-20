@@ -26,6 +26,7 @@ import {
   roundedNow,
   running,
   runningMin,
+  runningSec,
 } from '../lib/worklog'
 import {
   currentOccurrence,
@@ -121,16 +122,17 @@ export function WorkLogView({
 
   const live = useMemo(() => running(tasks), [tasks])
 
-  /* 予定の記録は秒まで動く。動いているものがあるときだけ1秒ごとに書き換える。 */
+  /* 実行中の経過時間は秒まで出す。動いているものがあるときだけ1秒ごとに書き換える。 */
   const [tick, setTick] = useState(() => Date.now())
   const livePlans = useMemo(() => activeRuns(runBox.runs), [runBox.runs])
   const anyPlanRunning = livePlans.some((r) => r.state === 'running')
+  const anyRunning = anyPlanRunning || live.length > 0
   useEffect(() => {
-    if (!anyPlanRunning) return
+    if (!anyRunning) return
     const id = window.setInterval(() => setTick(Date.now()), 1000)
     return () => window.clearInterval(id)
-  }, [anyPlanRunning])
-  const box: RunBox = { ...runBox, nowMs: anyPlanRunning ? tick : runBox.nowMs }
+  }, [anyRunning])
+  const box: RunBox = { ...runBox, nowMs: anyRunning ? tick : runBox.nowMs }
 
   const occurrences = useMemo(
     () =>
@@ -228,9 +230,8 @@ export function WorkLogView({
                   <span className="tp-live-dot" aria-hidden="true" />
                   <button type="button" className="tp-live-body" onClick={() => onEdit(t)}>
                     <span className="tp-live-title">{t.title}</span>
-                    <span className="tp-live-meta tp-mono">
-                      {logStartTime(t)} から {durationLabel(runningMin(t))}
-                    </span>
+                    {/* 出すのは経過時間だけ。始めた時刻や区分は下の記録で読める */}
+                    <span className="tp-live-meta tp-mono">{clockLabel(runningSec(t, tick))}</span>
                   </button>
                   <button type="button" className="tp-btn-ghost" onClick={() => onToggleRunning(t)}>
                     止める
@@ -254,11 +255,7 @@ export function WorkLogView({
                   <span className="tp-live-dot" aria-hidden="true" />
                   <span className="tp-live-body">
                     <span className="tp-live-title">{r.title}</span>
-                    <span className="tp-live-meta tp-mono">
-                      予定 ／ {clockLabel(runSeconds(r, box.nowMs))}
-                      {r.auto && ' ／ 自動'}
-                      {r.day !== today && ` ／ ${formatMDShort(r.day)}から`}
-                    </span>
+                    <span className="tp-live-meta tp-mono">{clockLabel(runSeconds(r, box.nowMs))}</span>
                   </span>
                   <button
                     type="button"
