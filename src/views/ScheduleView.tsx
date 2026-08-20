@@ -6,7 +6,7 @@ import { MonthGrid } from '../components/MonthGrid'
 import { PlanRow } from '../components/PlanRow'
 import {
   addDaysKey,
-  durationLabel,
+  durationShort,
   formatMD,
   formatMDShort,
   monthKey,
@@ -29,10 +29,14 @@ import type {
  * スケジュールビュー
  *
  * 上から順に、
- *   1. その日 … **縦軸の時間の並び**（`DayTimeline`）＋ 時刻未定の仕事
+ *   1. DAY   … **縦軸の時間の並び**（`DayTimeline`）＋ 時刻未定の仕事
  *   2. 期限超過 … 拾い残しを上に出す
- *   3. 1週間 … **予定のある日だけ**を並べる
- *   4. カレンダー … 月の升目（v1.24.0 でカレンダーの画面から移した）
+ *   3. WEEK  … **予定のある日だけ**を並べる
+ *   4. MONTH … 月の升目（v1.24.0 でカレンダーの画面から移した）
+ *
+ * v1.27.0（利用者の指示）
+ *   - 面の名前は英語の1語（DAY / WEEK / MONTH）。日と週と月の区別だけが要るので短くする
+ *   - DAY は左上に日付、右上に名前。面の中に「予定を入れる」釦は置かない（右下の ＋ から）
  *
  * v1.24.0 で、1日を2時間の枠（午前前半…）に畳む形をやめた（§10.1）。
  * 枠に畳むと「何時から何時まで空いているか」が読めず、
@@ -50,8 +54,6 @@ export function ScheduleView({
   runBox,
   onEdit,
   onEditPlan,
-  onAddPlan,
-  onAddTask,
   onImportEvent,
   onNotify,
 }: {
@@ -65,10 +67,6 @@ export function ScheduleView({
   runBox: RunBox
   onEdit: (task: Task) => void
   onEditPlan: (plan: Plan) => void
-  /** その日に予定を入れる */
-  onAddPlan: (day: string) => void
-  /** その日を期限にしてタスクを作る */
-  onAddTask: (day: string) => void
   /** Googleカレンダーの予定をタスク候補にする（確認画面を通す） */
   onImportEvent: (ev: CalendarEvent) => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
@@ -162,32 +160,14 @@ export function ScheduleView({
 
   return (
     <div className="tp-view">
-      {/* --- その日 --- */}
+      {/* --- DAY（その日） --- */}
       <Reveal>
         <section className="tp-panel">
+          {/* 左上に日付、右上に面の名前（v1.27.0。利用者の指示）。
+              予定もタスクも右下の ＋ から入れるので、ここに足す釦は置かない */}
           <div className="tp-panel-head">
-            <h2>{formatMD(day)}</h2>
-            {/* 記号だけにする（v1.26.0。利用者の指示）。言葉は読み上げと長押しで出る */}
-            <div className="tp-head-acts">
-              <button
-                type="button"
-                className="tp-icon-btn"
-                onClick={() => onAddPlan(day)}
-                aria-label="この日に予定を入れる"
-                title="予定を入れる"
-              >
-                <Icon name="calendar" size={18} />
-              </button>
-              <button
-                type="button"
-                className="tp-icon-btn"
-                onClick={() => onAddTask(day)}
-                aria-label="この日を期限にしてタスクを作る"
-                title="タスクを作る"
-              >
-                <Icon name="plus" size={18} />
-              </button>
-            </div>
+            <p className="tp-card-date tp-mono">{formatMD(day)}</p>
+            <h2 className="tp-card-en">DAY</h2>
           </div>
 
           <div className="tp-daystrip" role="tablist" aria-label="表示する日">
@@ -270,7 +250,7 @@ export function ScheduleView({
                       >
                         <span>{t.title}</span>
                         <span className="tp-mono">
-                          {durationLabel(taskMinutes(t, settings.defaultEstimateMin))}
+                          {durationShort(taskMinutes(t, settings.defaultEstimateMin))}
                         </span>
                       </button>
                     </li>
@@ -316,11 +296,11 @@ export function ScheduleView({
         </Reveal>
       )}
 
-      {/* --- 1週間（予定のある日だけ） --- */}
+      {/* --- WEEK（予定のある日だけ） --- */}
       <Reveal>
         <section className="tp-panel">
           <div className="tp-panel-head">
-            <h2>週間予定</h2>
+            <h2 className="tp-card-en">WEEK</h2>
             <span className="tp-badge tp-mono">{week.length}日</span>
           </div>
           {week.length === 0 ? (
@@ -359,11 +339,11 @@ export function ScheduleView({
         </section>
       </Reveal>
 
-      {/* --- カレンダー（月） --- */}
+      {/* --- MONTH（月の升目） --- */}
       <Reveal>
         <section className="tp-panel">
           <div className="tp-panel-head">
-            <h2>カレンダー</h2>
+            <h2 className="tp-card-en">MONTH</h2>
           </div>
           <MonthGrid
             month={month}
@@ -379,7 +359,7 @@ export function ScheduleView({
             }}
           />
           <p className="tp-hint">
-            日を押すと、上の「その日」がその日に変わります。棒はタスクの見込み時間が
+            日を押すと、いちばん上の DAY がその日に変わります。棒はタスクの見込み時間が
             勤務時間のどれだけを埋めているか。
           </p>
         </section>

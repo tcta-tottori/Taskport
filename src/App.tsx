@@ -1515,11 +1515,6 @@ export default function App() {
             runBox={runBox}
             onEdit={setEditing}
             onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
-            onAddPlan={openNewPlan}
-            onAddTask={(day) => {
-              setSeed({ ...emptyDraft('form'), due: day })
-              setCreating('form')
-            }}
             onImportEvent={importEvent}
             onNotify={notify}
           />

@@ -160,6 +160,19 @@ export function durationLabel(min: number): string {
   return `${h}時間${String(m).padStart(2, '0')}分`
 }
 
+/**
+ * 短い所要時間の表記（「15min」「1h」「1h30min」）。
+ * 予定の行は件名を優先するので、時間は桁を食わない形で添える（v1.27.0。利用者の指示）。
+ */
+export function durationShort(min: number): string {
+  const v = Math.max(0, Math.round(min))
+  const h = Math.floor(v / 60)
+  const m = v % 60
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h${m}min`
+}
+
 /** 直近 n 日ぶんの日付キー（古い順、末尾が today） */
 export function lastNDays(today: string, n: number): string[] {
   const out: string[] = []

@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties } from 'react'
 import { catStyle } from './CategoryChip'
 import { Icon } from './Icon'
-import { fromMinutes, toMinutes } from '../lib/date'
+import { durationShort, fromMinutes, toMinutes } from '../lib/date'
 import { allBreaks, taskMinutes, trim, workSegments } from '../lib/workday'
 import { planMinutes } from '../lib/plans'
 import { colorOf, primaryCategory } from '../lib/workCategories'
@@ -25,13 +25,18 @@ import type {
  *   - **重なった時間は横に並べる**（時間帯の帯と同じ考え。`packLanes`）
  *   - 休憩は地を沈めて出す。仕事の面と同じ濃さにしない
  *   - 今日はいまの時刻に線を引く
- *   - 色だけで伝えない。件名・時刻を必ず添える
+ *   - 色だけで伝えない。件名・所要時間を必ず添える
+ *
+ * v1.27.0（利用者の指示）で、1件を**1行**にした。
+ * 「10:00–10:15」と件名を2行に積むと、短い予定では件名が枠から切れて読めない。
+ * 始まりの時刻は軸の位置が示すので、行には**件名＋所要時間**だけを置く
+ * （「所要確認 15min」。時間は薄く小さく、件名を食わない）。
  * =======================================================*/
 
 /** 1分あたりの高さ（px）。9時間で 600px 弱に収まる */
 const PX = 1.1
-/** 短い予定でも文字が読める最低の高さ */
-const MIN_H = 26
+/** 短い予定でも文字が読める最低の高さ。1行になったぶん下げてある */
+const MIN_H = 22
 /** 左の時刻の目盛りの幅 */
 const GUTTER = 42
 /** いちばん上の時刻が切れないぶんの余白 */
@@ -217,6 +222,7 @@ export function DayTimeline({
       {/* 予定・タスク */}
       {placed.map(({ item, col, cols }) => {
         const h = Math.max(MIN_H, (item.to - item.from) * PX)
+        // 行に時刻は出さない（軸の位置が示す）。読み上げと吹き出しにだけ時刻を添える。
         return (
           <button
             key={item.key}
@@ -232,14 +238,15 @@ export function DayTimeline({
               } as CSSProperties
             }
             onClick={item.onPick}
+            aria-label={`${trim(fromMinutes(item.from))}〜${trim(fromMinutes(item.to))} ${item.title}`}
             title={`${trim(fromMinutes(item.from))}〜${trim(fromMinutes(item.to))} ${item.title}`}
           >
-            <span className="tp-tline-time tp-mono">
-              {trim(fromMinutes(item.from))}–{trim(fromMinutes(item.to))}
+            {item.kind === 'event' && <Icon name="calendar" size={11} className="tp-tline-ico" />}
+            <span className="tp-tline-title">
+              {item.title}
+              {item.sub && <small className="tp-tline-sub">／ {item.sub}</small>}
             </span>
-            <span className="tp-tline-title">{item.title}</span>
-            {item.sub && <span className="tp-tline-sub">{item.sub}</span>}
-            {item.kind === 'event' && <Icon name="calendar" size={12} className="tp-tline-ico" />}
+            <span className="tp-tline-min tp-mono">{durationShort(item.to - item.from)}</span>
           </button>
         )
       })}
