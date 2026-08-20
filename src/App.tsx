@@ -7,6 +7,7 @@ import { ListView } from './views/ListView'
 import { ScheduleView } from './views/ScheduleView'
 import { CalendarView } from './views/CalendarView'
 import { PlanSheet } from './views/PlanSheet'
+import { StartSheet, type StartMode } from './views/StartSheet'
 import { DashboardView } from './views/DashboardView'
 import { SettingsView } from './views/SettingsView'
 import { ExportSheet } from './views/ExportSheet'
@@ -43,7 +44,7 @@ import {
 } from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
-import { isRunning, logToTask, runningMin } from './lib/worklog'
+import { isRunning, logToTask, runningMin, runningSec } from './lib/worklog'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { clearRemote, syncOnce } from './lib/driveSync'
 import { isConnected } from './lib/googleAuth'
@@ -94,9 +95,9 @@ import {
 type ViewKey = 'list' | 'worklog' | 'calendar' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
 
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
-  { key: 'list', label: '一覧', icon: 'list' },
-  // 「実行」＝いま動かす面と、その日の記録。同じ仕事なので1つの画面にまとめてある
+  // 「実行」＝いま動かす面と、その日の記録。1日のうちいちばん開くので最上段に置く
   { key: 'worklog', label: '実行', icon: 'play' },
+  { key: 'list', label: '一覧', icon: 'list' },
   { key: 'calendar', label: 'カレンダー', icon: 'grid' },
   { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
   { key: 'dashboard', label: '分析', icon: 'chart' },
@@ -173,6 +174,8 @@ export default function App() {
   const [creating, setCreating] = useState<SheetMode | false>(false)
   /** 記憶から呼び出したときの下敷き。フォームを開くときに使う */
   const [seed, setSeed] = useState<Draft | null>(null)
+  /** 「始める」の画面（タスクから／区分から）。null なら閉じている */
+  const [starting, setStarting] = useState<StartMode | null>(null)
   const [exporting, setExporting] = useState(false)
   /** 録音から高精度で取り直している最中の進み具合。null なら走っていない */
   const [refining, setRefining] = useState<WhisperProgress | null>(null)
@@ -325,6 +328,7 @@ export default function App() {
         setWrappingUp(false)
         setEditingCalendar(false)
         setPlanEditing(null)
+        setStarting(null)
         return
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return
@@ -621,17 +625,25 @@ export default function App() {
     const same = viewRef.current === 'worklog'
     setDrawer(false)
     setView('worklog')
+    // 画面が変わるぶんは view の切り替えで上へ戻る。
+    // 同じ画面にいるときだけ、ここで滑らせて上へ返す。
+    if (!same) return
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior: same && !reduce ? 'smooth' : 'auto' })
+      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
     })
   }, [])
 
   const toggleRunning = useCallback(
     async (task: Task) => {
       if (isRunning(task)) {
-        // 止めるときは、測れた経過を実績に足す。始めたのが無かったことにはしない。
-        const spent = runningMin(task)
+        /* 止めるときは、測れた経過を実績に足す。始めたのが無かったことにはしない。
+           1分に満たないぶんの扱い:
+             20秒未満 … 押し間違いとみなして何も足さない
+             20秒〜1分 … 1分として足す（触った印が残らないと「止めてあるもの」に出ず、
+                          再開する道が消える。最小単位は1分という数え方に合わせる） */
+        const sec = runningSec(task)
+        const spent = sec >= 20 ? Math.max(1, Math.floor(sec / 60)) : 0
         await repository.update(task.id, {
           startedAt: null,
           actualMin: spent > 0 ? (task.actualMin ?? 0) + spent : task.actualMin,
@@ -1185,6 +1197,14 @@ export default function App() {
     setDrawer(false)
   }
 
+  /**
+   * 画面を変えたら、必ずいちばん上から出す。
+   * 前の画面の位置が残っていると、開いた先の途中から始まって見える。
+   */
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [view])
+
   /** 手で更新を確認する。新しい版があれば自動で再読み込みされる。 */
   const onCheckUpdate = async () => {
     setChecking(true)
@@ -1470,6 +1490,7 @@ export default function App() {
           onStartVoice={() => void session.start()}
           onCreate={(mode) => setCreating(mode)}
           onAddPlan={() => openNewPlan(today)}
+          onStart={(mode) => setStarting(mode)}
         />
       )}
 
@@ -1544,6 +1565,25 @@ export default function App() {
             void runParse(text, 'text')
           }}
           onClose={() => setCreating(false)}
+        />
+      )}
+
+      {/* 始める。押した時点で数え始め、実行の画面へ移る */}
+      {starting && (
+        <StartSheet
+          mode={starting}
+          tasks={tasks}
+          today={today}
+          settings={settings}
+          onStartTask={(t) => {
+            setStarting(null)
+            void guard(() => toggleRunning(t))
+          }}
+          onQuickTask={(c, start) => {
+            setStarting(null)
+            void guard(() => quickTask(c, start))
+          }}
+          onClose={() => setStarting(null)}
         />
       )}
 

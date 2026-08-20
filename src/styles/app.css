@@ -417,14 +417,14 @@ body::before {
   box-shadow: 0 10px 26px color-mix(in srgb, var(--brand1) 42%, transparent);
 }
 
-/* ---------- ＋から開く扇（作り方を選ぶ） ----------
-   ＋を押す／長押しすると、真上から左横までの 1/4 円に5つ並ぶ。
-   真上＝予定、左へ 手描き・記憶・文章・マイク。
-   位置は「向き（--fx/--fy）×半径（--fan-r）」で出し、
-   半径だけを画面幅で変える。
-   5つに増えたぶん間隔は 22.5°。そのままだと丸が重なるので半径を広げた
-   （136 → 172px。円弧の間隔は 172×22.5° ≒ 68px で、丸の 60px より広い）。 */
-.tp-quick { --fan-r: 172px; --fan-label-r: 50px; }
+/* ---------- ＋から開く扇（始める／作る） ----------
+   ＋を押す／長押しすると、真上から左横までの 1/4 円に7つ並ぶ。
+   真上から 区分・始める（＝いま手を動かす2つ）、続けて
+   予定・手描き・記憶・文章・マイク（＝あとでやることを入れる5つ）。
+   位置は「向き（--fx/--fy）×半径（--fan-r）」で出し、半径だけを画面幅で変える。
+   7つに増えたぶん間隔は 15°。丸が重ならないよう半径を 172 → 220px に広げ、
+   丸は 60 → 54px に落とした（220×15° ≒ 58px で、丸の 54px より広い）。 */
+.tp-quick { --fan-r: 220px; --fan-label-r: 42px; --fan-size: 54px; }
 .tp-fan { position: relative; }
 
 .tp-fan-backdrop {
@@ -441,18 +441,19 @@ body::before {
    どちらも順番に少しずつずらして、扇が「開く／閉じる」ように見せる。 */
 .tp-fan-item {
   position: absolute; left: 50%; top: 50%;
-  width: 60px; height: 60px; margin: -30px 0 0 -30px;
+  width: var(--fan-size); height: var(--fan-size);
+  margin: calc(var(--fan-size) / -2) 0 0 calc(var(--fan-size) / -2);
   transform: translate(calc(var(--fan-r) * var(--fx)), calc(var(--fan-r) * var(--fy)));
   animation: tpFanIn .42s cubic-bezier(.2, 1.35, .3, 1) backwards;
   animation-delay: calc(var(--i) * 45ms);
 }
-/* 閉じるとき: 外側から順に＋へ吸い込まれる（4 は最後の番号＝5つ目） */
+/* 閉じるとき: 外側から順に＋へ吸い込まれる（6 は最後の番号＝7つ目） */
 .tp-fan-item.is-out {
   animation: tpFanOut .22s cubic-bezier(.5, 0, .75, 0) forwards;
-  animation-delay: calc((4 - var(--i)) * 30ms);
+  animation-delay: calc((6 - var(--i)) * 24ms);
 }
 .tp-fan-btn {
-  width: 60px; height: 60px; border-radius: 50%;
+  width: var(--fan-size); height: var(--fan-size); border-radius: 50%;
   display: grid; place-items: center;
   background: var(--surface); color: var(--brand1);
   border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
@@ -465,6 +466,14 @@ body::before {
   transform: scale(1.12);
   box-shadow: 0 10px 24px color-mix(in srgb, var(--brand1) 40%, transparent);
 }
+/* 「始める」の2つ。作る系と役割が違うので、実行と同じ緑にする */
+.tp-fan-btn.is-start { color: var(--go); border-color: color-mix(in srgb, var(--go) 42%, var(--line-strong)); }
+.tp-fan-btn.is-start:hover { border-color: var(--go); }
+.tp-fan-btn.is-start.is-hot {
+  background: var(--go); border-color: var(--go); color: var(--on-brand);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--go) 40%, transparent);
+}
+
 /* 予定はタスクの作り方ではないので、同じ形のまま色だけ分ける */
 .tp-fan-btn.is-plan { color: var(--brand3); border-color: color-mix(in srgb, var(--brand3) 40%, var(--line-strong)); }
 .tp-fan-btn.is-plan:hover { border-color: var(--brand3); }
@@ -939,10 +948,8 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-about { grid-template-columns: 1fr; gap: 2px; }
   .tp-about dd { margin-bottom: 8px; }
   .tp-quick-btn { width: 56px; height: 56px; }
-  /* 54px の丸が 22.5° 間隔で重ならない半径（150×22.5° ≒ 59px） */
-  .tp-quick { --fan-r: 150px; --fan-label-r: 46px; }
-  .tp-fan-item { width: 54px; height: 54px; margin: -27px 0 0 -27px; }
-  .tp-fan-btn { width: 54px; height: 54px; }
+  /* 48px の丸が 15° 間隔で重ならない半径（190×15° ≒ 50px） */
+  .tp-quick { --fan-r: 200px; --fan-label-r: 36px; --fan-size: 48px; }
   .tp-hero-num { font-size: 34px; }
 }
 
@@ -2310,6 +2317,42 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   display: flex; flex-direction: column; gap: 2px; min-height: 44px; justify-content: center;
 }
 .tp-live-title { font-size: 14px; font-weight: 800; color: var(--ink); word-break: break-word; }
+/* ---------- 始める（＋の扇から開く画面） ---------- */
+.tp-start-seg { margin: 12px 18px 0; }
+.tp-start-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.tp-start-item {
+  width: 100%; min-height: 48px; display: flex; align-items: center; gap: 9px;
+  padding: 8px 11px; text-align: left; font-size: 13.5px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-left: 4px solid var(--pri-low); border-radius: 8px; transition: .16s;
+}
+.tp-start-item.tp-pri-high { border-left-color: var(--pri-high); }
+.tp-start-item.tp-pri-mid { border-left-color: var(--pri-mid); }
+.tp-start-item.tp-pri-low { border-left-color: var(--pri-low); }
+.tp-start-item > svg { flex: none; color: var(--go); }
+.tp-start-item:hover { background: var(--surface); border-color: var(--go); }
+.tp-start-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.tp-start-meta { flex: none; font-size: 11px; color: var(--muted); }
+
+/* 止めてあるもの。動いているものと見分けがつくよう、赤ではなく橙で出す */
+.tp-paused .tp-live-row { background: color-mix(in srgb, var(--amber) 7%, var(--surface-2)); border-color: color-mix(in srgb, var(--amber) 28%, var(--line)); }
+.tp-paused .tp-live-dot { background: var(--amber); animation: none; }
+.tp-paused .tp-live-meta { color: var(--amber); }
+.tp-live-warn { margin: 8px 2px 0; }
+
+/* 完了したぶんの開閉。押すまでは件数だけ出す */
+.tp-done-toggle {
+  width: 100%; min-height: 44px; display: flex; align-items: center; gap: 7px;
+  margin-top: 10px; padding: 8px 12px; border-radius: var(--radius-sm);
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.tp-done-toggle:hover { color: var(--go); border-color: color-mix(in srgb, var(--go) 32%, var(--line)); }
+.tp-done-toggle > svg:first-child { color: var(--go); }
+.tp-done-toggle > svg:last-child { margin-left: auto; }
+.tp-caret-up { transform: rotate(-90deg); }
+.tp-caret-down { transform: rotate(90deg); }
+
 /* 完了は実行中の行でいちばん強い操作なので、塗りの丸にする（ほかは輪郭だけ） */
 .tp-live-done {
   flex: none; display: grid; place-items: center; width: 44px; height: 44px;

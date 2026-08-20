@@ -119,13 +119,19 @@ export function WorkLogView({
 }) {
   const [day, setDay] = useState(today)
   const [adding, setAdding] = useState(false)
+  /** 完了したぶんを開いているか。既定は畳んでおく */
+  const [showDone, setShowDone] = useState(false)
 
   const live = useMemo(() => running(tasks), [tasks])
 
   /* 実行中の経過時間は秒まで出す。動いているものがあるときだけ1秒ごとに書き換える。 */
   const [tick, setTick] = useState(() => Date.now())
-  const livePlans = useMemo(() => activeRuns(runBox.runs), [runBox.runs])
-  const anyPlanRunning = livePlans.some((r) => r.state === 'running')
+  const activePlans = useMemo(() => activeRuns(runBox.runs), [runBox.runs])
+  /** 動いている予定 */
+  const livePlans = useMemo(() => activePlans.filter((r) => r.state === 'running'), [activePlans])
+  /** 止めてある予定（あとで再開できる） */
+  const pausedPlans = useMemo(() => activePlans.filter((r) => r.state === 'paused'), [activePlans])
+  const anyPlanRunning = livePlans.length > 0
   const anyRunning = anyPlanRunning || live.length > 0
   useEffect(() => {
     if (!anyRunning) return
@@ -149,7 +155,17 @@ export function WorkLogView({
   const open = useMemo(() => tasks.filter((t) => t.status === 'open'), [tasks])
   /** 今日締め（超過ぶんを含む）。動かしている最中のものは外す（同じ物が2か所に出ると迷う） */
   const upNext = useMemo(
-    () => sortTasks(open.filter((t) => !!t.due && diffDays(t.due, today) <= 0 && !isRunning(t))),
+    () =>
+      sortTasks(
+        open.filter(
+          (t) =>
+            !!t.due &&
+            diffDays(t.due, today) <= 0 &&
+            !isRunning(t) &&
+            // 止めてあるものは上に出ているので、ここには出さない
+            !(typeof t.actualMin === 'number' && t.actualMin > 0),
+        ),
+      ),
     [open, today],
   )
   const soon = useMemo(
@@ -169,6 +185,25 @@ export function WorkLogView({
     () => daySpent(tasks, day, settings.defaultEstimateMin),
     [tasks, day, settings.defaultEstimateMin],
   )
+  /**
+   * 止めてあるタスク。手を付けて止めた（実績が入っている）が、まだ終わっていないもの。
+   * 一度触ったものは、探し直さずに ▶ で戻れるようにする。
+   */
+  const pausedTasks = useMemo(
+    () =>
+      sortTasks(
+        spent.tasks.filter(
+          (t) => t.status === 'open' && !isRunning(t) && typeof t.actualMin === 'number' && t.actualMin > 0,
+        ),
+      ),
+    [spent.tasks],
+  )
+
+  /** 記録のうち、まだ終わっていないもの（実行の面に出すのはこちらだけ） */
+  const openRecords = useMemo(() => spent.tasks.filter((t) => t.status !== 'done'), [spent.tasks])
+  /** 済ませたもの。件数だけ出し、押したときに開く */
+  const doneRecords = useMemo(() => spent.tasks.filter((t) => t.status === 'done'), [spent.tasks])
+
   const capacity = isWorkDay(day, settings.workHours, settings.workCalendar)
     ? workMinutes(settings.workHours)
     : 0
@@ -293,13 +328,78 @@ export function WorkLogView({
             </ul>
           )}
 
-          {live.length + livePlans.length > 1 && (
-            <p className="tp-hint">
-              同時に {live.length + livePlans.length} 件を数えています。合計が実時間を超えるので、
-              置いた作業は「止める」を押してください。
-            </p>
-          )}
         </section>
+
+        {/* --- 止めてあるもの。押せばその場から続きを数える --- */}
+        {(pausedTasks.length > 0 || pausedPlans.length > 0) && (
+          <section className="tp-live tp-paused">
+            <p className="tp-label">止めてあるもの</p>
+            <ul className="tp-live-list">
+              {pausedTasks.map((t) => (
+                <li key={t.id} className="tp-live-row is-paused">
+                  <span className="tp-live-dot" aria-hidden="true" />
+                  <button type="button" className="tp-live-body" onClick={() => onEdit(t)}>
+                    <span className="tp-live-title">{t.title}</span>
+                    <span className="tp-live-meta tp-mono">ここまで {durationLabel(t.actualMin ?? 0)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tp-run-btn tp-run-start"
+                    aria-label={`${t.title} を再開する`}
+                    title="再開"
+                    onClick={() => onToggleRunning(t)}
+                  >
+                    <Icon name="play" size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="tp-live-done"
+                    aria-label={`${t.title} を完了にする`}
+                    title="完了"
+                    onClick={() => onToggle(t)}
+                  >
+                    <Icon name="check" size={18} strokeWidth={2.6} />
+                  </button>
+                </li>
+              ))}
+              {pausedPlans.map((r) => (
+                <li key={r.id} className="tp-live-row tp-live-plan is-paused">
+                  <span className="tp-live-dot" aria-hidden="true" />
+                  <span className="tp-live-body">
+                    <span className="tp-live-title">{r.title}</span>
+                    <span className="tp-live-meta tp-mono">ここまで {clockLabel(runSeconds(r, box.nowMs))}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="tp-run-btn tp-run-start"
+                    aria-label={`${r.title} を再開する`}
+                    title="再開"
+                    onClick={() => box.resume(r)}
+                  >
+                    <Icon name="play" size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="tp-run-btn tp-run-stop"
+                    aria-label={`${r.title} を終了する`}
+                    title="終了"
+                    onClick={() => box.finish(r)}
+                  >
+                    <Icon name="stop" size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="tp-hint">▶ を押すと、止めたところから続きを数えます。</p>
+          </section>
+        )}
+
+        {live.length + livePlans.length > 1 && (
+          <p className="tp-hint tp-live-warn">
+            同時に {live.length + livePlans.length} 件を数えています。合計が実時間を超えるので、
+            置いた作業は ⏸ で止めてください。
+          </p>
+        )}
 
         {/* --- 次にやる（今日締め）。今日を見ているときだけ出す --- */}
         {isToday && (
@@ -497,7 +597,10 @@ export function WorkLogView({
           </button>
         )}
 
-        {/* --- その日の記録 --- */}
+        {/* --- その日の記録 ---
+            完了したものは出さない（実行の面に済んだ仕事が積み上がると、
+            いま手を動かすものが埋もれる）。実績を直したいときのために、
+            件数だけは残して押すと開けるようにしてある。 */}
         {spent.tasks.length === 0 ? (
           <div className="tp-empty">
             <Icon name="clock" size={26} />
@@ -508,22 +611,63 @@ export function WorkLogView({
             </p>
           </div>
         ) : (
-          <ul className="tp-log-list">
-            {spent.tasks.map((t) => (
-              <LogRow
-                key={t.id}
-                task={t}
-                day={day}
-                defaultEstimateMin={settings.defaultEstimateMin}
-                categoryGroups={settings.categoryGroups}
-                onEdit={onEdit}
-                onToggle={onToggle}
-                onToggleRunning={onToggleRunning}
-                onPatch={onPatch}
-                onNotify={onNotify}
-              />
-            ))}
-          </ul>
+          <>
+            <ul className="tp-log-list">
+              {openRecords.map((t) => (
+                <LogRow
+                  key={t.id}
+                  task={t}
+                  day={day}
+                  defaultEstimateMin={settings.defaultEstimateMin}
+                  categoryGroups={settings.categoryGroups}
+                  onEdit={onEdit}
+                  onToggle={onToggle}
+                  onToggleRunning={onToggleRunning}
+                  onPatch={onPatch}
+                  onNotify={onNotify}
+                />
+              ))}
+            </ul>
+
+            {doneRecords.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="tp-done-toggle"
+                  aria-expanded={showDone}
+                  onClick={() => setShowDone((v) => !v)}
+                >
+                  <Icon name="check" size={14} strokeWidth={2.4} />
+                  完了した {doneRecords.length}件
+                  <Icon name="chevron" size={15} className={showDone ? 'tp-caret-up' : 'tp-caret-down'} />
+                </button>
+                {showDone && (
+                  <ul className="tp-log-list">
+                    {doneRecords.map((t) => (
+                      <LogRow
+                        key={t.id}
+                        task={t}
+                        day={day}
+                        defaultEstimateMin={settings.defaultEstimateMin}
+                        categoryGroups={settings.categoryGroups}
+                        onEdit={onEdit}
+                        onToggle={onToggle}
+                        onToggleRunning={onToggleRunning}
+                        onPatch={onPatch}
+                        onNotify={onNotify}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+
+            {openRecords.length === 0 && !showDone && (
+              <p className="tp-empty-body">
+                残っている仕事はありません。上の件数を押すと、済ませたぶんを見て直せます。
+              </p>
+            )}
+          </>
         )}
 
         {/* --- 区分から始める。台帳に無い飛び込みの作業を1タップで立てる --- */}

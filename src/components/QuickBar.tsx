@@ -7,13 +7,12 @@ import { Icon, type IconName } from './Icon'
  * 右下の ＋ だけ。録音もこの中（扇のマイク）から始める。
  *
  * ＋を押す（または長押しする）と、＋の周り 1/4 の円に沿って
- * 5つの入口が開く。真上から左へ順に
- *   予定（その時間そこにいるもの）→ 手描き（自分で書く）→ 記憶（控えから呼び出す）
- *   → 文章（自然文）→ マイク
- * タスクの作り方4つは利用者のスケッチどおりの並びのまま。**予定は種類が違う**ので
- * 端（真上）に置き、いちばん指の届く左端はマイクに残してある
- * （長押しのまま左へ滑らせて録音、が v1.12.1 からの手癖）。
- * 5つに増えたぶん、間隔は 22.5° に詰めて半径を広げた。
+ * 7つの入口が開く。真上から左へ順に
+ *   **始める**（区分から・タスクから）→ **作る**（予定・手描き・記憶・文章・マイク）
+ * 「始める＝いま手を動かす」と「作る＝あとでやることを入れる」は別の仕事なので、
+ * 続けて並べて色も分けてある。
+ * いちばん指の届く左端はマイクに残す（長押しのまま左へ滑らせて録音、が v1.12.1 からの手癖）。
+ * 7つに増えたぶん、間隔は 15° に詰めて半径を広げ、丸と名前を少し小さくした。
  *
  * **長押しはそのまま滑らせて選べる。** 指を置いたまま扇が開き、
  * 目当てのアイコンまで滑らせて離すと、そこが動く。指を離す位置で決まるので、
@@ -26,21 +25,35 @@ import { Icon, type IconName } from './Icon'
  * どちらを押したのか分からなくなるうえ、マイクは扇の中にもう1つある。
  * =======================================================*/
 
-/** ＋から開く入口。4つはタスクの作り方、1つ（plan）は予定を入れる道。 */
-export type MakeMode = 'form' | 'memory' | 'text' | 'voice' | 'plan'
+/**
+ * ＋から開く入口。
+ *   始める … 区分から（cat）／タスクから（task）。押した時点で時間を数え始める
+ *   作る   … 予定（plan）・手描き（form）・記憶（memory）・文章（text）・マイク（voice）
+ */
+export type MakeMode = 'catStart' | 'taskStart' | 'plan' | 'form' | 'memory' | 'text' | 'voice'
 
-/** タスクを作る画面を開く3つ（マイクと予定は別の道なので外してある） */
+/** タスクを作る画面を開く3つ（マイク・予定・始める系は別の道なので外してある） */
 export type SheetMode = 'form' | 'memory' | 'text'
 
 /**
  * 扇の並び。角度は数学の向き（90°＝真上、180°＝真横の左）。
- * 22.5°ずつ空けて 1/4 円に5つ置く（半径は CSS の --fan-r で広げてある）。
+ * 15°ずつ空けて 1/4 円に7つ置く（半径は CSS の --fan-r で広げてある）。
  */
-const ITEMS: { mode: MakeMode; label: string; icon: IconName; angle: number; hint: string }[] = [
-  { mode: 'plan', label: '予定', icon: 'calendar', angle: 90, hint: '打合せなど、その時間そこにいるものを入れる' },
-  { mode: 'form', label: '手描き', icon: 'pencil', angle: 112.5, hint: '自分で書いて1件作る' },
-  { mode: 'memory', label: '記憶', icon: 'checklist', angle: 135, hint: '記憶したタスクから呼び出す' },
-  { mode: 'text', label: '文章', icon: 'sparkle', angle: 157.5, hint: '文章からまとめて作る' },
+const ITEMS: {
+  mode: MakeMode
+  label: string
+  icon: IconName
+  angle: number
+  hint: string
+  /** 「始める」の組。色を分けて、作る系と見分けられるようにする */
+  start?: boolean
+}[] = [
+  { mode: 'catStart', label: '区分', icon: 'grid', angle: 90, hint: '区分から1件立てて、いま始める', start: true },
+  { mode: 'taskStart', label: '始める', icon: 'play', angle: 105, hint: 'タスクを選んで、いま始める', start: true },
+  { mode: 'plan', label: '予定', icon: 'calendar', angle: 120, hint: '打合せなど、その時間そこにいるものを入れる' },
+  { mode: 'form', label: '手描き', icon: 'pencil', angle: 135, hint: '自分で書いて1件作る' },
+  { mode: 'memory', label: '記憶', icon: 'checklist', angle: 150, hint: '記憶したタスクから呼び出す' },
+  { mode: 'text', label: '文章', icon: 'sparkle', angle: 165, hint: '文章からまとめて作る' },
   { mode: 'voice', label: 'マイク', icon: 'mic', angle: 180, hint: '話してタスクにする' },
 ]
 
@@ -53,6 +66,7 @@ export function QuickBar({
   onStartVoice,
   onCreate,
   onAddPlan,
+  onStart,
   busy,
   voiceSupported,
 }: {
@@ -62,6 +76,8 @@ export function QuickBar({
   onCreate: (mode: SheetMode) => void
   /** 予定を入れる画面を開く（今日を下敷きにする） */
   onAddPlan: () => void
+  /** 「始める」の画面を開く。タスクから／区分から を選んだ側で開く */
+  onStart: (mode: 'task' | 'category') => void
   busy: boolean
   voiceSupported: boolean
 }) {
@@ -142,6 +158,8 @@ export function QuickBar({
     setHover(null)
     if (mode === 'voice') onStartVoice()
     else if (mode === 'plan') onAddPlan()
+    else if (mode === 'catStart') onStart('category')
+    else if (mode === 'taskStart') onStart('task')
     else onCreate(mode)
   }
 
@@ -186,8 +204,8 @@ export function QuickBar({
                 <button
                   type="button"
                   className={`tp-fan-btn${it.mode === 'plan' ? ' is-plan' : ''}${
-                    hot === it.mode ? ' is-hot' : ''
-                  }`}
+                    it.start ? ' is-start' : ''
+                  }${hot === it.mode ? ' is-hot' : ''}`}
                   data-mode={it.mode}
                   disabled={disabled}
                   aria-label={`${it.label}：${it.hint}`}
