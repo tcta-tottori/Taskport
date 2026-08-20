@@ -1675,6 +1675,7 @@ export default function App() {
           today={today}
           settings={settings}
           plans={plans}
+          runs={runs}
           onClose={() => setExporting(false)}
           onNotify={notify}
         />

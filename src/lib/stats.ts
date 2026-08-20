@@ -330,7 +330,7 @@ export function dayShares(
   const exact = Array.isArray(runs)
   let unmeasured = 0
 
-  for (const t of ofDay(tasks, day)) {
+  for (const t of ofDay(tasks, day, runs ?? [])) {
     const min = exact ? measuredMin(t, now) : loggedMinutes(t, defaultEstimateMin)
     if (min <= 0) {
       if (exact) unmeasured++

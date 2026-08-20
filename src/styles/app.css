@@ -2669,8 +2669,9 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   background: var(--surface-3); border-radius: 6px; overflow: hidden;
 }
 .tp-band-work { position: absolute; top: 0; bottom: 0; background: var(--surface-2); }
+/* 重なった区間は行を分けて置く（top / height は React 側で行ごとに入れる） */
 .tp-band-seg {
-  position: absolute; top: 2px; bottom: 2px;
+  position: absolute;
   display: flex; align-items: center; padding: 0 5px;
   background: var(--cat, var(--brand1));
   border-radius: 4px; box-shadow: 0 0 0 1.5px var(--surface);

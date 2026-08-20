@@ -189,8 +189,8 @@ export function WorkLogView({
     [box.runs, day, box.nowMs],
   )
   const spent = useMemo(
-    () => daySpent(tasks, day, settings.defaultEstimateMin),
-    [tasks, day, settings.defaultEstimateMin],
+    () => daySpent(tasks, day, settings.defaultEstimateMin, box.runs),
+    [tasks, day, settings.defaultEstimateMin, box.runs],
   )
   /**
    * 止めてあるタスク。手を付けて止めた（実績が入っている）が、まだ終わっていないもの。

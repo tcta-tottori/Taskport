@@ -4,7 +4,7 @@ import { trim, workSegments } from '../../lib/workday'
 import { primaryCategory } from '../../lib/workCategories'
 import { loggedMinutes, logStartTime, ofDay } from '../../lib/worklog'
 import { planMinutes, planSpan } from '../../lib/plans'
-import type { PlanOccurrence, Task, WorkHours } from '../../types'
+import type { PlanOccurrence, Task, WorkHours, WorkRun } from '../../types'
 
 /* =========================================================
  * 出口: 日報・朝会用のプレーンテキスト
@@ -139,6 +139,8 @@ export function toWorkLogRows(
   defaultEstimateMin: number,
   /** その日の予定。時間が決まっているので、タスクより先に枠を取る */
   plans: PlanOccurrence[] = [],
+  /** その日の実行ログ。期限の無い仕事を落とさないために渡す */
+  runs: WorkRun[] = [],
 ): WorkLogRow[] {
   const slots = workSlots(wh)
   const rows: WorkLogRow[] = slots.map((s) => ({
@@ -147,7 +149,7 @@ export function toWorkLogRows(
     detail: '',
   }))
 
-  const mine = ofDay(tasks, day)
+  const mine = ofDay(tasks, day, runs)
   const timed = mine.filter((t) => logStartTime(t) !== null)
   const untimed = sortTasks(mine.filter((t) => logStartTime(t) === null))
 
@@ -201,8 +203,9 @@ export function toWorkLogTsv(
   wh: WorkHours,
   defaultEstimateMin: number,
   plans: PlanOccurrence[] = [],
+  runs: WorkRun[] = [],
 ): string {
-  return toWorkLogRows(tasks, day, wh, defaultEstimateMin, plans)
+  return toWorkLogRows(tasks, day, wh, defaultEstimateMin, plans, runs)
     .map((r) => [r.time, r.category, r.detail].join('\t'))
     .join('\n')
 }

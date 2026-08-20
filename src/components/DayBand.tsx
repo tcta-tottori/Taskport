@@ -11,14 +11,45 @@ import type { DaySegment } from '../lib/worklog'
  * 勤務時間を1本の帯にして、実際に動かした区間だけを区分の色で置く。
  * 円グラフが「どれだけ」なら、こちらは「いつ」。
  *
+ * **同時に動かしたぶんは行を増やして並べる**（v1.22.1）。
+ * 電話を受けながら伝票を打つ、が実際に起きるので、重ねて置くと
+ * 下になったほうが読めず、押すこともできない。
+ *
  * 色は区分のもの（--cat-*）を使うが、**色だけで見分けさせない**：
  *   - 幅のある区間には件名を直接書く
  *   - 押すとその仕事の実績（開始・かかった時間）を直せる
  *   - 下の目盛りに時刻を出す
  * =======================================================*/
 
-/** 帯の高さ（px） */
-const H = 34
+/** 1行の高さ（px）と行の間 */
+const LANE_H = 30
+const LANE_GAP = 4
+
+/** 行を割り当てた区間 */
+type Placed = { seg: DaySegment; lane: number }
+
+/**
+ * 重なる区間を別の行へ落とす。
+ *
+ * 早く始まったものから順に、**空いている中でいちばん上の行**へ置く。
+ * 同時に始まったときは長いほうを上にする（上の行から読める並びにする）。
+ */
+export function packLanes(segments: DaySegment[]): { placed: Placed[]; lanes: number } {
+  const sorted = [...segments].sort((a, b) => a.from - b.from || b.to - a.to)
+  const ends: number[] = []
+  const placed: Placed[] = []
+  for (const seg of sorted) {
+    let lane = ends.findIndex((end) => end <= seg.from)
+    if (lane < 0) {
+      lane = ends.length
+      ends.push(seg.to)
+    } else {
+      ends[lane] = seg.to
+    }
+    placed.push({ seg, lane })
+  }
+  return { placed, lanes: Math.max(1, ends.length) }
+}
 
 export function DayBand({
   segments,
@@ -41,13 +72,16 @@ export function DayBand({
   const span = Math.max(1, to - from)
   const pct = (min: number) => ((min - from) / span) * 100
 
+  const { placed, lanes } = packLanes(segments)
+  const height = lanes * LANE_H + (lanes - 1) * LANE_GAP
+
   // 正時の目盛り
   const hours: number[] = []
   for (let m = Math.ceil(from / 60) * 60; m <= to; m += 60) hours.push(m)
 
   return (
     <div className="tp-band-wrap">
-      <div className="tp-band-rail" style={{ height: H }}>
+      <div className="tp-band-rail" style={{ height }}>
         {/* 勤務している時間の地。休憩はここが抜けて見える */}
         {segs.map((s) => (
           <span
@@ -57,9 +91,9 @@ export function DayBand({
           />
         ))}
 
-        {segments.map((seg, i) => {
+        {placed.map(({ seg, lane }, i) => {
           const w = ((seg.to - seg.from) / span) * 100
-          const label = `${trim(fromMinutes(seg.from))}〜${trim(fromMinutes(seg.to))} ${seg.title}（${durationLabel(seg.to - seg.from)}）`
+          const label = `${trim(fromMinutes(seg.from))}〜${trim(fromMinutes(seg.to))} ${seg.title}（${durationLabel(seg.to - seg.from)}）${lanes > 1 ? ` ／ ${lane + 1}行目` : ''}`
           return (
             <button
               key={`${seg.from}-${seg.title}-${i}`}
@@ -69,6 +103,8 @@ export function DayBand({
                 {
                   left: `${pct(seg.from)}%`,
                   width: `${Math.max(0.6, w)}%`,
+                  top: lane * (LANE_H + LANE_GAP),
+                  height: LANE_H,
                   ...catStyle(colorOfGroupName(seg.group)),
                 } as CSSProperties
               }

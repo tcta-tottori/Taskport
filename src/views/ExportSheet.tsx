@@ -10,7 +10,7 @@ import { pushTasks } from '../ports/out/toGoogleCalendar'
 import { copyText, downloadText } from '../ports/out/download'
 import { workHoursSummary } from '../lib/workday'
 import { occurrencesOn } from '../lib/plans'
-import type { Plan, Settings, Task } from '../types'
+import type { Plan, Settings, Task, WorkRun } from '../types'
 
 /* =========================================================
  * 出力形式の選択
@@ -34,6 +34,7 @@ export function ExportSheet({
   today,
   settings,
   plans,
+  runs,
   onClose,
   onNotify,
 }: {
@@ -42,6 +43,8 @@ export function ExportSheet({
   settings: Settings
   /** その日の予定。日報の枠を先に取る（台帳には混ぜない） */
   plans: Plan[]
+  /** その日の実行ログ。期限の無い仕事を日報から落とさないために渡す（ログ自体は書き出さない） */
+  runs: WorkRun[]
   onClose: () => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
@@ -66,7 +69,7 @@ export function ExportSheet({
 
   const preview =
     form === 'worklog'
-      ? toWorkLogTsv(tasks, today, settings.workHours, settings.defaultEstimateMin, occurrences)
+      ? toWorkLogTsv(tasks, today, settings.workHours, settings.defaultEstimateMin, occurrences, runs)
       : form === 'report'
         ? toDailyReport(tasks, today, occurrences)
         : form === 'standup'

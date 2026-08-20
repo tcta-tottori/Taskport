@@ -65,9 +65,16 @@ export function isOfDay(task: Task, day: string): boolean {
   return task.due === day
 }
 
-/** その日の記録を、開始時刻の早い順に並べる。時刻の無いものは後ろ。 */
-export function ofDay(tasks: Task[], day: string): Task[] {
-  const mine = tasks.filter((t) => isOfDay(t, day))
+/**
+ * その日の記録を、開始時刻の早い順に並べる。時刻の無いものは後ろ。
+ *
+ * 実行ログ（`runs`）を渡すと、**その日に押して動かしたもの**も拾う。
+ * 期限の無い仕事は、止めた時点で `startedAt` が消えるので、
+ * これを渡さないとその日の集計から丸ごと落ちる（v1.22.1）。
+ */
+export function ofDay(tasks: Task[], day: string, runs: WorkRun[] = []): Task[] {
+  const worked = new Set(runs.filter((r) => r.day === day && r.kind === 'task').map((r) => r.targetId))
+  const mine = tasks.filter((t) => isOfDay(t, day) || worked.has(t.id))
   return mine.sort((a, b) => {
     const ta = toMinutes(logStartTime(a) ?? '') ?? 9999
     const tb = toMinutes(logStartTime(b) ?? '') ?? 9999
@@ -101,8 +108,13 @@ export interface DaySpent {
 }
 
 /** その日の積み上がり。実績と、見込みで埋めたぶんを分けて返す。 */
-export function daySpent(tasks: Task[], day: string, defaultEstimateMin: number): DaySpent {
-  const mine = ofDay(tasks, day)
+export function daySpent(
+  tasks: Task[],
+  day: string,
+  defaultEstimateMin: number,
+  runs: WorkRun[] = [],
+): DaySpent {
+  const mine = ofDay(tasks, day, runs)
   let actual = 0
   let total = 0
   let measured = 0
@@ -171,9 +183,11 @@ export function measuredOfDay(
   tasks: Task[],
   planRunMinutes: number,
   day: string,
+  /** その日の実行ログ。押して動かしたものを拾うために渡す */
+  runs: WorkRun[] = [],
   now = Date.now(),
 ): { total: number; taskMin: number; planMin: number; measuredCount: number; unmeasured: Task[] } {
-  const mine = ofDay(tasks, day)
+  const mine = ofDay(tasks, day, runs)
   let taskMin = 0
   let measuredCount = 0
   const unmeasured: Task[] = []
@@ -252,7 +266,7 @@ export function dayBand(
 
   // 2. あとから足した記録（実行ログを持たないもの）。開始時刻＋かかった時間で置く
   const logged = new Set(runs.filter((r) => r.day === day).map((r) => r.targetId))
-  for (const t of ofDay(tasks, day)) {
+  for (const t of ofDay(tasks, day, runs)) {
     if (logged.has(t.id)) continue
     const min = typeof t.actualMin === 'number' && t.actualMin > 0 ? t.actualMin : 0
     if (min <= 0) continue

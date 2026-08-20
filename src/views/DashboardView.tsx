@@ -114,7 +114,7 @@ export function DashboardView({
   )
 
   /** その日の記録のうち、実績を直せるもの */
-  const fixable = useMemo(() => ofDay(tasks, shareDay), [tasks, shareDay])
+  const fixable = useMemo(() => ofDay(tasks, shareDay, runs), [tasks, shareDay, runs])
 
   const wh = workHoursSummary(settings.workHours)
 
@@ -124,8 +124,8 @@ export function DashboardView({
     [runs, today],
   )
   const worked = useMemo(
-    () => measuredOfDay(tasks, todayPlanRunMin, today),
-    [tasks, todayPlanRunMin, today],
+    () => measuredOfDay(tasks, todayPlanRunMin, today, runs),
+    [tasks, todayPlanRunMin, today, runs],
   )
   const pct = load.capacity > 0 ? Math.round((worked.total / load.capacity) * 100) : 0
   const capacityOk = worked.total <= load.capacity
@@ -296,6 +296,7 @@ export function DashboardView({
                   />
                   <p className="tp-hint">
                     押した時刻から止めた時刻までを、そのまま置いています。
+                    同じ時間に2つ以上動かしたぶんは、行を分けて出します。
                     帯を押すと、その仕事の実績を直せます。
                   </p>
                 </div>
