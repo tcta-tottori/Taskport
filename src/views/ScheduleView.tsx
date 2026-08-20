@@ -36,7 +36,7 @@ import type {
  *
  * v1.27.0（利用者の指示）
  *   - 面の名前は英語の1語（DAY / WEEK / MONTH）。日と週と月の区別だけが要るので短くする
- *   - DAY は左上に日付、右上に名前。面の中に「予定を入れる」釦は置かない（右下の ＋ から）
+ *   - DAY は左上に名前、右上に日付（v1.27.1）。面の中に「予定を入れる」釦は置かない（右下の ＋ から）
  *
  * v1.24.0 で、1日を2時間の枠（午前前半…）に畳む形をやめた（§10.1）。
  * 枠に畳むと「何時から何時まで空いているか」が読めず、
@@ -163,11 +163,11 @@ export function ScheduleView({
       {/* --- DAY（その日） --- */}
       <Reveal>
         <section className="tp-panel">
-          {/* 左上に日付、右上に面の名前（v1.27.0。利用者の指示）。
+          {/* 左上に面の名前、右上に日付（v1.27.1。利用者の指示）。
               予定もタスクも右下の ＋ から入れるので、ここに足す釦は置かない */}
           <div className="tp-panel-head">
-            <p className="tp-card-date tp-mono">{formatMD(day)}</p>
             <h2 className="tp-card-en">DAY</h2>
+            <p className="tp-card-date tp-mono">{formatMD(day)}</p>
           </div>
 
           <div className="tp-daystrip" role="tablist" aria-label="表示する日">

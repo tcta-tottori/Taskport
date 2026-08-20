@@ -2832,22 +2832,35 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   font-size: 9.5px; font-weight: 800; color: var(--on-brand);
   background: var(--rec); border-radius: 999px; padding: 1px 5px;
 }
-/* 1件は1行（v1.27.0）。件名を先に、所要時間を薄く小さく右に添える */
+/* 1件は1行（v1.27.0）。件名を先に、所要時間を薄く小さく右に添える。
+   v1.27.1 で**四方に枠**を入れた（利用者の指示）。地の色だけだと、
+   続けて入っている2件（9:00 まで／10:00 まで）が1枚の面に見えて切れ目が読めない。 */
 .tp-tline-item {
   position: absolute; z-index: 2;
   display: flex; align-items: center; gap: 6px;
   padding: 3px 6px; text-align: left; overflow: hidden;
   border-radius: 6px;
   background: color-mix(in srgb, var(--cat, var(--brand1)) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--cat, var(--brand1)) 55%, var(--surface));
   border-left: 3px solid var(--cat, var(--brand1));
   box-shadow: var(--shadow-sm);
   color: var(--ink);
 }
 .tp-tline-item:hover { filter: brightness(.98); }
+/* 予定（打合せ・来客）は斜線を入れた色面にする（v1.27.1。利用者の指示）。
+   タスク＝塗り、予定＝斜線。色は区分のものを使うので、
+   何の予定かは色で、タスクかどうかは地の作りで見分けられる。 */
+.tp-tline-item.is-plan {
+  background: repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--cat, var(--brand1)) 26%, var(--surface)) 0 6px,
+    color-mix(in srgb, var(--cat, var(--brand1)) 10%, var(--surface)) 6px 12px);
+}
+/* Googleカレンダーの予定は区分を持たないので、これまでどおりブランドの色で細く */
 .tp-tline-item.is-event {
   background: repeating-linear-gradient(135deg,
     color-mix(in srgb, var(--brand2) 10%, var(--surface)) 0 5px,
     var(--surface) 5px 10px);
+  border-color: color-mix(in srgb, var(--brand2) 45%, var(--surface));
   border-left-color: var(--brand2);
 }
 /* いま動かしているタスクは枠を光らせる（実行の画面と同じ扱い） */
