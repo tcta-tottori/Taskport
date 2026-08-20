@@ -1,7 +1,8 @@
 import { dayOfIso, fromMinutes, isoAt, timeKey, timeOfIso, toMinutes } from './date'
 import { draftToTask } from './tasks'
 import { taskMinutes } from './workday'
-import type { Draft, Task } from '../types'
+import { primaryCategory } from './workCategories'
+import type { Draft, Task, WorkRun } from '../types'
 
 /* =========================================================
  * 実績（実行中の業務・やった業務）
@@ -150,4 +151,123 @@ export function roundedNow(now = new Date()): string {
 /** やった業務を、完了済みのタスク1件にする。保存の直前にここを通す。 */
 export function logToTask(draft: Draft, day: string, start: string, minutes: number): Task {
   return { ...draftToTask(draft), ...doneFields(day, start, minutes) }
+}
+
+/* ---------------------------------------------------------
+ * 実際に測れた時間だけを数える（見込みで埋めない）
+ *
+ * 「本日の稼働」と円グラフはここを通す。見込みを混ぜると、
+ * 予定を入れただけの日でも稼働が埋まって見える（v1.22.0 で直した）。
+ * ------------------------------------------------------- */
+
+/** タスク1件の実測分。止めてあるぶん（actualMin）＋動いているぶん */
+export function measuredMin(task: Task, now = Date.now()): number {
+  const stored = typeof task.actualMin === 'number' && task.actualMin > 0 ? task.actualMin : 0
+  return stored + (isRunning(task) ? Math.floor(runningSec(task, now) / 60) : 0)
+}
+
+/** その日に実際に測れた分（タスク＋予定）。二重に数えないよう、予定はログから取る。 */
+export function measuredOfDay(
+  tasks: Task[],
+  planRunMinutes: number,
+  day: string,
+  now = Date.now(),
+): { total: number; taskMin: number; planMin: number; measuredCount: number; unmeasured: Task[] } {
+  const mine = ofDay(tasks, day)
+  let taskMin = 0
+  let measuredCount = 0
+  const unmeasured: Task[] = []
+  for (const t of mine) {
+    const m = measuredMin(t, now)
+    if (m > 0) {
+      taskMin += m
+      measuredCount++
+    } else {
+      unmeasured.push(t)
+    }
+  }
+  return {
+    total: taskMin + planRunMinutes,
+    taskMin,
+    planMin: planRunMinutes,
+    measuredCount,
+    unmeasured,
+  }
+}
+
+/* ---------------------------------------------------------
+ * その日の時間帯（何時に何をしていたか）
+ *
+ * 分析の帯に出す。拾うのは**実際に測れたものだけ**。
+ *   予定・タスクの実行 … 実行ログの区間（開始と終了の時刻がそのまま入っている）
+ *   あとから足した記録 … 開始時刻＋かかった時間（`やったことを足す`）
+ * 見込みしか無い仕事は置かない（何時にやったか分からないため）。
+ * ------------------------------------------------------- */
+
+export interface DaySegment {
+  /** 0時からの分 */
+  from: number
+  to: number
+  title: string
+  /** 集計の単位（グループ名） */
+  group: string
+  kind: 'task' | 'plan'
+  /** 実績を直すときの相手。予定は直せないので null */
+  taskId: string | null
+}
+
+export function dayBand(
+  tasks: Task[],
+  runs: WorkRun[],
+  day: string,
+  groupOfCategory: (category: string) => string,
+  now = Date.now(),
+): DaySegment[] {
+  const out: DaySegment[] = []
+
+  // 1. 実行ログの区間。タスクも予定も同じ形で入っている
+  for (const r of runs) {
+    if (r.day !== day) continue
+    for (const seg of r.segments) {
+      const from = timeOfIso(seg.start)
+      if (!from) continue
+      const start = toMinutes(from)
+      if (start === null) continue
+      const endIso = seg.end ?? new Date(now).toISOString()
+      const endHm = timeOfIso(endIso)
+      const end = endHm ? toMinutes(endHm) : null
+      // 日をまたいだ区間は、その日の終わりまでで切る。
+      // 1分に満たない区間も 1分ぶんの幅で置く（合計には入っているので、帯から消すと食い違う）
+      const to = end === null || end < start ? 24 * 60 : Math.max(end, start + 1)
+      out.push({
+        from: start,
+        to,
+        title: r.title,
+        group: groupOfCategory(primaryCategory(r.categories)),
+        kind: r.kind,
+        taskId: r.kind === 'task' ? r.targetId : null,
+      })
+    }
+  }
+
+  // 2. あとから足した記録（実行ログを持たないもの）。開始時刻＋かかった時間で置く
+  const logged = new Set(runs.filter((r) => r.day === day).map((r) => r.targetId))
+  for (const t of ofDay(tasks, day)) {
+    if (logged.has(t.id)) continue
+    const min = typeof t.actualMin === 'number' && t.actualMin > 0 ? t.actualMin : 0
+    if (min <= 0) continue
+    const hm = logStartTime(t)
+    const start = hm ? toMinutes(hm) : null
+    if (start === null) continue
+    out.push({
+      from: start,
+      to: Math.min(24 * 60, start + min),
+      title: t.title,
+      group: groupOfCategory(primaryCategory(t.categories)),
+      kind: 'task',
+      taskId: t.id,
+    })
+  }
+
+  return out.sort((a, b) => a.from - b.from || a.to - b.to)
 }

@@ -18,8 +18,20 @@ import {
 import { workHoursSummary } from '../lib/workday'
 import { occurrencesOn } from '../lib/plans'
 import { DonutChart } from '../components/DonutChart'
-import { colorOf, colorOfGroup } from '../lib/workCategories'
-import { PRIORITIES, PRIORITY_LABEL, SOURCE_LABEL, type Plan, type Settings, type Task } from '../types'
+import { colorOf, colorOfGroup, groupOf, primaryCategory } from '../lib/workCategories'
+import { dayBand, measuredOfDay, ofDay } from '../lib/worklog'
+import { dayMinutes } from '../lib/runs'
+import { DayBand } from '../components/DayBand'
+import { ActualSheet } from './ActualSheet'
+import {
+  PRIORITIES,
+  PRIORITY_LABEL,
+  SOURCE_LABEL,
+  type Plan,
+  type Settings,
+  type Task,
+  type WorkRun,
+} from '../types'
 
 /* =========================================================
  * 分析ビュー
@@ -34,15 +46,23 @@ import { PRIORITIES, PRIORITY_LABEL, SOURCE_LABEL, type Plan, type Settings, typ
 export function DashboardView({
   tasks,
   plans,
+  runs,
   today,
   settings,
+  onPatch,
 }: {
   tasks: Task[]
   /** 予定。円グラフに会議などの時間も入れる（日報と同じ見方にする） */
   plans: Plan[]
+  /** 実行の記録。実測だけで数えるために使う */
+  runs: WorkRun[]
   today: string
   settings: Settings
+  /** 実績（かかった時間・開始時刻）を直す */
+  onPatch: (task: Task, patch: Partial<Task>) => void
 }) {
+  /** 実績を直す画面。開いている区分（または1件） */
+  const [fixing, setFixing] = useState<{ title?: string; tasks: Task[] } | null>(null)
   /** 円グラフに出す日。既定は今日。前後の日へ動かせる */
   const [shareDay, setShareDay] = useState(today)
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
@@ -75,14 +95,40 @@ export function DashboardView({
   )
   const share = useMemo(
     () =>
-      dayShares(tasks, dayPlans, shareDay, settings.defaultEstimateMin, settings.categoryGroups),
-    [tasks, dayPlans, shareDay, settings.defaultEstimateMin, settings.categoryGroups],
+      dayShares(
+        tasks,
+        dayPlans,
+        shareDay,
+        settings.defaultEstimateMin,
+        settings.categoryGroups,
+        // 実行ログを渡すと「実際に数えた時間」だけで出る
+        runs,
+      ),
+    [tasks, dayPlans, shareDay, settings.defaultEstimateMin, settings.categoryGroups, runs],
   )
+
+  /** その日の時間帯（何時に何をしていたか） */
+  const band = useMemo(
+    () => dayBand(tasks, runs, shareDay, (c) => groupOf(settings.categoryGroups, c)),
+    [tasks, runs, shareDay, settings.categoryGroups],
+  )
+
+  /** その日の記録のうち、実績を直せるもの */
+  const fixable = useMemo(() => ofDay(tasks, shareDay), [tasks, shareDay])
 
   const wh = workHoursSummary(settings.workHours)
 
-  const pct = Math.round(load.ratio * 100)
-  const capacityOk = load.over === 0
+  /** 本日の稼働＝**実際に記録した時間**（見込みでは埋めない） */
+  const todayPlanRunMin = useMemo(
+    () => dayMinutes(runs.filter((r) => r.kind === 'plan'), today),
+    [runs, today],
+  )
+  const worked = useMemo(
+    () => measuredOfDay(tasks, todayPlanRunMin, today),
+    [tasks, todayPlanRunMin, today],
+  )
+  const pct = load.capacity > 0 ? Math.round((worked.total / load.capacity) * 100) : 0
+  const capacityOk = worked.total <= load.capacity
 
   if (tasks.length === 0) {
     return (
@@ -100,6 +146,17 @@ export function DashboardView({
 
   return (
     <div className="tp-view tp-dash tp-grid">
+      {fixing && (
+        <ActualSheet
+          tasks={fixing.tasks}
+          day={shareDay}
+          title={fixing.title}
+          categoryGroups={settings.categoryGroups}
+          defaultEstimateMin={settings.defaultEstimateMin}
+          onPatch={onPatch}
+          onClose={() => setFixing(null)}
+        />
+      )}
       <Reveal>
         <section className="tp-panel tp-dash-hero is-wide">
           <div className="tp-panel-head">
@@ -114,7 +171,7 @@ export function DashboardView({
               <small>%</small>
             </div>
             <div className="tp-hero-side">
-              <p className="tp-mono">{durationLabel(load.planned)} / {durationLabel(load.capacity)}</p>
+              <p className="tp-mono">{durationLabel(worked.total)} / {durationLabel(load.capacity)}</p>
               <p className="tp-hero-hours">
                 {wh.span}
                 {wh.breakSpan && ` ／ 昼 ${wh.breakSpan}`}
@@ -127,10 +184,16 @@ export function DashboardView({
               style={{ width: `${Math.min(100, pct)}%` }}
             />
           </div>
+          {/* 出すのは**実際に押して数えた時間**。見込みは下の「今日の予定」で見る */}
           <p className="tp-hero-note">
             {capacityOk
-              ? `実働 ${durationLabel(load.capacity)} に対し ${durationLabel(load.capacity - load.planned)} 空いています。`
-              : `実働 ${durationLabel(load.capacity)} を ${durationLabel(load.over)} 超えています。`}
+              ? `実働 ${durationLabel(load.capacity)} に対し ${durationLabel(Math.max(0, load.capacity - worked.total))} 残っています。`
+              : `実働 ${durationLabel(load.capacity)} を ${durationLabel(worked.total - load.capacity)} 超えています。`}
+          </p>
+          <p className="tp-hero-hours">
+            数えたのは実際に動かした時間です（記録 {worked.measuredCount}件
+            {worked.planMin > 0 && ` ／ うち予定 ${durationLabel(worked.planMin)}`}）。
+            今日締めの見込みは {durationLabel(load.planned)}。
           </p>
 
           <div className="tp-statrow">
@@ -198,12 +261,45 @@ export function DashboardView({
             </p>
           ) : (
             <>
-              <DonutChart slices={share.slices} total={share.total} />
+              <DonutChart
+                slices={share.slices}
+                total={share.total}
+                onPick={(group) =>
+                  setFixing({
+                    title: group,
+                    tasks: fixable.filter((t) => groupOf(settings.categoryGroups, primaryCategory(t.categories)) === group),
+                  })
+                }
+              />
               <p className="tp-hint">
-                日報と同じ拾い方です（完了した日・手を付けた日・その日が期限のもの）。
-                実績が入っていない仕事は見込みの時間で数えます。
-                {share.planMinutes > 0 && ` 予定（打合せなど）の ${durationLabel(share.planMinutes)} を含みます。`}
+                実際に押して数えた時間だけで出しています
+                {share.planMinutes > 0 && `（うち予定 ${durationLabel(share.planMinutes)}）`}。
+                {share.unmeasured > 0 &&
+                  ` 時間を数えていない仕事が ${share.unmeasured}件あります（見込みのままなので入れていません）。`}
+                {' '}区分を押すと、その仕事の実績を直せます。
               </p>
+
+              {/* --- 時間帯（何時に何をしていたか） --- */}
+              {band.length > 0 && (
+                <div className="tp-band-block">
+                  <p className="tp-label">時間帯</p>
+                  <DayBand
+                    segments={band}
+                    workHours={settings.workHours}
+                    colorOfGroupName={(g) => colorOfGroup(settings.categoryGroups, g)}
+                    onPick={(seg) =>
+                      setFixing({
+                        title: seg.title,
+                        tasks: seg.taskId ? fixable.filter((t) => t.id === seg.taskId) : [],
+                      })
+                    }
+                  />
+                  <p className="tp-hint">
+                    押した時刻から止めた時刻までを、そのまま置いています。
+                    帯を押すと、その仕事の実績を直せます。
+                  </p>
+                </div>
+              )}
             </>
           )}
         </section>

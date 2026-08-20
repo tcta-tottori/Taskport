@@ -1,7 +1,7 @@
 {
   "name": "taskport",
   "private": true,
-  "version": "1.20.1",
+  "version": "1.22.0",
   "type": "module",
   "description": "Taskport — タスクとスケジュールを、どの端末からでも・どんな方法でも入れられて、必要な形で出せる個人用ハブ (PWA)",
   "scripts": {

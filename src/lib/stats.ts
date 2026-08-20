@@ -1,6 +1,7 @@
 import { addDaysKey, dayKey, dayOfIso, lastNDays } from './date'
 import { isWorkDay, taskMinutes, workMinutes } from './workday'
-import { loggedMinutes, ofDay } from './worklog'
+import { loggedMinutes, measuredMin, ofDay } from './worklog'
+import { runSeconds } from './runs'
 import { planMinutes } from './plans'
 import { colorOfGroup, groupOf, primaryCategory } from './workCategories'
 import {
@@ -11,6 +12,7 @@ import {
   type CategoryGroup,
   type PlanOccurrence,
   type Priority,
+  type WorkRun,
   type Settings,
   type Source,
   type Task,
@@ -306,7 +308,10 @@ export function dayShares(
   day: string,
   defaultEstimateMin: number,
   master: CategoryGroup[],
-): { slices: DayShare[]; total: number; planMinutes: number; measured: number } {
+  /** 実行ログ。渡すと**実測だけ**で数える（見込みで埋めない） */
+  runs?: WorkRun[],
+  now = Date.now(),
+): { slices: DayShare[]; total: number; planMinutes: number; measured: number; unmeasured: number } {
   const byGroup = new Map<string, { minutes: number; planMinutes: number }>()
   let total = 0
   let planTotal = 0
@@ -321,15 +326,28 @@ export function dayShares(
     if (fromPlan) planTotal += minutes
   }
 
+  // 実測だけで数えるか、見込みで埋めるか
+  const exact = Array.isArray(runs)
+  let unmeasured = 0
+
   for (const t of ofDay(tasks, day)) {
-    const min = loggedMinutes(t, defaultEstimateMin)
-    if (min <= 0) continue
+    const min = exact ? measuredMin(t, now) : loggedMinutes(t, defaultEstimateMin)
+    if (min <= 0) {
+      if (exact) unmeasured++
+      continue
+    }
     if (typeof t.actualMin === 'number' && t.actualMin > 0) measured += t.actualMin
     add(groupOf(master, primaryCategory(t.categories)), min, false)
   }
+
   for (const o of plans) {
     if (o.day !== day) continue
-    const min = planMinutes(o.plan)
+    // 実測のときは、その予定を実際に動かした分だけ数える（入れただけの予定は0）
+    const min = exact
+      ? (runs as WorkRun[])
+          .filter((r) => r.kind === 'plan' && r.targetId === o.key)
+          .reduce((sum, r) => sum + Math.floor(runSeconds(r, now) / 60), 0)
+      : planMinutes(o.plan)
     if (min <= 0) continue
     add(groupOf(master, primaryCategory(o.plan.categories)), min, true)
   }
@@ -362,5 +380,5 @@ export function dayShares(
     ]
   }
 
-  return { slices, total, planMinutes: planTotal, measured }
+  return { slices, total, planMinutes: planTotal, measured, unmeasured }
 }

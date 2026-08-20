@@ -1,28 +1,31 @@
 import { dayKey, isoAt, toMinutes } from './date'
 import { occurrenceKey, planEnd } from './plans'
 import { ulid } from './ulid'
-import type { PlanOccurrence, PlanRun, Task } from '../types'
+import type { PlanOccurrence, RunKind, Task, WorkRun } from '../types'
 
 /* =========================================================
- * 予定の実行（開始・一時停止・終了）
+ * 実行（開始・一時停止・終了）
  *
- * 【どちらが実績を持つか】
- *   タスク … 台帳が持つ（`Task.startedAt` / `Task.actualMin`。`lib/worklog.ts`）
- *   予定   … ここが持つ（予定はタスクではないので台帳に置けない）
- * 実行中の判定も同じ分担にする。1つの仕事が2か所に記録されないようにするため、
- * ここでタスクを扱わない。
+ * 【何をどこが持つか】
+ *   区間（いつからいつまで） … ここ。タスクも予定も同じ形で持つ
+ *   合計（かかった時間）     … タスクは台帳の `actualMin`（`lib/worklog.ts`）、
+ *                              予定はここの区間の合計
+ *   実行中の印               … タスクは台帳の `startedAt`、予定は区間が開いているか
  *
- * 区間の並びで持つので、一時停止は区間を閉じるだけ、再開は次の区間を開くだけ。
- * 合計は足し算で出る。記録は書き換えず、消したいときは記録ごと消す。
+ * 台帳の `startedAt` は止めると消えるので、それだけだと「何時にやったか」が
+ * 残らない。時間帯の色分け（分析）と日報の枠決めに要るので、区間はここに積む。
+ *
+ * 一時停止は区間を閉じるだけ、再開は次の区間を開くだけ。合計は足し算で出る。
+ * 記録は書き換えず、消したいときは記録ごと消す。
  * =======================================================*/
 
 /** 開いたままの区間の位置。無ければ -1 */
-function openSegment(run: PlanRun): number {
+function openSegment(run: WorkRun): number {
   return run.segments.findIndex((s) => s.end === null)
 }
 
 /** 実行した秒数。動いている区間は now までを数える。 */
-export function runSeconds(run: PlanRun, nowMs: number = Date.now()): number {
+export function runSeconds(run: WorkRun, nowMs: number = Date.now()): number {
   let ms = 0
   for (const s of run.segments) {
     const from = new Date(s.start).getTime()
@@ -34,22 +37,33 @@ export function runSeconds(run: PlanRun, nowMs: number = Date.now()): number {
 }
 
 /** 実行した分。稼働の集計に使う。 */
-export function runMinutes(run: PlanRun, nowMs: number = Date.now()): number {
+export function runMinutes(run: WorkRun, nowMs: number = Date.now()): number {
   return Math.round(runSeconds(run, nowMs) / 60)
 }
 
 /** その日の予定ぶんの実働（分） */
-export function dayMinutes(runs: PlanRun[], day: string, nowMs: number = Date.now()): number {
+export function dayMinutes(runs: WorkRun[], day: string, nowMs: number = Date.now()): number {
   return runs.filter((r) => r.day === day).reduce((s, r) => s + runMinutes(r, nowMs), 0)
 }
 
-/** その回に紐づく記録。無ければ null */
-export function runOf(runs: PlanRun[], planKey: string): PlanRun | null {
-  return runs.find((r) => r.planKey === planKey) ?? null
+/** その対象に紐づく記録。無ければ null（同じ日に1本だけ持つ） */
+export function runOf(runs: WorkRun[], targetId: string): WorkRun | null {
+  return runs.find((r) => r.targetId === targetId) ?? null
+}
+
+/** その対象・その日の記録すべて（日をまたぐと別の記録になる） */
+export function runsOf(runs: WorkRun[], targetId: string, day: string): WorkRun[] {
+  return runs.filter((r) => r.targetId === targetId && r.day === day)
+}
+
+/** その対象・その日に実際に測れた分 */
+export function measuredMinutesOf(runs: WorkRun[], targetId: string, day: string, nowMs = Date.now()): number {
+  const sec = runsOf(runs, targetId, day).reduce((s, r) => s + runSeconds(r, nowMs), 0)
+  return Math.floor(sec / 60)
 }
 
 /** 動いているものと止めてあるもの（終えたものは除く）。動いているほうが先。 */
-export function activeRuns(runs: PlanRun[]): PlanRun[] {
+export function activeRuns(runs: WorkRun[]): WorkRun[] {
   return runs
     .filter((r) => r.state !== 'done')
     .sort((a, b) => (a.state === b.state ? (a.id < b.id ? 1 : -1) : a.state === 'running' ? -1 : 1))
@@ -59,15 +73,53 @@ export function activeRuns(runs: PlanRun[]): PlanRun[] {
  * 状態を変える。どれも新しいオブジェクトを返す（元は触らない）。
  * ------------------------------------------------------- */
 
+/** 記録を1本起こす（タスク・予定の共通の入口） */
+export function newRun(input: {
+  kind: RunKind
+  targetId: string
+  title: string
+  categories: string[]
+  day?: string
+  auto?: boolean
+  startedAt?: string
+}): WorkRun {
+  const now = new Date().toISOString()
+  return {
+    id: ulid(),
+    kind: input.kind,
+    targetId: input.targetId,
+    title: input.title.trim() || '（件名なし）',
+    categories: [...input.categories],
+    day: input.day ?? dayKey(),
+    segments: [{ start: input.startedAt ?? now, end: null }],
+    state: 'running',
+    auto: input.auto === true,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+/** タスクから記録を起こす */
+export function runForTask(task: Task, day: string): WorkRun {
+  return newRun({
+    kind: 'task',
+    targetId: task.id,
+    title: task.title,
+    categories: task.categories,
+    day,
+  })
+}
+
 /** 予定の1回ぶんから記録を起こす */
 export function beginRun(
   occ: PlanOccurrence,
   opts: { auto: boolean; startedAt?: string },
-): PlanRun {
+): WorkRun {
   const now = new Date().toISOString()
   return {
     id: ulid(),
-    planKey: occ.key,
+    kind: 'plan',
+    targetId: occ.key,
     title: occ.plan.title.trim() || '（件名なし）',
     categories: [...occ.plan.categories],
     day: occ.day || dayKey(),
@@ -80,7 +132,7 @@ export function beginRun(
 }
 
 /** 止める。動いていなければそのまま返す。 */
-export function pauseRun(run: PlanRun, at: string = new Date().toISOString()): PlanRun {
+export function pauseRun(run: WorkRun, at: string = new Date().toISOString()): WorkRun {
   const i = openSegment(run)
   if (i < 0) return { ...run, state: 'paused', updatedAt: at }
   const segments = run.segments.map((s, j) => (j === i ? { ...s, end: at } : s))
@@ -88,13 +140,13 @@ export function pauseRun(run: PlanRun, at: string = new Date().toISOString()): P
 }
 
 /** 続きから始める。新しい区間を開く（前の区間は動かさない）。 */
-export function resumeRun(run: PlanRun, at: string = new Date().toISOString()): PlanRun {
+export function resumeRun(run: WorkRun, at: string = new Date().toISOString()): WorkRun {
   if (run.state === 'running') return run
   return { ...run, segments: [...run.segments, { start: at, end: null }], state: 'running', updatedAt: at }
 }
 
 /** 終える。動いている区間があれば閉じる。 */
-export function finishRun(run: PlanRun, at: string = new Date().toISOString()): PlanRun {
+export function finishRun(run: WorkRun, at: string = new Date().toISOString()): WorkRun {
   const i = openSegment(run)
   const segments = i < 0 ? run.segments : run.segments.map((s, j) => (j === i ? { ...s, end: at } : s))
   return { ...run, segments, state: 'done', updatedAt: at }
@@ -110,14 +162,14 @@ export function finishRun(run: PlanRun, at: string = new Date().toISOString()): 
  * ------------------------------------------------------- */
 
 export interface RunBox {
-  /** 保存してある予定の記録（新しい日ぶん） */
-  runs: PlanRun[]
+  /** 保存してある実行の記録（新しい日ぶん。タスクと予定の両方） */
+  runs: WorkRun[]
   /** いまの時刻（ミリ秒）。経過時間の計算に使う */
   nowMs: number
   startPlan: (occ: PlanOccurrence) => void
-  pause: (run: PlanRun) => void
-  resume: (run: PlanRun) => void
-  finish: (run: PlanRun) => void
+  pause: (run: WorkRun) => void
+  resume: (run: WorkRun) => void
+  finish: (run: WorkRun) => void
   /** タスクの手を付ける／止める（実績は台帳が持つ） */
   toggleTask: (task: Task) => void
 }
@@ -136,18 +188,18 @@ export interface RunBox {
 
 export interface AutoTrackResult {
   /** 保存する記録（新規・更新の両方） */
-  save: PlanRun[]
+  save: WorkRun[]
   /** 画面に出す知らせ。何も起きなければ空 */
   notes: string[]
 }
 
 export function autoTrack(
   occurrences: PlanOccurrence[],
-  runs: PlanRun[],
+  runs: WorkRun[],
   today: string,
   nowMin: number,
 ): AutoTrackResult {
-  const save: PlanRun[] = []
+  const save: WorkRun[] = []
   const notes: string[] = []
   for (const occ of occurrences) {
     const plan = occ.plan

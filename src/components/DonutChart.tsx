@@ -36,11 +36,14 @@ export function DonutChart({
   slices,
   total,
   centerLabel = '実働',
+  onPick,
 }: {
   slices: DayShare[]
   /** 合計（分）。真ん中に出す */
   total: number
   centerLabel?: string
+  /** 区分を押したとき（実績を直す口）。無ければ押しても目立たせるだけ */
+  onPick?: (group: string) => void
 }) {
   /** 押して目立たせている切れ。もう一度押すと戻る */
   const [picked, setPicked] = useState<string | null>(null)
@@ -101,7 +104,8 @@ export function DonutChart({
         <span>{centerLabel}</span>
       </div>
 
-      {/* 名前と割合。色が見分けられなくても、ここを読めば分かる */}
+      {/* 名前と割合。色が見分けられなくても、ここを読めば分かる。
+          押すと目立たせ、実績を直す画面へ渡す。 */}
       <ul className="tp-donut-legend">
         {slices.map((s) => (
           <li key={s.group}>
@@ -110,7 +114,10 @@ export function DonutChart({
               className={`tp-donut-row${picked === s.group ? ' is-on' : ''}`}
               aria-pressed={picked === s.group}
               style={catStyle(s.color)}
-              onClick={() => setPicked(picked === s.group ? null : s.group)}
+              onClick={() => {
+                setPicked(picked === s.group ? null : s.group)
+                onPick?.(s.group)
+              }}
             >
               <span className="tp-cat-dot" aria-hidden="true" />
               <span className="tp-donut-name">{s.group}</span>

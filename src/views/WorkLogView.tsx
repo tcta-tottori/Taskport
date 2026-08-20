@@ -126,13 +126,17 @@ export function WorkLogView({
 
   /* 実行中の経過時間は秒まで出す。動いているものがあるときだけ1秒ごとに書き換える。 */
   const [tick, setTick] = useState(() => Date.now())
-  const activePlans = useMemo(() => activeRuns(runBox.runs), [runBox.runs])
+  // 予定ぶんの記録だけ。タスクは台帳（startedAt / actualMin）で見る
+  const activePlans = useMemo(
+    () => activeRuns(runBox.runs).filter((r) => r.kind === 'plan'),
+    [runBox.runs],
+  )
   /** 動いている予定 */
   const livePlans = useMemo(() => activePlans.filter((r) => r.state === 'running'), [activePlans])
   /** 止めてある予定（あとで再開できる） */
   const pausedPlans = useMemo(() => activePlans.filter((r) => r.state === 'paused'), [activePlans])
-  const anyPlanRunning = livePlans.length > 0
-  const anyRunning = anyPlanRunning || live.length > 0
+  const anyWorkRunning = livePlans.length > 0
+  const anyRunning = anyWorkRunning || live.length > 0
   useEffect(() => {
     if (!anyRunning) return
     const id = window.setInterval(() => setTick(Date.now()), 1000)
@@ -180,7 +184,10 @@ export function WorkLogView({
     [open, today],
   )
   /** 予定ぶんの実働。台帳の実績とは別に数え、画面でも分けて書く */
-  const planWorked = dayMinutes(box.runs, day, box.nowMs)
+  const planWorked = useMemo(
+    () => dayMinutes(box.runs.filter((r) => r.kind === 'plan'), day, box.nowMs),
+    [box.runs, day, box.nowMs],
+  )
   const spent = useMemo(
     () => daySpent(tasks, day, settings.defaultEstimateMin),
     [tasks, day, settings.defaultEstimateMin],

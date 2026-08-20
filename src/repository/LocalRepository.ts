@@ -12,7 +12,7 @@ import {
   type Settings,
   type Task,
   type TaskTemplate,
-  type PlanRun,
+  type WorkRun,
 } from '../types'
 
 /* =========================================================
@@ -66,7 +66,7 @@ interface WorkDB extends DBSchema {
   }
   runs: {
     key: string
-    value: PlanRun
+    value: WorkRun
     indexes: { by_day: string; by_plan: string }
   }
 }
@@ -371,7 +371,10 @@ function work(): Promise<IDBPDatabase<WorkDB>> {
         if (!d.objectStoreNames.contains('runs')) {
           const store = d.createObjectStore('runs', { keyPath: 'id' })
           store.createIndex('by_day', 'day')
-          store.createIndex('by_plan', 'planKey')
+          // 索引は作るだけで引いていない（件数が少なく、読むときは全部取って絞る）。
+          // v1.22.0 で予定だけの記録からタスクも入る形に広げたが、
+          // DBの版は上げずに済ませるため、索引の名前はそのままにしてある。
+          store.createIndex('by_plan', 'targetId')
         }
       },
       () => {
@@ -437,13 +440,19 @@ function normalizePlan(raw: Plan): Plan {
   }
 }
 
-/** 予定の実行ログ。区間の形が壊れているものは落とす（実績を推測で埋めない）。 */
-function normalizeRun(raw: PlanRun): PlanRun {
+/**
+ * 実行ログ。区間の形が壊れているものは落とす（実績を推測で埋めない）。
+ * v1.21 以前は予定だけを持ち、鍵の名前が `planKey` だった。読むときに寄せる。
+ */
+function normalizeRun(raw: WorkRun & { planKey?: string }): WorkRun {
   const segments = Array.isArray(raw.segments)
     ? raw.segments.filter((s) => s && typeof s.start === 'string')
     : []
+  const { planKey: legacyKey, ...rest } = raw
   return {
-    ...raw,
+    ...rest,
+    kind: raw.kind === 'task' ? 'task' : 'plan',
+    targetId: raw.targetId ?? legacyKey ?? '',
     categories: Array.isArray(raw.categories) ? raw.categories : [],
     segments,
     state: raw.state === 'running' || raw.state === 'paused' ? raw.state : 'done',
@@ -606,18 +615,18 @@ export class LocalRepository implements Repository {
 
   /* --- 予定の実行ログ。積むだけで、後から時刻を書き換えない --- */
 
-  async listRuns(fromDay?: string): Promise<PlanRun[]> {
+  async listRuns(fromDay?: string): Promise<WorkRun[]> {
     const all = await (await work()).getAll('runs')
     const list = all.map(normalizeRun).filter((r) => !fromDay || r.day >= fromDay)
     // ULID は時系列に並ぶので、古い順にするだけでよい
     return list.sort((a, b) => (a.id < b.id ? -1 : 1))
   }
 
-  async saveRun(run: PlanRun): Promise<void> {
+  async saveRun(run: WorkRun): Promise<void> {
     await (await work()).put('runs', run)
   }
 
-  async saveRuns(runs: PlanRun[]): Promise<void> {
+  async saveRuns(runs: WorkRun[]): Promise<void> {
     if (runs.length === 0) return
     const d = await work()
     const tx = d.transaction('runs', 'readwrite')

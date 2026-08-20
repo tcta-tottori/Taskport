@@ -11,10 +11,13 @@ import type { CategoryGroup, Settings, Task } from '../types'
  * 始める（＋の扇から開く）
  *
  * 「いまから手を動かす」ための入口。作る画面とは別で、押した時点で
- * 時間を数え始める。2つの入り方を1つの画面に持つ。
+ * 時間を数え始める。**扇で選んだほうだけ**が開く（v1.22.0）。
  *
  *   タスクから … 台帳にあるものを選ぶ（今日締めが上、そのあと近日）
  *   区分から   … 台帳に無い飛び込みの作業を、区分の名前で1件立てて始める
+ *
+ * 中で切り替えるタブは置かない。押した入口と出る画面が1対1でないと、
+ * どちらを押したのか分からなくなる（扇を分けた意味が消える）。
  *
  * 選んだら閉じて、実行の画面のいちばん上へ移る（App 側の goRun）。
  * =======================================================*/
@@ -40,7 +43,6 @@ export function StartSheet({
   onQuickTask: (category: string, start: boolean) => void
   onClose: () => void
 }) {
-  const [tab, setTab] = useState<StartMode>(mode)
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -60,38 +62,22 @@ export function StartSheet({
   const groups: CategoryGroup[] = settings.categoryGroups
 
   return (
-    <div className="tp-sheet" role="dialog" aria-modal="true" aria-label="始める">
+    <div
+      className="tp-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label={mode === 'task' ? 'タスクを始める' : '区分から始める'}
+    >
       <div className="tp-sheet-card">
         <header className="tp-sheet-head">
-          <h2>始める</h2>
+          <h2>{mode === 'task' ? 'タスクを始める' : '区分から始める'}</h2>
           <button type="button" className="tp-icon-btn" onClick={onClose} aria-label="閉じる">
             <Icon name="close" size={18} />
           </button>
         </header>
 
-        <div className="tp-seg tp-start-seg" role="tablist" aria-label="始め方">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'task'}
-            className={`tp-seg-btn${tab === 'task' ? ' is-on' : ''}`}
-            onClick={() => setTab('task')}
-          >
-            タスクから
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'category'}
-            className={`tp-seg-btn${tab === 'category' ? ' is-on' : ''}`}
-            onClick={() => setTab('category')}
-          >
-            区分から
-          </button>
-        </div>
-
         <div className="tp-sheet-body">
-          {tab === 'task' ? (
+          {mode === 'task' ? (
             <>
               <label className="tp-search">
                 <Icon name="search" size={16} />

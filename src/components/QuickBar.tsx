@@ -6,13 +6,16 @@ import { Icon, type IconName } from './Icon'
  *
  * 右下の ＋ だけ。録音もこの中（扇のマイク）から始める。
  *
- * ＋を押す（または長押しする）と、＋の周り 1/4 の円に沿って
- * 7つの入口が開く。真上から左へ順に
- *   **始める**（区分から・タスクから）→ **作る**（予定・手描き・記憶・文章・マイク）
- * 「始める＝いま手を動かす」と「作る＝あとでやることを入れる」は別の仕事なので、
- * 続けて並べて色も分けてある。
+ * ＋を押す（または長押しする）と、＋の周り 1/4 の円に沿って7つの入口が開く。
+ * **2層**にしてある（v1.22.0。利用者の指示）。
+ *
+ *   1層目（＋に近い側）… 区分・始める・予定 ＝ **いま動かす／その日に入れる**
+ *   2層目（奥側）      … 手描き・記憶・文章・マイク ＝ **あとでやることを作る**
+ *
+ * よく押すものを近くに置き、1層目は指を伸ばさずに届く。
+ * 2層目の角度は1層目の隙間に来るように 15° ずらしてあるので、
+ * 名前が前の層の丸と重ならない。
  * いちばん指の届く左端はマイクに残す（長押しのまま左へ滑らせて録音、が v1.12.1 からの手癖）。
- * 7つに増えたぶん、間隔は 15° に詰めて半径を広げ、丸と名前を少し小さくした。
  *
  * **長押しはそのまま滑らせて選べる。** 指を置いたまま扇が開き、
  * 目当てのアイコンまで滑らせて離すと、そこが動く。指を離す位置で決まるので、
@@ -37,24 +40,28 @@ export type SheetMode = 'form' | 'memory' | 'text'
 
 /**
  * 扇の並び。角度は数学の向き（90°＝真上、180°＝真横の左）。
- * 15°ずつ空けて 1/4 円に7つ置く（半径は CSS の --fan-r で広げてある）。
+ * `ring` が層（1＝＋に近い側、2＝奥）。半径は CSS の --fan-r1 / --fan-r2。
  */
 const ITEMS: {
   mode: MakeMode
   label: string
   icon: IconName
+  /** 層。1 が手前 */
+  ring: 1 | 2
   angle: number
   hint: string
   /** 「始める」の組。色を分けて、作る系と見分けられるようにする */
   start?: boolean
 }[] = [
-  { mode: 'catStart', label: '区分', icon: 'grid', angle: 90, hint: '区分から1件立てて、いま始める', start: true },
-  { mode: 'taskStart', label: '始める', icon: 'play', angle: 105, hint: 'タスクを選んで、いま始める', start: true },
-  { mode: 'plan', label: '予定', icon: 'calendar', angle: 120, hint: '打合せなど、その時間そこにいるものを入れる' },
-  { mode: 'form', label: '手描き', icon: 'pencil', angle: 135, hint: '自分で書いて1件作る' },
-  { mode: 'memory', label: '記憶', icon: 'checklist', angle: 150, hint: '記憶したタスクから呼び出す' },
-  { mode: 'text', label: '文章', icon: 'sparkle', angle: 165, hint: '文章からまとめて作る' },
-  { mode: 'voice', label: 'マイク', icon: 'mic', angle: 180, hint: '話してタスクにする' },
+  // 1層目 — いま動かす／その日に入れる
+  { mode: 'catStart', label: '区分', icon: 'grid', ring: 1, angle: 105, hint: '区分から1件立てて、いま始める', start: true },
+  { mode: 'taskStart', label: '始める', icon: 'play', ring: 1, angle: 135, hint: 'タスクを選んで、いま始める', start: true },
+  { mode: 'plan', label: '予定', icon: 'calendar', ring: 1, angle: 165, hint: '打合せなど、その時間そこにいるものを入れる' },
+  // 2層目 — あとでやることを作る
+  { mode: 'form', label: '手描き', icon: 'pencil', ring: 2, angle: 90, hint: '自分で書いて1件作る' },
+  { mode: 'memory', label: '記憶', icon: 'checklist', ring: 2, angle: 120, hint: '記憶したタスクから呼び出す' },
+  { mode: 'text', label: '文章', icon: 'sparkle', ring: 2, angle: 150, hint: '文章からまとめて作る' },
+  { mode: 'voice', label: 'マイク', icon: 'mic', ring: 2, angle: 180, hint: '話してタスクにする' },
 ]
 
 /** ここまで押し続けたら「長押し」とみなす（ミリ秒） */
@@ -191,10 +198,10 @@ export function QuickBar({
             return (
               <div
                 key={it.mode}
-                className={`tp-fan-item${closing ? ' is-out' : ''}`}
+                className={`tp-fan-item${closing ? ' is-out' : ''} tp-ring-${it.ring}`}
                 style={
                   {
-                    // 半径は CSS が持つ（画面幅で変える）。ここは向きだけを渡す。
+                    // 半径は CSS が持つ（層と画面幅で変える）。ここは向きだけを渡す。
                     '--fx': Math.cos(rad).toFixed(4),
                     '--fy': (-Math.sin(rad)).toFixed(4),
                     '--i': i,

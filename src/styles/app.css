@@ -418,13 +418,12 @@ body::before {
 }
 
 /* ---------- ＋から開く扇（始める／作る） ----------
-   ＋を押す／長押しすると、真上から左横までの 1/4 円に7つ並ぶ。
-   真上から 区分・始める（＝いま手を動かす2つ）、続けて
-   予定・手描き・記憶・文章・マイク（＝あとでやることを入れる5つ）。
-   位置は「向き（--fx/--fy）×半径（--fan-r）」で出し、半径だけを画面幅で変える。
-   7つに増えたぶん間隔は 15°。丸が重ならないよう半径を 172 → 220px に広げ、
-   丸は 60 → 54px に落とした（220×15° ≒ 58px で、丸の 54px より広い）。 */
-.tp-quick { --fan-r: 220px; --fan-label-r: 42px; --fan-size: 54px; }
+   ＋を押す／長押しすると、真上から左横までの 1/4 円に**2層**で並ぶ。
+     1層目（手前・--fan-r1）… 区分・始める・予定 ＝ いま動かす／その日に入れる
+     2層目（奥・--fan-r2）  … 手描き・記憶・文章・マイク ＝ あとで作る
+   位置は「向き（--fx/--fy）×半径」で出し、半径だけを画面幅で変える。
+   2層目の角度は1層目の隙間（15°ずれ）にあるので、名前が前の層の丸と重ならない。 */
+.tp-quick { --fan-r1: 120px; --fan-r2: 216px; --fan-label-r: 40px; --fan-size: 54px; }
 .tp-fan { position: relative; }
 
 .tp-fan-backdrop {
@@ -443,6 +442,7 @@ body::before {
   position: absolute; left: 50%; top: 50%;
   width: var(--fan-size); height: var(--fan-size);
   margin: calc(var(--fan-size) / -2) 0 0 calc(var(--fan-size) / -2);
+  --fan-r: var(--fan-r2);
   transform: translate(calc(var(--fan-r) * var(--fx)), calc(var(--fan-r) * var(--fy)));
   animation: tpFanIn .42s cubic-bezier(.2, 1.35, .3, 1) backwards;
   animation-delay: calc(var(--i) * 45ms);
@@ -452,6 +452,10 @@ body::before {
   animation: tpFanOut .22s cubic-bezier(.5, 0, .75, 0) forwards;
   animation-delay: calc((6 - var(--i)) * 24ms);
 }
+/* 層ごとの半径。手前の層は少しだけ丸を小さくして、奥が隠れないようにする */
+.tp-fan-item.tp-ring-1 { --fan-r: var(--fan-r1); }
+.tp-fan-item.tp-ring-2 { --fan-r: var(--fan-r2); }
+
 .tp-fan-btn {
   width: var(--fan-size); height: var(--fan-size); border-radius: 50%;
   display: grid; place-items: center;
@@ -948,8 +952,8 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-about { grid-template-columns: 1fr; gap: 2px; }
   .tp-about dd { margin-bottom: 8px; }
   .tp-quick-btn { width: 56px; height: 56px; }
-  /* 48px の丸が 15° 間隔で重ならない半径（190×15° ≒ 50px） */
-  .tp-quick { --fan-r: 200px; --fan-label-r: 36px; --fan-size: 48px; }
+  /* 狭い端末。1層目 108px・2層目 196px（30°間隔なので丸は重ならない） */
+  .tp-quick { --fan-r1: 108px; --fan-r2: 196px; --fan-label-r: 34px; --fan-size: 48px; }
   .tp-hero-num { font-size: 34px; }
 }
 
@@ -2223,6 +2227,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 
 @media (prefers-reduced-motion: reduce) {
   .tp-run-dot { animation: none; }
+  .tp-live-row:not(.is-paused), .tp-live-plan:not(.is-paused) { animation: none; }
 }
 
 /* =========================================================
@@ -2333,6 +2338,31 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-start-item:hover { background: var(--surface); border-color: var(--go); }
 .tp-start-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .tp-start-meta { flex: none; font-size: 11px; color: var(--muted); }
+
+/* 動いている行は枠を脈打たせる（画面を離れて戻っても、数えているのが分かる） */
+.tp-live-row:not(.is-paused) { animation: tpLiveEdge 2s ease-in-out infinite; }
+@keyframes tpLiveEdge {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--rec) 32%, var(--line));
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--rec) 26%, transparent);
+  }
+  50% {
+    border-color: var(--rec);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--rec) 16%, transparent);
+  }
+}
+/* 予定ぶんはブランド色で脈打たせる（タスクの赤と見分ける） */
+.tp-live-plan:not(.is-paused) { animation-name: tpLiveEdgePlan; }
+@keyframes tpLiveEdgePlan {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--brand1) 32%, var(--line));
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand1) 26%, transparent);
+  }
+  50% {
+    border-color: var(--brand1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand1) 16%, transparent);
+  }
+}
 
 /* 止めてあるもの。動いているものと見分けがつくよう、赤ではなく橙で出す */
 .tp-paused .tp-live-row { background: color-mix(in srgb, var(--amber) 7%, var(--surface-2)); border-color: color-mix(in srgb, var(--amber) 28%, var(--line)); }
@@ -2630,3 +2660,44 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-donut-center { left: 50%; top: clamp(74px, 21vw, 95px); }
   .tp-donut-legend { width: 100%; }
 }
+
+/* ---------- 時間帯の帯（分析） ---------- */
+.tp-band-block { margin-top: 18px; }
+.tp-band-wrap { position: relative; margin-top: 6px; }
+.tp-band-rail {
+  position: relative; width: 100%;
+  background: var(--surface-3); border-radius: 6px; overflow: hidden;
+}
+.tp-band-work { position: absolute; top: 0; bottom: 0; background: var(--surface-2); }
+.tp-band-seg {
+  position: absolute; top: 2px; bottom: 2px;
+  display: flex; align-items: center; padding: 0 5px;
+  background: var(--cat, var(--brand1));
+  border-radius: 4px; box-shadow: 0 0 0 1.5px var(--surface);
+  color: var(--on-brand); font-size: 10.5px; font-weight: 700;
+  overflow: hidden; white-space: nowrap;
+}
+.tp-band-seg:hover { filter: brightness(1.08); }
+/* 予定は斜線を薄く重ねて、タスクと形でも見分ける */
+.tp-band-seg.is-plan {
+  background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.28) 0 4px, transparent 4px 9px);
+}
+.tp-band-seg-name { overflow: hidden; text-overflow: ellipsis; }
+.tp-band-ticks { position: relative; height: 16px; margin-top: 3px; }
+.tp-band-ticks > span {
+  position: absolute; transform: translateX(-50%);
+  font-size: 9.5px; color: var(--faint);
+}
+
+/* ---------- 実績を直す ---------- */
+.tp-actual-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.tp-actual-row {
+  border: 1px solid var(--line); border-left: 4px solid var(--pri-low);
+  border-radius: var(--radius-card); background: var(--surface-2); padding: 10px 12px;
+}
+.tp-actual-row.tp-pri-high { border-left-color: var(--pri-high); }
+.tp-actual-row.tp-pri-mid { border-left-color: var(--pri-mid); }
+.tp-actual-row.tp-pri-low { border-left-color: var(--pri-low); }
+.tp-actual-title { margin: 0 0 5px; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.tp-actual-cats { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 8px; }
+.tp-actual-quick { margin-top: 8px; }

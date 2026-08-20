@@ -38,8 +38,11 @@ import {
   finishRun,
   pauseRun,
   resumeRun,
+  runForTask,
   runMinutes,
   runOf,
+  runSeconds,
+  runsOf,
   type RunBox,
 } from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
@@ -82,7 +85,7 @@ import {
   type Task,
   type TaskFilter,
   type TaskTemplate,
-  type PlanRun,
+  type WorkRun,
 } from './types'
 
 /* =========================================================
@@ -126,7 +129,7 @@ export default function App() {
   /** 予定（打合せ・固定の業務）。台帳とは別に持つ */
   const [plans, setPlans] = useState<Plan[]>([])
   /** 実行ログ（開始・一時停止・終了）。新しい日ぶんだけ手元に置く */
-  const [runs, setRuns] = useState<PlanRun[]>([])
+  const [runs, setRuns] = useState<WorkRun[]>([])
   /** 直している予定。existing が false なら新しく入れるところ */
   const [planEditing, setPlanEditing] = useState<{ plan: Plan; existing: boolean } | null>(null)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
@@ -187,7 +190,7 @@ export default function App() {
   /** 続けて登録したときに控えを取りこぼさないよう、いまの控えを常に持っておく */
   const templatesRef = useRef<TaskTemplate[]>([])
   /** いまの台帳と設定。あとから走る処理（同期・リマインド）が古い値を掴まないようにする */
-  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS, runs: [] as PlanRun[] })
+  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS, runs: [] as WorkRun[] })
   liveRef.current = { tasks, settings, runs }
   const [today, setToday] = useState(dayKey())
   const [checking, setChecking] = useState(false)
@@ -634,30 +637,54 @@ export default function App() {
     })
   }, [])
 
+  /**
+   * いま手を付ける／手を止める。
+   *
+   * 【区間はログ、合計は台帳】
+   * 押した時刻の区間を実行ログに積み、止めたときにその日の合計を台帳
+   * （`actualMin`）へ書き戻す。`startedAt` は「いま動いている印」で、
+   * 止めると消える。それだけだと「何時にやったか」が残らないので、
+   * 時間帯の色分け（分析）と日報の枠決めのために区間を残す。
+   *
+   * 1分に満たないぶんの扱い:
+   *   20秒未満 … 押し間違いとみなして記録ごと捨てる
+   *   20秒〜1分 … 1分として数える（触った印が残らないと「止めてあるもの」に
+   *               出ず、再開する道が消える。最小単位1分は日報の書き方に合わせた）
+   */
   const toggleRunning = useCallback(
     async (task: Task) => {
+      const at = new Date().toISOString()
       if (isRunning(task)) {
-        /* 止めるときは、測れた経過を実績に足す。始めたのが無かったことにはしない。
-           1分に満たないぶんの扱い:
-             20秒未満 … 押し間違いとみなして何も足さない
-             20秒〜1分 … 1分として足す（触った印が残らないと「止めてあるもの」に出ず、
-                          再開する道が消える。最小単位は1分という数え方に合わせる） */
-        const sec = runningSec(task)
-        const spent = sec >= 20 ? Math.max(1, Math.floor(sec / 60)) : 0
+        const open = runOf(liveRef.current.runs, task.id)
+        const closed = open ? finishRun(open, at) : null
+        if (closed) await repository.saveRun(closed)
+
+        // 実測（この日の区間の合計）。押し間違いは捨てる
+        const others = runsOf(liveRef.current.runs, task.id, today).filter((r) => r.id !== closed?.id)
+        const sec =
+          (closed ? runSeconds(closed) : runningSec(task)) +
+          others.reduce((s, r) => s + runSeconds(r), 0)
+        const measured = sec >= 20 ? Math.max(1, Math.floor(sec / 60)) : 0
+        if (closed && sec < 20) await repository.removeRun(closed.id)
+
         await repository.update(task.id, {
           startedAt: null,
-          actualMin: spent > 0 ? (task.actualMin ?? 0) + spent : task.actualMin,
+          actualMin: measured > 0 ? measured : task.actualMin,
         })
-        notify(spent > 0 ? `手を止めました（${durationLabel(spent)}を記録）` : '手を止めました')
+        notify(measured > 0 ? `手を止めました（${durationLabel(measured)}を記録）` : '手を止めました')
       } else {
-        await repository.update(task.id, { startedAt: new Date().toISOString() })
+        const open = runOf(liveRef.current.runs, task.id)
+        // 同じ日にもう一度始めるときは、前の記録に区間を足す（回数で散らばらせない）
+        await repository.saveRun(open ? resumeRun(open, at) : runForTask(task, today))
+        await repository.update(task.id, { startedAt: at })
         notify('始めました')
         // 始めたときだけ移る（止めたときは、押した場所にとどまる）
         goRun()
       }
       await reload()
+      await reloadWork()
     },
-    [reload, notify, goRun],
+    [reload, reloadWork, notify, goRun, today],
   )
 
   /** 実績を直す（かかった時間・開始時刻）。実績の画面からその場で使う。 */
@@ -794,7 +821,7 @@ export default function App() {
   )
 
   const pauseRunning = useCallback(
-    async (run: PlanRun) => {
+    async (run: WorkRun) => {
       const next = pauseRun(run)
       await repository.saveRun(next)
       await reloadWork()
@@ -804,7 +831,7 @@ export default function App() {
   )
 
   const resumeRunning = useCallback(
-    async (run: PlanRun) => {
+    async (run: WorkRun) => {
       await repository.saveRun(resumeRun(run))
       await reloadWork()
       goRun()
@@ -813,7 +840,7 @@ export default function App() {
   )
 
   const finishRunning = useCallback(
-    async (run: PlanRun) => {
+    async (run: WorkRun) => {
       const next = finishRun(run)
       await repository.saveRun(next)
       await reloadWork()
@@ -835,14 +862,18 @@ export default function App() {
         categories: [category],
         due: today,
       })
-      if (start) created.startedAt = new Date().toISOString()
+      if (start) {
+        created.startedAt = new Date().toISOString()
+        await repository.saveRun(runForTask(created, today))
+      }
       await repository.add([created])
       await rememberAll([created])
       await reload()
+      await reloadWork()
       notify(start ? `「${category}」を立てて始めました` : `「${category}」を立てました`)
       if (start) goRun()
     },
-    [today, reload, rememberAll, notify, goRun],
+    [today, reload, reloadWork, rememberAll, notify, goRun],
   )
 
   /** 実行の操作をまとめて画面へ渡す。画面ごとに名前が変わらないようにする。 */
@@ -1453,7 +1484,14 @@ export default function App() {
             onNotify={notify}
           />
         ) : view === 'dashboard' ? (
-          <DashboardView tasks={tasks} plans={plans} today={today} settings={settings} />
+          <DashboardView
+            tasks={tasks}
+            plans={plans}
+            runs={runs}
+            today={today}
+            settings={settings}
+            onPatch={(t, p) => void guard(() => patchTask(t, p))}
+          />
         ) : view === 'recordings' ? (
           <RecordingsView
             onNotify={notify}
