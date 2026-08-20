@@ -58,6 +58,7 @@ export function DashboardView({
   today,
   settings,
   onPatch,
+  onAddLog,
   onSaveOrder,
 }: {
   tasks: Task[]
@@ -69,6 +70,8 @@ export function DashboardView({
   settings: Settings
   /** 実績（かかった時間・開始時刻）を直す */
   onPatch: (task: Task, patch: Partial<Task>) => void
+  /** やったことを後から足す（v1.28.0 で実行の画面から移した）。先の日には出さない */
+  onAddLog: (day: string) => void
   /** 面の並びを保存する（設定が持つ） */
   onSaveOrder: (order: string[]) => void
 }) {
@@ -156,8 +159,15 @@ export function DashboardView({
           <p className="tp-empty-head">まだ集計するデータがありません</p>
           <p className="tp-empty-body">
             タスクを登録して完了にしていくと、日ごとの推移と区分ごとの偏りがここに出ます。
+            会議や電話など、台帳に無いまま終わった仕事は下から足せます。
           </p>
         </div>
+        {/* 1件も無いときでも、後から足す道は残す（v1.28.0） */}
+        <button type="button" className="tp-log-add" onClick={() => onAddLog(today)}>
+          <Icon name="plus" size={16} />
+          やったことを足す
+          <small>会議・電話・応援など、台帳に無いまま終わった仕事</small>
+        </button>
       </div>
     )
   }
@@ -279,11 +289,22 @@ export function DashboardView({
             </div>
           </div>
 
+          {/* やったことを足す。実行の画面から移した（v1.28.0。利用者の指示）。
+              円グラフのその日と同じ日に入るので、入れた結果がその場で下に出る。
+              **先の日には出さない**（起きていない仕事を実績にしない）。 */}
+          {diffDays(shareDay, today) <= 0 && (
+            <button type="button" className="tp-log-add" onClick={() => onAddLog(shareDay)}>
+              <Icon name="plus" size={16} />
+              やったことを足す
+              <small>会議・電話・応援など、台帳に無いまま終わった仕事</small>
+            </button>
+          )}
+
           {share.total === 0 ? (
             <p className="tp-empty-body">
               {diffDays(shareDay, today) > 0
                 ? 'この日はまだ記録がありません。予定を入れておくと、その時間ぶんが先に出ます。'
-                : 'この日の記録がありません。実行の画面で始めるか、やったことを足すと、ここに割合が出ます。'}
+                : 'この日の記録がありません。上の「やったことを足す」か、実行の画面で始めると出ます。'}
             </p>
           ) : (
             <>

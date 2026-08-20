@@ -55,6 +55,7 @@ export function ScheduleView({
   onEdit,
   onEditPlan,
   onImportEvent,
+  onAddLog,
   onNotify,
 }: {
   tasks: Task[]
@@ -69,6 +70,8 @@ export function ScheduleView({
   onEditPlan: (plan: Plan) => void
   /** Googleカレンダーの予定をタスク候補にする（確認画面を通す） */
   onImportEvent: (ev: CalendarEvent) => void
+  /** やったことを後から足す（v1.28.0 で実行の画面から移した）。先の日には出さない */
+  onAddLog: (day: string) => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [day, setDay] = useState(today)
@@ -260,6 +263,16 @@ export function ScheduleView({
               </>
             )}
           </div>
+
+          {/* やったことを足す。会議・電話・応援など、台帳に無いまま終わった仕事を後から入れる。
+              **先の日には出さない**（v1.26.0）。まだ起きていない仕事を実績にしない。 */}
+          {day <= today && (
+            <button type="button" className="tp-log-add" onClick={() => onAddLog(day)}>
+              <Icon name="plus" size={16} />
+              やったことを足す
+              <small>会議・電話・応援など、台帳に無いまま終わった仕事</small>
+            </button>
+          )}
 
           {calendarReady && (
             <div className="tp-cal-bar">

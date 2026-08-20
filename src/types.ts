@@ -171,6 +171,20 @@ export interface Draft extends Omit<Task, 'id' | 'status' | 'createdAt' | 'updat
   tempId: string
 }
 
+/**
+ * 「やったことを足す」で入れる1件（会議・電話・応援など、台帳に無いまま終わった仕事）。
+ * v1.28.0 で入口をスケジュールと分析へ移した（実行の画面からは外した）。
+ */
+export interface LogEntry {
+  draft: Draft
+  /** "YYYY-MM-DD" */
+  day: string
+  /** 開始時刻 "HH:mm" */
+  start: string
+  /** かかった時間（分） */
+  minutes: number
+}
+
 export const PRIORITIES: Priority[] = ['high', 'mid', 'low']
 
 export const PRIORITY_LABEL: Record<Priority, string> = {

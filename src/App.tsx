@@ -18,7 +18,8 @@ import { TemplateSheet } from './views/TemplateSheet'
 import { TextSheet } from './views/TextSheet'
 import { TriageSheet, type TriageAction } from './views/TriageSheet'
 import { WrapUpSheet } from './views/WrapUpSheet'
-import { WorkLogView, type LogEntry } from './views/WorkLogView'
+import { WorkLogView } from './views/WorkLogView'
+import { AddLogSheet } from './views/AddLogSheet'
 import { WorkCalendarSheet } from './views/WorkCalendarSheet'
 import { RecordingOverlay } from './views/RecordingOverlay'
 import { RecordingsView } from './views/RecordingsView'
@@ -79,6 +80,7 @@ import {
   type CategoryGroup,
   type Draft,
   type Job,
+  type LogEntry,
   type Plan,
   type PlanOccurrence,
   type Recording,
@@ -152,6 +154,8 @@ export default function App() {
   /** 保存データの開き具合。時間がかかっていることを画面に出すために見張る。 */
   const [dbStatus, setDbStatus] = useState<DbStatus>('idle')
   const [triaging, setTriaging] = useState(false)
+  /** 「やったことを足す」を開いている日。null なら閉じている（v1.28.0） */
+  const [logging, setLogging] = useState<string | null>(null)
   const [wrappingUp, setWrappingUp] = useState(false)
   const [editingCalendar, setEditingCalendar] = useState(false)
   /** いまの時刻（0時からの分）。1分ごとに更新する */
@@ -1516,6 +1520,7 @@ export default function App() {
             onEdit={setEditing}
             onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
             onImportEvent={importEvent}
+            onAddLog={setLogging}
             onNotify={notify}
           />
         ) : view === 'worklog' ? (
@@ -1523,15 +1528,10 @@ export default function App() {
             tasks={tasks}
             today={today}
             settings={settings}
-            templates={templates}
             runBox={runBox}
             onEdit={setEditing}
             onToggle={(t) => void guard(() => toggleDone(t))}
             onToggleRunning={(t) => void guard(() => toggleRunning(t))}
-            onPatch={(t, p) => void guard(() => patchTask(t, p))}
-            onAddLog={(e) => void guard(() => addLog(e))}
-            onQuickTask={(c, start) => void guard(() => quickTask(c, start))}
-            onChangeCategoryGroups={saveCategoryGroups}
             onToggleSubtask={(t, id) => void guard(() => toggleSubtask(t, id))}
             tab={tab}
             onTabChange={setTab}
@@ -1543,7 +1543,6 @@ export default function App() {
             onTriage={() => setTriaging(true)}
             onWrapUp={() => setWrappingUp(true)}
             jobs={jobs}
-            onNotify={notify}
           />
         ) : view === 'jobs' ? (
           <JobsView
@@ -1566,6 +1565,7 @@ export default function App() {
             today={today}
             settings={settings}
             onPatch={(t, p) => void guard(() => patchTask(t, p))}
+            onAddLog={setLogging}
             onSaveOrder={(dashOrder) => void guard(() => saveSettings({ ...settings, dashOrder }))}
           />
         ) : view === 'recordings' ? (
@@ -1735,6 +1735,22 @@ export default function App() {
           settings={settings}
           onApply={(t, a) => guard(() => applyTriage(t, a))}
           onClose={() => setTriaging(false)}
+        />
+      )}
+
+      {/* やったことを足す。スケジュール（DAY）と分析（その日）から開く。
+          先の日には出さないので、呼ぶ側で day を確かめてから渡す。 */}
+      {logging && (
+        <AddLogSheet
+          day={logging}
+          templates={templates}
+          categoryGroups={settings.categoryGroups}
+          onChangeCategoryGroups={saveCategoryGroups}
+          onCommit={(entry) => {
+            setLogging(null)
+            void guard(() => addLog(entry))
+          }}
+          onClose={() => setLogging(null)}
         />
       )}
 
