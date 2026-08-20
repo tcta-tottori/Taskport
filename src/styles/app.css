@@ -1282,6 +1282,27 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   display: flex; flex-direction: column; gap: 5px;
 }
 .tp-board-free .tp-hint { margin-top: 6px; }
+/* その日の空き。件数の隣に、弱い字で添える（v1.29.0） */
+/* 見出し（.tp-label）の中に置くので、大文字化と字間を戻す（「15min」を崩さない） */
+.tp-free-note {
+  margin-left: 8px; font-size: 11px; font-weight: 700; color: var(--faint);
+  text-transform: none; letter-spacing: 0;
+}
+/* 空いている時間へ置く釦。時刻そのものを出すので、押す前に置き先が分かる */
+.tp-place {
+  flex: none; min-height: 44px; padding: 0 12px; border-radius: 11px;
+  font-size: 12.5px; font-weight: 800; color: var(--brand1);
+  background: color-mix(in srgb, var(--brand1) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand1) 30%, transparent);
+  transition: .16s;
+}
+.tp-place:hover { background: var(--brand1); border-color: var(--brand1); color: var(--on-brand); }
+/* 入りきらないときは押せる形にしない（押しても何も起きない釦を出さない） */
+.tp-place.is-full {
+  display: inline-flex; align-items: center;
+  color: var(--faint); background: transparent; border-style: dashed;
+  border-color: var(--line-strong); font-weight: 700;
+}
 .tp-mini-event {
   border-left-color: var(--brand2) !important;
   border-style: dashed;

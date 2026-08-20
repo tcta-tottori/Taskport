@@ -14,6 +14,7 @@ import {
 } from '../lib/date'
 import { groupByDue, sortTasks } from '../lib/tasks'
 import { isWorkDay, taskMinutes } from '../lib/workday'
+import { busySlots, firstFit, fitLabel, freeMinutes, freeSlots } from '../lib/timebox'
 import { fetchEvents } from '../ports/in/fromCalendar'
 import { isConnected } from '../lib/googleAuth'
 import { groupOccurrences, occurrencesInRange } from '../lib/plans'
@@ -56,6 +57,7 @@ export function ScheduleView({
   onEditPlan,
   onImportEvent,
   onAddLog,
+  onPlace,
   onNotify,
 }: {
   tasks: Task[]
@@ -72,6 +74,8 @@ export function ScheduleView({
   onImportEvent: (ev: CalendarEvent) => void
   /** やったことを後から足す（v1.28.0 で実行の画面から移した）。先の日には出さない */
   onAddLog: (day: string) => void
+  /** 時刻を決めていない仕事を、その日の空きへ置く（タイムボックス。v1.29.0） */
+  onPlace: (task: Task, time: string) => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [day, setDay] = useState(today)
@@ -136,6 +140,19 @@ export function ScheduleView({
     () => dayTasks.filter((t) => t.status === 'open' && !t.dueTime),
     [dayTasks],
   )
+
+  /* --- タイムボックス（v1.29.0）---
+     その日の空いている区間を出して、時刻未定の仕事を早いところから置けるようにする。
+     今日はいまより前を空きにしない。先の日は始業から。 */
+  const busy = useMemo(
+    () => busySlots(dayTasks, dayPlans, settings.defaultEstimateMin),
+    [dayTasks, dayPlans, settings.defaultEstimateMin],
+  )
+  const slots = useMemo(
+    () => freeSlots(settings.workHours, busy, day === today ? nowMin : null),
+    [settings.workHours, busy, day, today, nowMin],
+  )
+  const free = freeMinutes(slots)
 
   const overdue = useMemo(() => sortTasks(open.filter((t) => !!t.due && t.due < today)), [open, today])
 
@@ -234,32 +251,55 @@ export function ScheduleView({
             onImportEvent={onImportEvent}
           />
 
-          {/* 時刻を決めていない仕事。軸に置けないぶんをここで拾う（未完了だけ） */}
+          {/* 時刻を決めていない仕事。軸に置けないぶんをここで拾う（未完了だけ）。
+              v1.29.0 で、空いている時間へ置く釦を足した（タイムボックス）。
+              置き先は見込みの長さで決める。実績には触らない。 */}
           <div className="tp-board-free">
             <p className="tp-label">
               時刻未定 <b className="tp-mono">{loose.length}</b>
+              <span className="tp-free-note tp-mono">空き {durationShort(free)}</span>
             </p>
             {loose.length === 0 ? (
               <p className="tp-hint">この日は、時刻を決めていない仕事はありません。</p>
             ) : (
               <>
                 <ul className="tp-daylist">
-                  {loose.map((t) => (
-                    <li key={t.id}>
-                      <button
-                        type="button"
-                        className={`tp-mini tp-pri-${t.priority}`}
-                        onClick={() => onEdit(t)}
-                      >
-                        <span>{t.title}</span>
-                        <span className="tp-mono">
-                          {durationShort(taskMinutes(t, settings.defaultEstimateMin))}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                  {loose.map((t) => {
+                    const need = taskMinutes(t, settings.defaultEstimateMin)
+                    const at = firstFit(need, slots)
+                    return (
+                      <li key={t.id} className="tp-dayrow">
+                        <button
+                          type="button"
+                          className={`tp-mini tp-pri-${t.priority}`}
+                          onClick={() => onEdit(t)}
+                        >
+                          <span>{t.title}</span>
+                          <span className="tp-mono">{durationShort(need)}</span>
+                        </button>
+                        {at === null ? (
+                          <span className="tp-place is-full tp-mono" title="空いている時間に入りません">
+                            空きなし
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="tp-place tp-mono"
+                            aria-label={`${t.title} を ${fitLabel(at)} に置く`}
+                            title="空いている時間に置く"
+                            onClick={() => onPlace(t, fitLabel(at))}
+                          >
+                            {fitLabel(at)}
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
-                <p className="tp-hint">開いて時刻を入れると、上の軸に並びます。</p>
+                <p className="tp-hint">
+                  時刻を押すと、その仕事を空いている時間へ置きます（見込みの長さぶん。
+                  休憩と入っている予定は避けます）。開いて時刻を直すこともできます。
+                </p>
               </>
             )}
           </div>

@@ -1,6 +1,7 @@
 import { fromMinutes, toMinutes } from './date'
+import { planMinutes } from './plans'
 import { taskMinutes, trim, workSegments } from './workday'
-import type { Task, TimeboxKey, WorkHours } from '../types'
+import type { PlanOccurrence, Task, TimeboxKey, WorkHours } from '../types'
 
 /* =========================================================
  * タイムボックス（時間枠）
@@ -173,4 +174,114 @@ export function nextUp(tasks: Task[], wh: WorkHours, nowMin: number): Task | nul
     if (ahead.length > 0) return ahead[0]
   }
   return null
+}
+
+/* =========================================================
+ * その日の空き時間へ置く（v1.29.0）
+ *
+ * 上の「枠」は1日を4つの帯に畳んだ粗い見方で、スケジュールの縦軸
+ * （`DayTimeline`）は実時刻の並び。**置き場を決めるのはこちら**で、
+ * 「いつやるか決めていない仕事」を、空いているところへ実時刻で置く。
+ *
+ * 守っていること
+ *   - 休憩と、すでに入っている予定・時刻の決まった仕事は避ける
+ *   - **今日は、いまより前には置かない**（過ぎた時間に置かせない）
+ *   - 使うのは見込み（`estimateMin`）だけ。実績（`actualMin`）には触らない
+ *   - 入りきらないときは詰めない。置けないことを画面に出す
+ *
+ * 稼働の集計には混ぜない。ここは「これからの置き場」を出すだけで、
+ * 数えるのは押して測った時間だけ（`lib/worklog.ts` の `measuredOfDay`）。
+ * =======================================================*/
+
+export interface Slot {
+  /** 0時からの分 */
+  from: number
+  to: number
+}
+
+/** 合計の空き（分） */
+export function freeMinutes(slots: Slot[]): number {
+  return slots.reduce((n, s) => n + Math.max(0, s.to - s.from), 0)
+}
+
+/** 重なった区間をつなげる（開始順） */
+function mergeSlots(list: Slot[]): Slot[] {
+  const sorted = [...list].filter((s) => s.to > s.from).sort((a, b) => a.from - b.from)
+  const out: Slot[] = []
+  for (const s of sorted) {
+    const last = out[out.length - 1]
+    if (last && s.from <= last.to) last.to = Math.max(last.to, s.to)
+    else out.push({ ...s })
+  }
+  return out
+}
+
+/**
+ * すでに埋まっている区間。
+ * 時刻の決まった**未完了**タスク（見込みの長さぶん）と、終日でない予定を集める。
+ * 済んだ仕事はもう手が空いているので、埋まっているとみなさない。
+ */
+export function busySlots(
+  tasks: Task[],
+  occurrences: PlanOccurrence[],
+  defaultEstimateMin: number,
+): Slot[] {
+  const out: Slot[] = []
+  for (const t of tasks) {
+    if (t.status === 'done' || !t.dueTime) continue
+    const from = toMinutes(t.dueTime)
+    if (from === null) continue
+    out.push({ from, to: from + taskMinutes(t, defaultEstimateMin) })
+  }
+  for (const o of occurrences) {
+    if (o.plan.allDay) continue
+    const from = toMinutes(o.plan.startTime ?? '')
+    if (from === null) continue
+    out.push({ from, to: from + planMinutes(o.plan) })
+  }
+  return mergeSlots(out)
+}
+
+/**
+ * 空いている区間。勤務している時間（休憩を抜いたもの）から、埋まっている区間を引く。
+ * `notBefore` を渡すと、それより前は空きにしない（今日はいまの時刻を渡す）。
+ */
+export function freeSlots(wh: WorkHours, busy: Slot[], notBefore: number | null = null): Slot[] {
+  const out: Slot[] = []
+  for (const seg of workSegments(wh)) {
+    let cursor = notBefore === null ? seg.from : Math.max(seg.from, notBefore)
+    for (const b of busy) {
+      if (b.to <= cursor) continue
+      if (b.from >= seg.to) break
+      if (b.from > cursor) out.push({ from: cursor, to: Math.min(b.from, seg.to) })
+      cursor = Math.max(cursor, b.to)
+      if (cursor >= seg.to) break
+    }
+    if (cursor < seg.to) out.push({ from: cursor, to: seg.to })
+  }
+  return out.filter((s) => s.to > s.from)
+}
+
+/** 置き先を丸める単位（分）。時刻の見た目を揃える */
+const STEP = 5
+
+/**
+ * 見込み `minutes` の仕事が入る、いちばん早い開始時刻（0時からの分）。
+ * どこにも入らなければ null。
+ *
+ * 開始は5分刻みに切り上げる（区間の頭が 10:22 でも「10:25 に置く」と読める形にする。
+ * 切り上げたぶんが区間からはみ出さないことは、その場で確かめている）。
+ */
+export function firstFit(minutes: number, slots: Slot[]): number | null {
+  const need = Math.max(1, Math.round(minutes))
+  for (const s of slots) {
+    const start = Math.ceil(s.from / STEP) * STEP
+    if (start + need <= s.to) return start
+  }
+  return null
+}
+
+/** 「10:25」。置き先を釦に出すのに使う */
+export function fitLabel(min: number): string {
+  return fromMinutes(min)
 }

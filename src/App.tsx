@@ -723,6 +723,19 @@ export default function App() {
     [reload],
   )
 
+  /**
+   * 時刻を決めていない仕事を、その日の空きへ置く（タイムボックス。v1.29.0）。
+   * 触るのは開始時刻（`dueTime`）だけで、期限も見込みも実績も変えない。
+   */
+  const placeTask = useCallback(
+    async (task: Task, time: string) => {
+      await repository.update(task.id, { dueTime: time })
+      await reload()
+      notify(`${task.title} を ${time} に置きました`)
+    },
+    [reload, notify],
+  )
+
   /** やった業務を1件、完了済みとして足す。確認画面は通さない（人が自分で書いた1件） */
   const addLog = useCallback(
     async (entry: LogEntry) => {
@@ -1521,6 +1534,7 @@ export default function App() {
             onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
             onImportEvent={importEvent}
             onAddLog={setLogging}
+            onPlace={(t, time) => void guard(() => placeTask(t, time))}
             onNotify={notify}
           />
         ) : view === 'worklog' ? (
