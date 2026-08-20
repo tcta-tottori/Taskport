@@ -170,7 +170,7 @@ export function DashboardView({
         <section className="tp-panel tp-dash-hero is-wide">
           {bar}
           <div className="tp-panel-head">
-            <h2>TODAY</h2>
+            <h2>本日の稼働</h2>
             <span className="tp-chip-flame">
               <Icon name="flame" size={13} /> 連続{streak}日
             </span>
@@ -219,7 +219,7 @@ export function DashboardView({
   <section className="tp-panel is-wide tp-band-card">
           {bar}
           <div className="tp-panel-head">
-            <h2>TIMELINE</h2>
+            <h2>時間帯</h2>
             <button
               type="button"
               className="tp-btn-ghost tp-btn-sm"
@@ -257,7 +257,7 @@ export function DashboardView({
         <section className="tp-panel is-wide">
           {bar}
           <div className="tp-panel-head">
-            <h2>CATEGORY SHARE</h2>
+            <h2>区分の割合</h2>
             <div className="tp-head-acts">
               <button
                 type="button"
@@ -276,11 +276,6 @@ export function DashboardView({
               >
                 <Icon name="chevron" size={18} />
               </button>
-              {shareDay !== today && (
-                <button type="button" className="tp-btn-ghost tp-btn-sm" onClick={() => setShareDay(today)}>
-                  今日へ
-                </button>
-              )}
             </div>
           </div>
 
@@ -319,7 +314,7 @@ export function DashboardView({
         <section className="tp-panel is-wide">
           {bar}
           <div className="tp-panel-head">
-            <h2>CATEGORY TIME</h2>
+            <h2>区分ごとの時間</h2>
             <span className="tp-badge tp-mono">直近10日</span>
           </div>
           {spent.total === 0 ? (
@@ -383,7 +378,7 @@ export function DashboardView({
         return (
         <section className="tp-panel">
           {bar}
-          <h2 className="tp-panel-title">PROGRESS</h2>
+          <h2 className="tp-panel-title">区分別の進捗</h2>
           {cats.length === 0 && <p className="tp-empty-body">区分のついたタスクがありません。</p>}
           {cats.map((c) => {
             const p = Math.round(c.rate * 100)
@@ -425,7 +420,7 @@ export function DashboardView({
             <TrendCard allDays={allDays} />
           ) : (
             <>
-              <h2 className="tp-panel-title">TREND</h2>
+              <h2 className="tp-panel-title">推移</h2>
               <p className="tp-empty-body">
                 登録と完了を続けると、日ごとの件数と消化率の推移が出ます。
               </p>
@@ -437,7 +432,7 @@ export function DashboardView({
         return (
         <section className="tp-panel">
           {bar}
-          <h2 className="tp-panel-title">PRIORITY</h2>
+          <h2 className="tp-panel-title">優先度</h2>
           <PriorityBars dist={pri} />
           <p className="tp-muted tp-small">
             高が積み上がっているときは、期限をずらすより先に減らす対象を決めてください。
@@ -448,7 +443,7 @@ export function DashboardView({
         return (
         <section className="tp-panel">
           {bar}
-          <h2 className="tp-panel-title">SOURCE</h2>
+          <h2 className="tp-panel-title">入口別</h2>
           <SourceBar stats={srcs} total={tasks.length} />
           <p className="tp-muted tp-small">
             使われている入口が分かると、次に手を入れる入口を決められます。
@@ -562,7 +557,7 @@ function TrendCard({ allDays }: { allDays: DayPoint[] }) {
   return (
     <>
       <div className="tp-trend-head">
-        <h2 className="tp-panel-title">TREND</h2>
+        <h2 className="tp-panel-title">推移</h2>
         {maxRange > minRange && (
           <label className="tp-trend-range" title="表示する日数">
             <input

@@ -99,7 +99,7 @@ export function JobsView({
       <Reveal>
         <section className="tp-panel">
           <div className="tp-panel-head">
-            <h2>JOBS</h2>
+            <h2>工数</h2>
             <div className="tp-head-acts">
               <span className="tp-badge tp-mono">{live.length}</span>
               <button type="button" className="tp-btn-ghost tp-btn-sm" onClick={onNewJob}>
@@ -186,7 +186,7 @@ export function JobsView({
       <Reveal>
         <section className="tp-panel">
           <div className="tp-panel-head">
-            <h2>NO JOB</h2>
+            <h2>案件なし</h2>
             <span className="tp-badge tp-mono">{durationLabel(loose?.actualMin ?? 0)}</span>
           </div>
           {looseTasks.length === 0 ? (

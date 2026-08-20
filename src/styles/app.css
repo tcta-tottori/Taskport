@@ -450,7 +450,8 @@ body::before {
      2層目（奥・--fan-r2）  … 手描き・記憶・文章・マイク ＝ あとで作る
    位置は「向き（--fx/--fy）×半径」で出し、半径だけを画面幅で変える。
    2層目の角度は1層目の隙間（15°ずれ）にあるので、名前が前の層の丸と重ならない。 */
-.tp-quick { --fan-r1: 100px; --fan-r2: 172px; --fan-size: 46px; }
+/* 丸は ＋ と同じ大きさ。名前は丸の中に入れる（v1.26.0。利用者の指示） */
+.tp-quick { --fan-r1: 100px; --fan-r2: 172px; --fan-size: 60px; }
 .tp-fan { position: relative; }
 
 .tp-fan-backdrop {
@@ -485,7 +486,7 @@ body::before {
 
 .tp-fan-btn {
   width: var(--fan-size); height: var(--fan-size); border-radius: 50%;
-  display: grid; place-items: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   background: var(--surface); color: var(--brand1);
   border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
   transition: transform .12s ease, color .16s, border-color .16s;
@@ -514,18 +515,13 @@ body::before {
 }
 .tp-fan-btn:active { transform: scale(.94); }
 .tp-fan-btn:disabled { opacity: .45; cursor: default; }
-/* 名前は円の**真下**に置く（v1.23.0。利用者の指示）。
-   外側に出していた頃は、名前の場所が向きによって変わって読む目が回っていた。
-   下に固定するぶん、いちばん下（マイク）の角度を 180°→170° に上げて、
-   名前が画面の下に切れないようにしてある。 */
+/* 名前は**丸の中**、アイコンの下に置く（v1.26.0。利用者の指示）。
+   外に出していた頃は、名前が隣の丸に重ならないよう角度と半径を詰める必要があり、
+   そのぶん丸を小さくしていた。中に入れたので丸を ＋ と同じ大きさに戻せる。 */
 .tp-fan-label {
-  position: absolute; left: 50%; top: calc(100% + 4px);
-  transform: translateX(-50%);
-  white-space: nowrap;
-  font-size: 10.5px; font-weight: 700; color: var(--ink);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  border-radius: 999px; padding: 1px 7px;
-  box-shadow: var(--shadow-sm);
+  font-size: 9.5px; font-weight: 800; line-height: 1;
+  letter-spacing: -.02em;
+  color: inherit;
   pointer-events: none;
 }
 /* 長押しのまま滑らせるので、押している間に画面が動かないようにする */
@@ -551,12 +547,6 @@ body::before {
   100% { opacity: 0; transform: translate(0, 0) scale(.3) rotate(20deg); }
 }
 
-/* 名前は円より少し遅れて出る（円が先に飛んでから名前が乗る） */
-.tp-fan-label {
-  animation: tpFade .22s ease backwards;
-  animation-delay: calc(var(--i) * 45ms + .16s);
-}
-.tp-fan-item.is-out .tp-fan-label { animation: none; }
 
 /* 録音中の波形（録音オーバーレイと共用） */
 .tp-wave { display: block; width: 100%; height: 100%; }
@@ -993,7 +983,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-about dd { margin-bottom: 8px; }
   .tp-quick-btn { width: 56px; height: 56px; }
   /* 狭い端末。1層目 108px・2層目 196px（30°間隔なので丸は重ならない） */
-  .tp-quick { --fan-r1: 98px; --fan-r2: 168px; --fan-size: 44px; }
+  .tp-quick { --fan-r1: 96px; --fan-r2: 164px; --fan-size: 56px; }
   .tp-hero-num { font-size: 34px; }
 }
 
@@ -2945,3 +2935,34 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   background: var(--surface-3); border: 1px solid var(--line);
   border-radius: 999px; padding: 1px 7px;
 }
+
+
+/* 確かめる小さな窓（消す前に1枚はさむ）v1.26.0 */
+.tp-confirm {
+  position: fixed; inset: 0; z-index: 80;
+  display: grid; place-items: center; padding: 20px;
+  animation: tpFade .16s ease;
+}
+.tp-confirm-back {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  background: rgba(20, 26, 40, .5);
+}
+.tp-confirm-card {
+  position: relative; width: 100%; max-width: 360px;
+  background: var(--surface); border-radius: 18px; padding: 18px 18px 14px;
+  box-shadow: var(--shadow-lg);
+  animation: tpRise .2s cubic-bezier(.22, 1, .36, 1);
+}
+.tp-confirm-title { margin: 0 0 6px; font-size: 15px; font-weight: 800; color: var(--ink); }
+.tp-confirm-body { margin: 0 0 14px; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.tp-confirm-acts { display: flex; justify-content: flex-end; gap: 8px; }
+.tp-confirm-acts > button { min-height: 44px; }
+
+/* シートの下部: 消すボタンは左端に固定して、決める操作と離す */
+.tp-sheet-foot.tp-foot-split { justify-content: space-between; }
+.tp-foot-right { display: flex; gap: 8px; }
+.tp-round-danger {
+  background: var(--surface-2); color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.tp-round-danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }

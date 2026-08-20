@@ -56,7 +56,7 @@ const ITEMS: {
   // 1層目 — いま動かす／その日に入れる
   { mode: 'catStart', label: '区分', icon: 'grid', ring: 1, angle: 90, hint: '区分から1件立てて、いま始める', start: true },
   { mode: 'taskStart', label: '始める', icon: 'play', ring: 1, angle: 130, hint: 'タスクを選んで、いま始める', start: true },
-  { mode: 'plan', label: '予定', icon: 'calendar', ring: 1, angle: 176, hint: '打合せなど、その時間そこにいるものを入れる' },
+  { mode: 'plan', label: '予定', icon: 'calendar', ring: 1, angle: 170, hint: '打合せなど、その時間そこにいるものを入れる' },
   // 2層目 — あとでやることを作る
   { mode: 'form', label: '手描き', icon: 'pencil', ring: 2, angle: 90, hint: '自分で書いて1件作る' },
   { mode: 'memory', label: '記憶', icon: 'checklist', ring: 2, angle: 118, hint: '記憶したタスクから呼び出す' },
@@ -219,9 +219,9 @@ export function QuickBar({
                   title={it.hint}
                   onClick={() => pick(it.mode)}
                 >
-                  <Icon name={it.icon} size={22} strokeWidth={2} />
+                  <Icon name={it.icon} size={19} strokeWidth={2} />
+                  <span className="tp-fan-label">{it.label}</span>
                 </button>
-                <span className="tp-fan-label">{it.label}</span>
               </div>
             )
           })}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { CategoryChip } from '../components/CategoryChip'
 import { TimeField } from '../components/TimeField'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { CategorySheet } from './CategorySheet'
 import { cleanPlan, DEFAULT_PLAN_MIN, planSpan } from '../lib/plans'
 import { colorOf, detectCategories } from '../lib/workCategories'
@@ -333,52 +334,52 @@ export function PlanSheet({
             {draft.autoTrack && !draft.allDay ? ' ／ 自動で計上' : ' ／ 手で開始・終了'}
           </p>
 
-          {existing && onDelete && (
-            <div className="tp-edit-danger">
-              {confirmDelete ? (
-                <>
-                  <p>この予定を消します。繰り返しにしてある場合は、先の回もまとめて消えます。</p>
-                  <div className="tp-row-end">
-                    <button type="button" className="tp-btn-ghost" onClick={() => setConfirmDelete(false)}>
-                      やめる
-                    </button>
-                    <button type="button" className="tp-btn-danger" onClick={() => onDelete(draft)}>
-                      <Icon name="trash" size={15} />
-                      消す
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <button type="button" className="tp-link-danger" onClick={() => setConfirmDelete(true)}>
-                  <Icon name="trash" size={14} />
-                  この予定を消す
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
-        <footer className="tp-sheet-foot">
-          <button
-            type="button"
-            className="tp-round-btn tp-round-cancel"
-            onClick={onClose}
-            aria-label="やめる"
-            title="やめる"
-          >
-            <Icon name="close" size={22} strokeWidth={2.2} />
-          </button>
-          <button
-            type="button"
-            className="tp-round-btn tp-round-go"
-            disabled={!draft.title.trim()}
-            onClick={() => onSave(cleanPlan(draft))}
-            aria-label={existing ? '保存する' : '予定を入れる'}
-            title={existing ? '保存' : '入れる'}
-          >
-            <Icon name="check" size={22} strokeWidth={2.4} />
-          </button>
+        <footer className={`tp-sheet-foot${existing && onDelete ? ' tp-foot-split' : ''}`}>
+          {existing && onDelete && (
+            <button
+              type="button"
+              className="tp-round-btn tp-round-danger"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="この予定を消す"
+              title="消す"
+            >
+              <Icon name="trash" size={20} />
+            </button>
+          )}
+          <div className="tp-foot-right">
+            <button
+              type="button"
+              className="tp-round-btn tp-round-cancel"
+              onClick={onClose}
+              aria-label="やめる"
+              title="やめる"
+            >
+              <Icon name="close" size={22} strokeWidth={2.2} />
+            </button>
+            <button
+              type="button"
+              className="tp-round-btn tp-round-go"
+              disabled={!draft.title.trim()}
+              onClick={() => onSave(cleanPlan(draft))}
+              aria-label={existing ? '保存する' : '予定を入れる'}
+              title={existing ? '保存' : '入れる'}
+            >
+              <Icon name="check" size={22} strokeWidth={2.4} />
+            </button>
+          </div>
         </footer>
+
+        {confirmDelete && onDelete && (
+          <ConfirmDialog
+            title="この予定を消しますか"
+            body="繰り返しにしてある場合は、先の回もまとめて消えます。元に戻せません。"
+            okLabel="消す"
+            onOk={() => onDelete(draft)}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
       </div>
     </div>
   )

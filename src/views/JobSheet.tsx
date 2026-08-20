@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { durationLabel } from '../lib/date'
 import type { Job } from '../types'
@@ -151,34 +152,21 @@ export function JobSheet({
             </label>
           </div>
 
-          {existing && onDelete && (
-            <div className="tp-job-danger">
-              {confirmDelete ? (
-                <>
-                  <p className="tp-note">
-                    この案件を消します。<b>タスクと予定は消えません</b>（案件なしに戻ります）。
-                  </p>
-                  <div className="tp-flow-acts">
-                    <button type="button" className="tp-btn-ghost" onClick={() => setConfirmDelete(false)}>
-                      やめる
-                    </button>
-                    <button type="button" className="tp-btn-danger" onClick={() => onDelete(draft)}>
-                      <Icon name="trash" size={15} />
-                      消す
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <button type="button" className="tp-btn-ghost" onClick={() => setConfirmDelete(true)}>
-                  <Icon name="trash" size={15} />
-                  この案件を消す
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
-        <footer className="tp-sheet-foot">
+        <footer className={`tp-sheet-foot${existing && onDelete ? ' tp-foot-split' : ''}`}>
+          {existing && onDelete && (
+            <button
+              type="button"
+              className="tp-round-btn tp-round-danger"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="この案件を消す"
+              title="消す"
+            >
+              <Icon name="trash" size={20} />
+            </button>
+          )}
+          <div className="tp-foot-right">
           <button
             type="button"
             className="tp-round-btn tp-round-cancel"
@@ -200,7 +188,18 @@ export function JobSheet({
           >
             <Icon name="check" size={22} strokeWidth={2.4} />
           </button>
+          </div>
         </footer>
+
+        {confirmDelete && onDelete && (
+          <ConfirmDialog
+            title="この案件を消しますか"
+            body="タスクと予定は消えません（案件なしに戻ります）。元に戻せません。"
+            okLabel="消す"
+            onOk={() => onDelete(draft)}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
       </div>
     </div>,
     document.body,

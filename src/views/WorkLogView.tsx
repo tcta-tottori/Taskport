@@ -277,11 +277,6 @@ export function WorkLogView({
           >
             <Icon name="chevron" size={18} />
           </button>
-          {day !== today && (
-            <button type="button" className="tp-btn-ghost tp-log-today" onClick={() => setDay(today)}>
-              今日へ
-            </button>
-          )}
         </section>
 
         {/* 朝の仕分け・明日の準備。一覧の画面から移した（v1.24.0） */}
@@ -299,12 +294,12 @@ export function WorkLogView({
           </div>
         )}
 
-        {/* --- RUNNING（いま動いているもの）---
+        {/* --- 実行中（いま動いているもの）---
             **1件も動いていないときは面ごと出さない**（v1.24.0。利用者の指示）。
             空の枠が常に居座ると、次に見る「UP NEXT」が下がるだけになる。 */}
         {(live.length > 0 || livePlans.length > 0) && (
         <section className="tp-live">
-          <p className="tp-label">RUNNING</p>
+          <p className="tp-label">実行中</p>
           {live.length === 0 ? null : (
             <ul className="tp-live-list">
               {live.map((t) => (
@@ -378,10 +373,10 @@ export function WorkLogView({
         </section>
         )}
 
-        {/* --- PAUSED（止めてあるもの）。押せばその場から続きを数える --- */}
+        {/* --- 停止中（止めてあるもの）。押せばその場から続きを数える --- */}
         {(pausedTasks.length > 0 || pausedPlans.length > 0) && (
           <section className="tp-live tp-paused">
-            <p className="tp-label">PAUSED</p>
+            <p className="tp-label">停止中</p>
             <ul className="tp-live-list">
               {pausedTasks.map((t) => (
                 <li key={t.id} className="tp-live-row is-paused">
@@ -449,11 +444,11 @@ export function WorkLogView({
           </p>
         )}
 
-        {/* --- 次にやる（今日締め）。今日を見ているときだけ出す --- */}
+        {/* --- 次の作業（今日締め）。今日を見ているときだけ出す --- */}
         {isToday && (
           <section className="tp-panel">
             <div className="tp-panel-head">
-              <h2>UP NEXT</h2>
+              <h2>次の作業</h2>
               <span className="tp-badge tp-mono">{upNext.length}</span>
             </div>
             {upNext.length === 0 ? (
@@ -502,7 +497,7 @@ export function WorkLogView({
               </ul>
             )}
             {upNext.length > 8 && (
-              <p className="tp-hint">ほか {upNext.length - 8} 件は下の TASKS で見られます。</p>
+              <p className="tp-hint">ほか {upNext.length - 8} 件は下のタスク一覧で見られます。</p>
             )}
           </section>
         )}
@@ -511,7 +506,7 @@ export function WorkLogView({
         {isToday && soon.length > 0 && (
           <section className="tp-panel">
             <div className="tp-panel-head">
-              <h2>DUE SOON</h2>
+              <h2>近日締切</h2>
               <span className="tp-badge tp-mono">{soon.length}</span>
             </div>
             <ul className="tp-daylist">
@@ -540,15 +535,17 @@ export function WorkLogView({
               ))}
             </ul>
             {soon.length > 6 && (
-              <p className="tp-hint">ほか {soon.length - 6} 件は下の TASKS の「今週」で見られます。</p>
+              <p className="tp-hint">ほか {soon.length - 6} 件は下のタスク一覧の「今週」で見られます。</p>
             )}
           </section>
         )}
       </div>
 
       <div className="tp-col">
-        {/* --- やったことを足す --- */}
-        {adding ? (
+        {/* --- やったことを足す ---
+            **先の日には出さない**（v1.26.0。利用者の指示）。
+            まだ起きていない仕事を「やったこと」として入れる道は要らない。 */}
+        {ahead ? null : adding ? (
           <AddLogForm
             day={day}
             templates={templates}
@@ -568,18 +565,18 @@ export function WorkLogView({
           </button>
         )}
 
-        {/* --- TODAY'S LOG（その日の記録）---
+        {/* --- 本日の記録 ---
             完了したものは出さない（実行の面に済んだ仕事が積み上がると、
             いま手を動かすものが埋もれる）。実績を直したいときのために、
             件数だけは残して押すと開けるようにしてある。 */}
-        <p className="tp-label tp-log-head">{isToday ? "TODAY'S LOG" : 'LOG'}</p>
+        <p className="tp-label tp-log-head">{isToday ? '本日の記録' : '記録'}</p>
         {spent.tasks.length === 0 ? (
           <div className="tp-empty">
             <Icon name="clock" size={26} />
             <p className="tp-empty-head">{formatMD(day)}の記録はありません</p>
             <p className="tp-empty-body">
               上の「やったことを足す」で、終わった仕事を後から入れられます。
-              下の TASKS から「始める」を押した仕事も、ここに出ます。
+              下のタスク一覧から「始める」を押した仕事も、ここに出ます。
             </p>
           </div>
         ) : (
@@ -646,7 +643,7 @@ export function WorkLogView({
         {isToday && (
           <section className="tp-panel tp-launch-panel">
             <div className="tp-panel-head">
-              <h2>START BY CATEGORY</h2>
+              <h2>区分から開始</h2>
               <Icon name="grid" size={16} />
             </div>
             <p className="tp-note">
@@ -657,12 +654,12 @@ export function WorkLogView({
           </section>
         )}
 
-        {/* --- TASKS（台帳）---
+        {/* --- タスク（台帳）---
             v1.24.0 で一覧の画面をやめ、ここへ集約した（利用者の指示）。
             「いま動かす」と「台帳から探す」を行き来するのに画面を変えなくて済む。 */}
         <section className="tp-panel tp-tasks-panel">
           <div className="tp-panel-head">
-            <h2>TASKS</h2>
+            <h2>タスク</h2>
             <span className="tp-badge tp-mono">{shown.length}</span>
           </div>
 

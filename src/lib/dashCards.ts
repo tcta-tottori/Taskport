@@ -20,16 +20,16 @@ export type DashCard =
   | 'priority'
   | 'source'
 
-/** 面の見出し。見出しは英語（v1.24.0。利用者の指示） */
+/** 面の見出し。カタカナ、無ければ漢字（v1.26.0。利用者の指示） */
 export const DASH_LABEL: Record<DashCard, string> = {
-  hero: 'TODAY',
-  band: 'TIMELINE',
-  share: 'CATEGORY SHARE',
-  catTime: 'CATEGORY TIME',
-  progress: 'PROGRESS',
-  trend: 'TREND',
-  priority: 'PRIORITY',
-  source: 'SOURCE',
+  hero: '本日の稼働',
+  band: '時間帯',
+  share: '区分の割合',
+  catTime: '区分ごとの時間',
+  progress: '区分別の進捗',
+  trend: '推移',
+  priority: '優先度',
+  source: '入口別',
 }
 
 /**

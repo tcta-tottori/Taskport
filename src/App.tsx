@@ -100,19 +100,19 @@ import {
 type ViewKey = 'worklog' | 'schedule' | 'jobs' | 'dashboard' | 'recordings' | 'settings'
 
 /**
- * 画面の並び。見出しは英語で置く（v1.24.0。利用者の指示）。
+ * 画面の並び。見出しはカタカナ、無ければ漢字（v1.26.0。利用者の指示）。
  * v1.24.0 で一覧とカレンダーの画面をやめ、
  * 一覧は Run（実行）へ、カレンダーは Schedule の最後の面へ集約した。
  */
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   // Run ＝いま動かす面と、その日の記録、台帳。1日のうちいちばん開くので最上段に置く
-  { key: 'worklog', label: 'RUN', icon: 'play' },
-  { key: 'schedule', label: 'SCHEDULE', icon: 'calendar' },
+  { key: 'worklog', label: '実行', icon: 'play' },
+  { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
   // 工数＝案件ごとの時間。日で見る ANALYSIS に対して、こちらは案件で見る
-  { key: 'jobs', label: 'JOBS', icon: 'checklist' },
-  { key: 'dashboard', label: 'ANALYSIS', icon: 'chart' },
-  { key: 'recordings', label: 'RECORDINGS', icon: 'mic' },
-  { key: 'settings', label: 'SETTINGS', icon: 'gear' },
+  { key: 'jobs', label: '工数', icon: 'checklist' },
+  { key: 'dashboard', label: '分析', icon: 'chart' },
+  { key: 'recordings', label: '録音', icon: 'mic' },
+  { key: 'settings', label: '設定', icon: 'gear' },
 ]
 
 /** 録音を取り直すときの相手。端末内で聞き直すか、Gemini へ送るか。 */
@@ -1395,7 +1395,7 @@ export default function App() {
         ))}
         <button type="button" className="tp-drawer-item" onClick={() => { setExporting(true); setDrawer(false) }}>
           <Icon name="export" size={19} />
-          <span>EXPORT</span>
+          <span>書き出し</span>
         </button>
         <div className="tp-drawer-foot">
           {/* 同期の様子。動いているのか失敗しているのかを、押さずに分かるようにする */}

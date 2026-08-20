@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '../components/Icon'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DraftFields } from './DraftFields'
 import { taskToDraft } from '../lib/tasks'
 import { dayOfIso } from '../lib/date'
@@ -71,52 +72,54 @@ export function TaskEditor({
               {task.doneAt && ` ／ 完了 ${dayOfIso(task.doneAt)}`}
             </p>
           )}
-          {task && onDelete && (
-            <div className="tp-edit-danger">
-              {confirmDelete ? (
-                <>
-                  <p>このタスクを消します。元に戻せません。</p>
-                  <div className="tp-row-end">
-                    <button type="button" className="tp-btn-ghost" onClick={() => setConfirmDelete(false)}>
-                      やめる
-                    </button>
-                    <button type="button" className="tp-btn-danger" onClick={() => onDelete(task)}>
-                      <Icon name="trash" size={15} />
-                      消す
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <button type="button" className="tp-link-danger" onClick={() => setConfirmDelete(true)}>
-                  <Icon name="trash" size={14} />
-                  このタスクを消す
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
-        <footer className="tp-sheet-foot">
-          <button
-            type="button"
-            className="tp-round-btn tp-round-cancel"
-            onClick={onClose}
-            aria-label="やめる"
-            title="やめる"
-          >
-            <Icon name="close" size={22} strokeWidth={2.2} />
-          </button>
-          <button
-            type="button"
-            className="tp-round-btn tp-round-go"
-            disabled={!draft.title.trim()}
-            onClick={() => onSave(draft)}
-            aria-label={task ? '保存する' : '登録する'}
-            title={task ? '保存' : '登録'}
-          >
-            <Icon name="check" size={22} strokeWidth={2.4} />
-          </button>
+        {/* 消す・やめる・決める は下に固定して置く（v1.26.0。利用者の指示）。
+            消すは左端に離し、押したら確かめる窓を1枚はさむ。 */}
+        <footer className={`tp-sheet-foot${task && onDelete ? ' tp-foot-split' : ''}`}>
+          {task && onDelete && (
+            <button
+              type="button"
+              className="tp-round-btn tp-round-danger"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="このタスクを消す"
+              title="消す"
+            >
+              <Icon name="trash" size={20} />
+            </button>
+          )}
+          <div className="tp-foot-right">
+            <button
+              type="button"
+              className="tp-round-btn tp-round-cancel"
+              onClick={onClose}
+              aria-label="やめる"
+              title="やめる"
+            >
+              <Icon name="close" size={22} strokeWidth={2.2} />
+            </button>
+            <button
+              type="button"
+              className="tp-round-btn tp-round-go"
+              disabled={!draft.title.trim()}
+              onClick={() => onSave(draft)}
+              aria-label={task ? '保存する' : '登録する'}
+              title={task ? '保存' : '登録'}
+            >
+              <Icon name="check" size={22} strokeWidth={2.4} />
+            </button>
+          </div>
         </footer>
+
+        {confirmDelete && task && onDelete && (
+          <ConfirmDialog
+            title="このタスクを消しますか"
+            body={`「${task.title}」を消します。元に戻せません。`}
+            okLabel="消す"
+            onOk={() => onDelete(task)}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
       </div>
 
     </div>

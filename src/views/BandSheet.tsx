@@ -54,7 +54,7 @@ export function BandSheet({
     <div className="tp-sheet tp-sheet-over" role="dialog" aria-modal="true" aria-label="時間帯">
       <div className="tp-sheet-card">
         <header className="tp-sheet-head">
-          <h2>TIMELINE</h2>
+          <h2>時間帯</h2>
           <button type="button" className="tp-icon-btn" onClick={onClose} aria-label="閉じる">
             <Icon name="close" size={18} />
           </button>

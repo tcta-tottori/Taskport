@@ -13,10 +13,10 @@ import {
   weekdayLabel,
 } from '../lib/date'
 import { groupByDue, sortTasks } from '../lib/tasks'
-import { dayLoad, isWorkDay, taskMinutes } from '../lib/workday'
+import { isWorkDay, taskMinutes } from '../lib/workday'
 import { fetchEvents } from '../ports/in/fromCalendar'
 import { isConnected } from '../lib/googleAuth'
-import { bookedMinutes, groupOccurrences, occurrencesInRange } from '../lib/plans'
+import { groupOccurrences, occurrencesInRange } from '../lib/plans'
 import type { RunBox } from '../lib/runs'
 import type {
   CalendarEvent,
@@ -29,7 +29,7 @@ import type {
  * スケジュールビュー
  *
  * 上から順に、
- *   1. その日 … **縦軸の時間の並び**（`DayTimeline`）＋ 時刻を決めていない仕事
+ *   1. その日 … **縦軸の時間の並び**（`DayTimeline`）＋ 時刻未定の仕事
  *   2. 期限超過 … 拾い残しを上に出す
  *   3. 1週間 … **予定のある日だけ**を並べる
  *   4. カレンダー … 月の升目（v1.24.0 でカレンダーの画面から移した）
@@ -127,15 +127,7 @@ export function ScheduleView({
   const open = useMemo(() => tasks.filter((t) => t.status === 'open'), [tasks])
   const byDue = useMemo(() => groupByDue(tasks), [tasks])
   const dayTasks = useMemo(() => sortTasks(tasks.filter((t) => t.due === day)), [tasks, day])
-  const load = dayLoad(
-    dayTasks.filter((t) => t.status === 'open'),
-    settings.workHours,
-    settings.defaultEstimateMin,
-    day,
-    settings.workCalendar,
-  )
   const dayPlans = plansByDay.get(day) ?? []
-  const dayBooked = bookedMinutes(dayPlans)
   const allDayPlans = dayPlans.filter((o) => o.plan.allDay)
 
   /** 時刻を決めていない仕事。**未完了だけ**（済んだものを並べても選べない） */
@@ -175,17 +167,25 @@ export function ScheduleView({
         <section className="tp-panel">
           <div className="tp-panel-head">
             <h2>{formatMD(day)}</h2>
+            {/* 記号だけにする（v1.26.0。利用者の指示）。言葉は読み上げと長押しで出る */}
             <div className="tp-head-acts">
-              <span className={`tp-badge${load.planned + dayBooked > load.capacity ? ' is-over' : ''}`}>
-                {durationLabel(load.planned + dayBooked)} / {durationLabel(load.capacity)}
-              </span>
-              <button type="button" className="tp-btn-ghost tp-btn-sm" onClick={() => onAddPlan(day)}>
-                <Icon name="calendar" size={15} />
-                予定を入れる
+              <button
+                type="button"
+                className="tp-icon-btn"
+                onClick={() => onAddPlan(day)}
+                aria-label="この日に予定を入れる"
+                title="予定を入れる"
+              >
+                <Icon name="calendar" size={18} />
               </button>
-              <button type="button" className="tp-btn-ghost tp-btn-sm" onClick={() => onAddTask(day)}>
-                <Icon name="plus" size={15} />
-                タスクを作る
+              <button
+                type="button"
+                className="tp-icon-btn"
+                onClick={() => onAddTask(day)}
+                aria-label="この日を期限にしてタスクを作る"
+                title="タスクを作る"
+              >
+                <Icon name="plus" size={18} />
               </button>
             </div>
           </div>
@@ -224,7 +224,7 @@ export function ScheduleView({
           {/* 終日の予定は軸に置けないので、上にまとめて出す */}
           {allDayPlans.length > 0 && (
             <div className="tp-board-allday">
-              <p className="tp-label">ALL DAY</p>
+              <p className="tp-label">終日</p>
               <ul className="tp-daylist">
                 {allDayPlans.map((o) => (
                   <PlanRow
@@ -254,7 +254,7 @@ export function ScheduleView({
           {/* 時刻を決めていない仕事。軸に置けないぶんをここで拾う（未完了だけ） */}
           <div className="tp-board-free">
             <p className="tp-label">
-              NO TIME <b className="tp-mono">{loose.length}</b>
+              時刻未定 <b className="tp-mono">{loose.length}</b>
             </p>
             {loose.length === 0 ? (
               <p className="tp-hint">この日は、時刻を決めていない仕事はありません。</p>
@@ -299,7 +299,7 @@ export function ScheduleView({
         <Reveal>
           <section className="tp-panel">
             <div className="tp-panel-head">
-              <h2>OVERDUE</h2>
+              <h2>期限超過</h2>
               <span className="tp-badge is-over tp-mono">{overdue.length}</span>
             </div>
             <ul className="tp-daylist">
@@ -320,7 +320,7 @@ export function ScheduleView({
       <Reveal>
         <section className="tp-panel">
           <div className="tp-panel-head">
-            <h2>WEEK</h2>
+            <h2>週間予定</h2>
             <span className="tp-badge tp-mono">{week.length}日</span>
           </div>
           {week.length === 0 ? (
@@ -363,7 +363,7 @@ export function ScheduleView({
       <Reveal>
         <section className="tp-panel">
           <div className="tp-panel-head">
-            <h2>CALENDAR</h2>
+            <h2>カレンダー</h2>
           </div>
           <MonthGrid
             month={month}
