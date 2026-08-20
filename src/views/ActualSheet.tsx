@@ -94,7 +94,7 @@ export function ActualSheet({
   )
 }
 
-function ActualRow({
+export function ActualRow({
   task,
   day,
   categoryGroups,

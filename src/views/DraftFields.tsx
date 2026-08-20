@@ -98,7 +98,7 @@ export function DraftFields({
       </label>
 
       <div className="tp-field-row tp-field-row-4">
-        <label className="tp-field">
+        <label className="tp-field tp-field-wide">
           <span className="tp-label">期限</span>
           <input
             type="date"

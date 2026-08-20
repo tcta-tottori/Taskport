@@ -54,14 +54,14 @@ const ITEMS: {
   start?: boolean
 }[] = [
   // 1層目 — いま動かす／その日に入れる
-  { mode: 'catStart', label: '区分', icon: 'grid', ring: 1, angle: 105, hint: '区分から1件立てて、いま始める', start: true },
-  { mode: 'taskStart', label: '始める', icon: 'play', ring: 1, angle: 135, hint: 'タスクを選んで、いま始める', start: true },
-  { mode: 'plan', label: '予定', icon: 'calendar', ring: 1, angle: 165, hint: '打合せなど、その時間そこにいるものを入れる' },
+  { mode: 'catStart', label: '区分', icon: 'grid', ring: 1, angle: 90, hint: '区分から1件立てて、いま始める', start: true },
+  { mode: 'taskStart', label: '始める', icon: 'play', ring: 1, angle: 130, hint: 'タスクを選んで、いま始める', start: true },
+  { mode: 'plan', label: '予定', icon: 'calendar', ring: 1, angle: 176, hint: '打合せなど、その時間そこにいるものを入れる' },
   // 2層目 — あとでやることを作る
   { mode: 'form', label: '手描き', icon: 'pencil', ring: 2, angle: 90, hint: '自分で書いて1件作る' },
-  { mode: 'memory', label: '記憶', icon: 'checklist', ring: 2, angle: 120, hint: '記憶したタスクから呼び出す' },
-  { mode: 'text', label: '文章', icon: 'sparkle', ring: 2, angle: 150, hint: '文章からまとめて作る' },
-  { mode: 'voice', label: 'マイク', icon: 'mic', ring: 2, angle: 180, hint: '話してタスクにする' },
+  { mode: 'memory', label: '記憶', icon: 'checklist', ring: 2, angle: 118, hint: '記憶したタスクから呼び出す' },
+  { mode: 'text', label: '文章', icon: 'sparkle', ring: 2, angle: 146, hint: '文章からまとめて作る' },
+  { mode: 'voice', label: 'マイク', icon: 'mic', ring: 2, angle: 174, hint: '話してタスクにする' },
 ]
 
 /** ここまで押し続けたら「長押し」とみなす（ミリ秒） */

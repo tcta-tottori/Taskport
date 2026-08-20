@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Icon, type IconName } from './components/Icon'
 import { QuickBar, type SheetMode } from './components/QuickBar'
 import { Toast, type ToastMessage } from './components/Toast'
@@ -47,7 +47,7 @@ import {
 } from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
-import { isRunning, logToTask, runningMin, runningSec } from './lib/worklog'
+import { isRunning, logToTask, running, runningMin, runningSec } from './lib/worklog'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { clearRemote, syncOnce } from './lib/driveSync'
 import { isConnected } from './lib/googleAuth'
@@ -61,7 +61,7 @@ import {
 import { acquireWakeLock, refreshWakeLock, releaseWakeLock } from './lib/keepAlive'
 import { ulid } from './lib/ulid'
 import { applyTemplate, forget, remember, touch } from './lib/templates'
-import { cleanCategories } from './lib/workCategories'
+import { cleanCategories, colorOf, primaryCategory } from './lib/workCategories'
 import { hasKey as hasGeminiKey, transcribeAudio } from './lib/gemini'
 import {
   cancelTranscribe,
@@ -1198,9 +1198,23 @@ export default function App() {
    * タスクは台帳の startedAt、予定は実行の記録。数え方が2つに割れないよう、ここで足す。
    */
   const runningCount = useMemo(
-    () => tasks.filter(isRunning).length + runs.filter((r) => r.state === 'running').length,
+    // 予定だけをログから数える。タスクは v1.22.0 から実行ログにも区間が載るので、
+    // ここで種類を絞らないと同じ1件を2つに数えてしまう
+    () =>
+      tasks.filter(isRunning).length +
+      runs.filter((r) => r.kind === 'plan' && r.state === 'running').length,
     [tasks, runs],
   )
+  /**
+   * 実行中の印に使う色。いちばん新しく始めたものの区分から取る。
+   * 何本動いているかは数字で出すので、色は目印にとどめる。
+   */
+  const runningTint = useMemo(() => {
+    const task = running(tasks)[0]
+    if (task) return colorOf(settings.categoryGroups, primaryCategory(task.categories))
+    const run = runs.find((r) => r.kind === 'plan' && r.state === 'running')
+    return colorOf(settings.categoryGroups, primaryCategory(run?.categories ?? []))
+  }, [tasks, runs, settings.categoryGroups])
 
   // 起動時のクエリ（PWAショートカット）
   useEffect(() => {
@@ -1268,14 +1282,25 @@ export default function App() {
           <span className="tp-wordmark">Taskport</span>
           <span className="tp-tagline">IN / OUT — ONE LEDGER</span>
         </div>
-        <button
-          type="button"
-          className="tp-head-btn"
-          onClick={() => setExporting(true)}
-          aria-label="書き出し"
-        >
-          <Icon name="export" size={19} />
-        </button>
+        {/* 右上は「いま動かしているもの」の印。
+            書き出しは引き出しに置いてある（同じ道を2つ持たない）。
+            止め忘れにその場で気づけるよう、区分の色で光らせ、
+            2つ以上動いているときは本数を出す（色だけで伝えない）。 */}
+        {runningCount > 0 ? (
+          <button
+            type="button"
+            className="tp-head-live"
+            style={{ '--cat': `var(--cat-${runningTint})` } as CSSProperties}
+            onClick={() => go('worklog')}
+            aria-label={`実行中 ${runningCount}件。実行の画面へ`}
+            title={`実行中 ${runningCount}件`}
+          >
+            <span className="tp-head-live-dot" aria-hidden="true" />
+            {runningCount > 1 && <b className="tp-mono">{runningCount}</b>}
+          </button>
+        ) : (
+          <span className="tp-head-slot" aria-hidden="true" />
+        )}
       </header>
 
       {drawer && <div className="tp-backdrop" onClick={() => setDrawer(false)} aria-hidden="true" />}
@@ -1491,6 +1516,7 @@ export default function App() {
             today={today}
             settings={settings}
             onPatch={(t, p) => void guard(() => patchTask(t, p))}
+            onSaveOrder={(dashOrder) => void guard(() => saveSettings({ ...settings, dashOrder }))}
           />
         ) : view === 'recordings' ? (
           <RecordingsView

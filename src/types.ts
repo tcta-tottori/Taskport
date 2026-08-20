@@ -414,6 +414,12 @@ export interface Settings {
    * 予定ごとに切り替えられる（ここは既定値だけを決める）。
    */
   planAutoTrack: boolean
+  /**
+   * 分析の面の並び（カードの鍵を上から順に）。画面から並べ替えられる。
+   * 空・欠け・知らない鍵は `lib/dashCards.ts` の `normalizeDashOrder` が直す
+   * （カードが増えても、保存された並びで落ちないようにする）。
+   */
+  dashOrder: string[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -438,6 +444,8 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderEnabled: false,
   reminderLeadMin: 10,
   planAutoTrack: true,
+  // 既定の並びは lib/dashCards.ts が持つ（型の定義がデータを抱えない）
+  dashOrder: [],
 }
 
 /* ---------------------------------------------------------

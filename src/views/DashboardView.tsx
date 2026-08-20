@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { Icon } from '../components/Icon'
 import { Reveal } from '../components/Reveal'
 import { addDaysKey, diffDays, durationLabel, formatMD, formatMDShort } from '../lib/date'
@@ -23,6 +23,14 @@ import { dayBand, measuredOfDay, ofDay } from '../lib/worklog'
 import { dayMinutes } from '../lib/runs'
 import { DayBand } from '../components/DayBand'
 import { ActualSheet } from './ActualSheet'
+import { BandSheet, keyOf } from './BandSheet'
+import {
+  DASH_LABEL,
+  DEFAULT_DASH_ORDER,
+  moveCard,
+  normalizeDashOrder,
+  type DashCard,
+} from '../lib/dashCards'
 import {
   PRIORITIES,
   PRIORITY_LABEL,
@@ -50,6 +58,7 @@ export function DashboardView({
   today,
   settings,
   onPatch,
+  onSaveOrder,
 }: {
   tasks: Task[]
   /** 予定。円グラフに会議などの時間も入れる（日報と同じ見方にする） */
@@ -60,9 +69,18 @@ export function DashboardView({
   settings: Settings
   /** 実績（かかった時間・開始時刻）を直す */
   onPatch: (task: Task, patch: Partial<Task>) => void
+  /** 面の並びを保存する（設定が持つ） */
+  onSaveOrder: (order: string[]) => void
 }) {
   /** 実績を直す画面。開いている区分（または1件） */
   const [fixing, setFixing] = useState<{ title?: string; tasks: Task[] } | null>(null)
+  /** 時間帯のポップアップ。focus は帯を押して開いたときの区間 */
+  const [banding, setBanding] = useState<{ focus: string | null } | null>(null)
+  /** 並べ替え中か。押している間だけ各カードに ↑↓ が出る */
+  const [sorting, setSorting] = useState(false)
+  /** 面の並び。保存されたものを、いまあるカードに合わせて整える */
+  const order = useMemo(() => normalizeDashOrder(settings.dashOrder), [settings.dashOrder])
+  const saveOrder = (next: DashCard[]) => onSaveOrder(next)
   /** 円グラフに出す日。既定は今日。前後の日へ動かせる */
   const [shareDay, setShareDay] = useState(today)
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
@@ -144,21 +162,13 @@ export function DashboardView({
     )
   }
 
-  return (
-    <div className="tp-view tp-dash tp-grid">
-      {fixing && (
-        <ActualSheet
-          tasks={fixing.tasks}
-          day={shareDay}
-          title={fixing.title}
-          categoryGroups={settings.categoryGroups}
-          defaultEstimateMin={settings.defaultEstimateMin}
-          onPatch={onPatch}
-          onClose={() => setFixing(null)}
-        />
-      )}
-      <Reveal>
+  /** 1枚ぶんの中身。並びは設定が持つので、ここでは鍵から引くだけにする */
+  const cardOf = (key: DashCard, bar: ReactNode): ReactNode => {
+    switch (key) {
+      case 'hero':
+        return (
         <section className="tp-panel tp-dash-hero is-wide">
+          {bar}
           <div className="tp-panel-head">
             <h2>本日の稼働</h2>
             <span className="tp-chip-flame">
@@ -203,28 +213,49 @@ export function DashboardView({
             <Stat label="完了" value={ov.done} tone="good" />
           </div>
         </section>
-      </Reveal>
-
-      <Reveal>
-        <section className="tp-panel is-wide">
-          {allDays.length > 0 ? (
-            <TrendCard allDays={allDays} />
+        )
+      case 'band':
+        return (
+  <section className="tp-panel is-wide tp-band-card">
+          {bar}
+          <div className="tp-panel-head">
+            <h2>時間帯</h2>
+            <button
+              type="button"
+              className="tp-btn-ghost tp-btn-sm"
+              onClick={() => setBanding({ focus: null })}
+              disabled={band.length === 0}
+            >
+              <Icon name="search" size={14} />
+              大きく見る
+            </button>
+          </div>
+          {band.length === 0 ? (
+            <p className="tp-empty-body">
+              この日はまだ動かした記録がありません。実行の画面で「始める」を押すと、
+              押した時刻から止めた時刻までがここに並びます。
+            </p>
           ) : (
             <>
-              <h2 className="tp-panel-title">処理の推移</h2>
-              <p className="tp-empty-body">
-                登録と完了を続けると、日ごとの件数と消化率の推移が出ます。
+              <DayBand
+                segments={band}
+                workHours={settings.workHours}
+                colorOfGroupName={(g) => colorOfGroup(settings.categoryGroups, g)}
+                onPick={(seg) => setBanding({ focus: keyOf(seg) })}
+              />
+              <p className="tp-hint">
+                {formatMD(shareDay)}／押した時刻から止めた時刻まで。
+                同時に動かしたぶんは行を分けています。
+                <b>押すと一覧で開いて、実績を直せます。</b>
               </p>
             </>
           )}
         </section>
-      </Reveal>
-
-      {/* --- その日の区分の割合（円グラフ） ---
-          「今日は何にどれだけ使ったか」を一目で見るための面。
-          割合の数字を必ず添える（色だけで見分けさせない）。 */}
-      <Reveal>
+        )
+      case 'share':
+        return (
         <section className="tp-panel is-wide">
+          {bar}
           <div className="tp-panel-head">
             <h2>その日の区分の割合</h2>
             <div className="tp-head-acts">
@@ -279,35 +310,14 @@ export function DashboardView({
                 {' '}区分を押すと、その仕事の実績を直せます。
               </p>
 
-              {/* --- 時間帯（何時に何をしていたか） --- */}
-              {band.length > 0 && (
-                <div className="tp-band-block">
-                  <p className="tp-label">時間帯</p>
-                  <DayBand
-                    segments={band}
-                    workHours={settings.workHours}
-                    colorOfGroupName={(g) => colorOfGroup(settings.categoryGroups, g)}
-                    onPick={(seg) =>
-                      setFixing({
-                        title: seg.title,
-                        tasks: seg.taskId ? fixable.filter((t) => t.id === seg.taskId) : [],
-                      })
-                    }
-                  />
-                  <p className="tp-hint">
-                    押した時刻から止めた時刻までを、そのまま置いています。
-                    同じ時間に2つ以上動かしたぶんは、行を分けて出します。
-                    帯を押すと、その仕事の実績を直せます。
-                  </p>
-                </div>
-              )}
             </>
           )}
         </section>
-      </Reveal>
-
-      <Reveal>
+        )
+      case 'catTime':
+        return (
         <section className="tp-panel is-wide">
+          {bar}
           <div className="tp-panel-head">
             <h2>区分ごとの時間</h2>
             <span className="tp-badge tp-mono">直近10日</span>
@@ -368,10 +378,11 @@ export function DashboardView({
             </>
           )}
         </section>
-      </Reveal>
-
-      <Reveal>
+        )
+      case 'progress':
+        return (
         <section className="tp-panel">
+          {bar}
           <h2 className="tp-panel-title">区分ごとの進み具合</h2>
           {cats.length === 0 && <p className="tp-empty-body">区分のついたタスクがありません。</p>}
           {cats.map((c) => {
@@ -405,27 +416,123 @@ export function DashboardView({
             )
           })}
         </section>
-      </Reveal>
-
-      <Reveal>
+        )
+      case 'trend':
+        return (
+        <section className="tp-panel is-wide">
+          {bar}
+          {allDays.length > 0 ? (
+            <TrendCard allDays={allDays} />
+          ) : (
+            <>
+              <h2 className="tp-panel-title">処理の推移</h2>
+              <p className="tp-empty-body">
+                登録と完了を続けると、日ごとの件数と消化率の推移が出ます。
+              </p>
+            </>
+          )}
+        </section>
+        )
+      case 'priority':
+        return (
         <section className="tp-panel">
+          {bar}
           <h2 className="tp-panel-title">未完了の優先度分布</h2>
           <PriorityBars dist={pri} />
           <p className="tp-muted tp-small">
             高が積み上がっているときは、期限をずらすより先に減らす対象を決めてください。
           </p>
         </section>
-      </Reveal>
-
-      <Reveal>
+        )
+      case 'source':
+        return (
         <section className="tp-panel">
+          {bar}
           <h2 className="tp-panel-title">どの入口から入ったか</h2>
           <SourceBar stats={srcs} total={tasks.length} />
           <p className="tp-muted tp-small">
             使われている入口が分かると、次に手を入れる入口を決められます。
           </p>
         </section>
-      </Reveal>
+        )
+    }
+  }
+
+  return (
+    <div className="tp-view tp-dash tp-grid">
+      {fixing && (
+        <ActualSheet
+          tasks={fixing.tasks}
+          day={shareDay}
+          title={fixing.title}
+          categoryGroups={settings.categoryGroups}
+          defaultEstimateMin={settings.defaultEstimateMin}
+          onPatch={onPatch}
+          onClose={() => setFixing(null)}
+        />
+      )}
+      {banding && (
+        <BandSheet
+          segments={band}
+          day={shareDay}
+          tasks={fixable}
+          workHours={settings.workHours}
+          categoryGroups={settings.categoryGroups}
+          defaultEstimateMin={settings.defaultEstimateMin}
+          focusKey={banding.focus}
+          onPatch={onPatch}
+          onClose={() => setBanding(null)}
+        />
+      )}
+
+      {/* 並べ替え。押している間だけ、各カードの上に ↑↓ が出る */}
+      <div className="tp-dash-tools is-wide">
+        <button
+          type="button"
+          className={`tp-btn-ghost tp-btn-sm${sorting ? ' is-on' : ''}`}
+          aria-pressed={sorting}
+          onClick={() => setSorting((v) => !v)}
+        >
+          <Icon name={sorting ? 'check' : 'menu'} size={14} />
+          {sorting ? '並べ替えを終わる' : '並べ替え'}
+        </button>
+        {sorting && order.join() !== DEFAULT_DASH_ORDER.join() && (
+          <button type="button" className="tp-btn-ghost tp-btn-sm" onClick={() => saveOrder(DEFAULT_DASH_ORDER)}>
+            もとの並びに戻す
+          </button>
+        )}
+      </div>
+
+      {order.map((key, i) => (
+        <Reveal key={key}>
+          {cardOf(
+            key,
+            sorting ? (
+              <div className="tp-card-bar">
+                <span className="tp-card-bar-name">{DASH_LABEL[key]}</span>
+                <button
+                  type="button"
+                  className="tp-icon-btn"
+                  aria-label={`${DASH_LABEL[key]}を上へ`}
+                  disabled={i === 0}
+                  onClick={() => saveOrder(moveCard(order, key, -1))}
+                >
+                  <Icon name="chevron" size={16} className="tp-turn-up" />
+                </button>
+                <button
+                  type="button"
+                  className="tp-icon-btn"
+                  aria-label={`${DASH_LABEL[key]}を下へ`}
+                  disabled={i === order.length - 1}
+                  onClick={() => saveOrder(moveCard(order, key, 1))}
+                >
+                  <Icon name="chevron" size={16} className="tp-turn" />
+                </button>
+              </div>
+            ) : null,
+          ) as ReactElement}
+        </Reveal>
+      ))}
     </div>
   )
 }

@@ -148,6 +148,33 @@ body::before {
 .tp-menu { left: clamp(10px, 3vw, 22px); flex-direction: column; gap: 5px; }
 .tp-head-btn { right: clamp(10px, 3vw, 22px); }
 .tp-menu:hover, .tp-head-btn:hover { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .38); }
+
+/* ヘッダー右の「いま動かしているもの」（v1.23.0）。
+   書き出しのボタンをここから外し、止め忘れに気づける印に替えた。
+   色は区分のもの。本数は2つ以上のときだけ数字で出す（色だけで伝えない）。 */
+.tp-head-live {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  right: clamp(10px, 3vw, 22px);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-width: 44px; height: 44px; padding: 0 12px;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 11px; color: var(--on-header); transition: .16s;
+}
+.tp-head-live:hover { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .38); }
+.tp-head-live b { font-size: 13px; font-weight: 800; }
+.tp-head-live-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--cat, var(--rec));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cat, var(--rec)) 30%, transparent);
+  animation: tpLiveDot 2s ease-in-out infinite;
+}
+@keyframes tpLiveDot {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--cat, var(--rec)) 30%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--cat, var(--rec)) 10%, transparent); }
+}
+/* 何も動いていないときは、題が真ん中からずれないように場所だけ空ける */
+.tp-head-slot { position: absolute; right: clamp(10px, 3vw, 22px); width: 44px; height: 44px; }
 .tp-bar { display: block; height: 2px; width: 100%; background: var(--on-header); border-radius: 2px; transition: .25s; }
 .tp-menu[aria-expanded="true"] .tp-bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
 .tp-menu[aria-expanded="true"] .tp-bar:nth-child(2) { opacity: 0; }
@@ -423,7 +450,7 @@ body::before {
      2層目（奥・--fan-r2）  … 手描き・記憶・文章・マイク ＝ あとで作る
    位置は「向き（--fx/--fy）×半径」で出し、半径だけを画面幅で変える。
    2層目の角度は1層目の隙間（15°ずれ）にあるので、名前が前の層の丸と重ならない。 */
-.tp-quick { --fan-r1: 120px; --fan-r2: 216px; --fan-label-r: 40px; --fan-size: 54px; }
+.tp-quick { --fan-r1: 100px; --fan-r2: 172px; --fan-size: 46px; }
 .tp-fan { position: relative; }
 
 .tp-fan-backdrop {
@@ -487,12 +514,13 @@ body::before {
 }
 .tp-fan-btn:active { transform: scale(.94); }
 .tp-fan-btn:disabled { opacity: .45; cursor: default; }
-/* 名前は円の「外側」（＋から見て向こう側）に置く。
-   下に置くと隣の円とぶつかり、真横のものは画面の下に切れる。 */
+/* 名前は円の**真下**に置く（v1.23.0。利用者の指示）。
+   外側に出していた頃は、名前の場所が向きによって変わって読む目が回っていた。
+   下に固定するぶん、いちばん下（マイク）の角度を 180°→170° に上げて、
+   名前が画面の下に切れないようにしてある。 */
 .tp-fan-label {
-  position: absolute; left: 50%; top: 50%;
-  transform: translate(-50%, -50%)
-    translate(calc(var(--fx) * var(--fan-label-r)), calc(var(--fy) * var(--fan-label-r)));
+  position: absolute; left: 50%; top: calc(100% + 4px);
+  transform: translateX(-50%);
   white-space: nowrap;
   font-size: 10.5px; font-weight: 700; color: var(--ink);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -592,11 +620,15 @@ body::before {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
 }
 /* 時刻の欄。入れた時刻は ✕ で消せる（時刻なしに戻す道を消さない） */
+/* 時刻の欄。
+   端末の時刻入力は中身（10:00）を縮めてくれないので、
+   欄が狭いと「10:0」のように切れて見える。左右の余白を詰め、
+   ✕ のぶんだけを空けて、数字が入る幅を確保する（v1.23.0）。 */
 .tp-timefield { position: relative; display: flex; align-items: center; min-width: 0; }
-.tp-timefield input { padding-right: 34px; }
+.tp-timefield input { padding-left: 8px; padding-right: 30px; min-width: 0; }
 .tp-time-clear {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  display: grid; place-items: center; width: 28px; height: 28px;
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 26px; height: 26px;
   border-radius: 50%; color: var(--faint); background: var(--surface);
 }
 .tp-time-clear:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
@@ -943,6 +975,14 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-quick-add.is-on { transform: rotate(135deg); }
 }
 
+/* 日付と時刻が同じ行に並ぶと、時刻の欄が「10:0」まで潰れる。
+   スマホの幅では日付を1行使い、時刻は2つで分け合う（v1.23.0） */
+@media (max-width: 560px) {
+  .tp-field-row { grid-template-columns: 1fr 1fr; }
+  .tp-field-row-4 { grid-template-columns: 1fr 1fr; }
+  .tp-field-row > .tp-field-wide { grid-column: 1 / -1; }
+}
+
 /* ---------- 320px 幅まで崩れない ---------- */
 @media (max-width: 380px) {
   .tp-field-row { grid-template-columns: 1fr 1fr; }
@@ -953,7 +993,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-about dd { margin-bottom: 8px; }
   .tp-quick-btn { width: 56px; height: 56px; }
   /* 狭い端末。1層目 108px・2層目 196px（30°間隔なので丸は重ならない） */
-  .tp-quick { --fan-r1: 108px; --fan-r2: 196px; --fan-label-r: 34px; --fan-size: 48px; }
+  .tp-quick { --fan-r1: 98px; --fan-r2: 168px; --fan-size: 44px; }
   .tp-hero-num { font-size: 34px; }
 }
 
@@ -2702,3 +2742,50 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-actual-title { margin: 0 0 5px; font-size: 13.5px; font-weight: 700; color: var(--ink); }
 .tp-actual-cats { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 8px; }
 .tp-actual-quick { margin-top: 8px; }
+
+
+/* =========================================================
+ * 分析: 面の並べ替えと、時間帯のカード（v1.23.0）
+ * =======================================================*/
+.tp-dash-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tp-dash-tools .tp-btn-ghost.is-on {
+  background: color-mix(in srgb, var(--brand1) 12%, transparent);
+  border-color: color-mix(in srgb, var(--brand1) 40%, transparent);
+  color: var(--brand1);
+}
+/* 並べ替え中だけカードの頭に出る帯 */
+.tp-card-bar {
+  display: flex; align-items: center; gap: 6px;
+  margin: -4px 0 10px; padding: 6px 8px;
+  background: var(--surface-2); border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+.tp-card-bar-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 800; color: var(--muted); }
+.tp-card-bar .tp-icon-btn { width: 36px; height: 36px; }
+.tp-turn { transform: rotate(90deg); }
+.tp-turn-up { transform: rotate(-90deg); }
+
+/* 時間帯のカード。押すと一覧（ポップアップ）が開く */
+.tp-band-card .tp-hint { margin-top: 6px; }
+
+/* 時間帯の一覧（ポップアップ） */
+.tp-span-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tp-span { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.tp-span.is-open { border-color: var(--line-strong); background: var(--surface); }
+.tp-span-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  min-height: 48px; padding: 8px 10px; text-align: left; color: var(--ink);
+}
+.tp-span-time { font-size: 12px; font-weight: 700; color: var(--muted); flex: none; }
+.tp-span-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-span-kind {
+  margin-left: 6px; font-size: 10px; font-weight: 800; color: var(--brand2);
+  background: color-mix(in srgb, var(--brand2) 12%, transparent);
+  border-radius: 999px; padding: 1px 6px;
+}
+.tp-span-min { font-size: 12px; color: var(--muted); flex: none; }
+.tp-span-body { padding: 0 10px 10px; }
+.tp-span-body .tp-actual-list { margin: 0; }
+.tp-span-body .tp-actual-row { border: none; padding: 0; background: none; }
+/* 件名は上の行に出ているので、開いた中では繰り返さない */
+.tp-span-body .tp-actual-title { display: none; }

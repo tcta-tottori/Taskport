@@ -116,7 +116,7 @@ export function PlanSheet({
             </label>
 
             <div className="tp-field-row">
-              <label className="tp-field">
+              <label className="tp-field tp-field-wide">
                 <span className="tp-label">日付</span>
                 <input
                   type="date"
