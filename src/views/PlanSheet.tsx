@@ -7,7 +7,8 @@ import { cleanPlan, DEFAULT_PLAN_MIN, planSpan } from '../lib/plans'
 import { colorOf, detectCategories } from '../lib/workCategories'
 import { emptyRepeat, REPEAT_UNITS } from '../lib/repeat'
 import { toMinutes, weekdayOf } from '../lib/date'
-import type { CategoryGroup, Plan, RepeatUnit } from '../types'
+import { jobLabel } from '../lib/jobs'
+import type { CategoryGroup, Job, Plan, RepeatUnit } from '../types'
 
 /* =========================================================
  * 予定を作る／直す
@@ -40,6 +41,7 @@ export function PlanSheet({
   plan,
   existing,
   categoryGroups,
+  jobs,
   onChangeCategoryGroups,
   onSave,
   onDelete,
@@ -50,6 +52,8 @@ export function PlanSheet({
   /** 既存の予定を直しているか（消す口を出すかの判断に使う） */
   existing: boolean
   categoryGroups: CategoryGroup[]
+  /** 案件（工数の単位）。打合せの時間も案件に積む */
+  jobs: Job[]
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
   onSave: (plan: Plan) => void
   onDelete?: (plan: Plan) => void
@@ -199,6 +203,26 @@ export function PlanSheet({
               </button>
               <p className="tp-hint">実行の記録は先頭の区分で数えます。</p>
             </div>
+
+            {/* 案件（工数の単位）。会議に出た時間も案件に積む */}
+            <label className="tp-field">
+              <span className="tp-label">案件</span>
+              <select
+                value={draft.jobId ?? ''}
+                onChange={(e) => change({ jobId: e.target.value || null })}
+              >
+                <option value="">案件なし</option>
+                {jobs
+                  .filter((j) => !j.closed || j.id === draft.jobId)
+                  .map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {jobLabel(j)}
+                      {j.closed ? '（締め）' : ''}
+                    </option>
+                  ))}
+              </select>
+              <p className="tp-hint">開始・終了を押して測った時間が、その案件の工数に積まれます。</p>
+            </label>
 
             {picking && (
               <CategorySheet

@@ -14,6 +14,7 @@ export function emptyDraft(source: Source = 'form'): Draft {
     tempId: ulid(),
     title: '',
     note: '',
+    jobId: null,
     due: null,
     dueTime: null,
     estimateMin: null,
@@ -35,6 +36,7 @@ export function draftToTask(draft: Draft): Task {
     id: ulid(),
     title: draft.title.trim(),
     note: draft.note.trim(),
+    jobId: draft.jobId ?? null,
     due: isDayKey(draft.due) ? draft.due : null,
     dueTime: isTimeKey(draft.dueTime) ? draft.dueTime : null,
     estimateMin:
@@ -61,6 +63,7 @@ export function taskToDraft(task: Task): Draft {
     tempId: task.id,
     title: task.title,
     note: task.note,
+    jobId: task.jobId ?? null,
     due: task.due,
     dueTime: task.dueTime,
     estimateMin: task.estimateMin,

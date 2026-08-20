@@ -8,11 +8,13 @@ import {
   PRIORITY_LABEL,
   type CategoryGroup,
   type Draft,
+  type Job,
   type RepeatUnit,
   type Subtask,
   type WorkHours,
 } from '../types'
 import { colorOf, detectCategories } from '../lib/workCategories'
+import { jobLabel } from '../lib/jobs'
 import { emptyRepeat, REPEAT_UNITS } from '../lib/repeat'
 import { bands } from '../lib/timebox'
 import { weekdayOf } from '../lib/date'
@@ -30,6 +32,7 @@ export function DraftFields({
   workHours,
   categoryGroups,
   onChangeCategoryGroups,
+  jobs,
 }: {
   draft: Draft
   onChange: (patch: Partial<Draft>) => void
@@ -40,6 +43,8 @@ export function DraftFields({
   categoryGroups: CategoryGroup[]
   /** 区分の選択画面でマスタを直したとき */
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
+  /** 案件（工数の単位）。締めたものは選べない */
+  jobs: Job[]
 }) {
   const repeat = draft.repeat
   const WEEK = ['日', '月', '火', '水', '木', '金', '土']
@@ -196,6 +201,30 @@ export function DraftFields({
         </button>
         {autoFilled && <p className="tp-hint">件名から当てました。違うときは押して選び直してください。</p>}
       </div>
+
+      {/* 案件（工数の単位）。区分が「何をしたか」、案件は「何のためにしたか」 */}
+      <label className="tp-field">
+        <span className="tp-label">案件</span>
+        <select
+          value={draft.jobId ?? ''}
+          onChange={(e) => onChange({ jobId: e.target.value || null })}
+        >
+          <option value="">案件なし</option>
+          {jobs
+            .filter((j) => !j.closed || j.id === draft.jobId)
+            .map((j) => (
+              <option key={j.id} value={j.id}>
+                {jobLabel(j)}
+                {j.closed ? '（締め）' : ''}
+              </option>
+            ))}
+        </select>
+        <p className="tp-hint">
+          {jobs.length === 0
+            ? '案件は工数の画面（JOBS）で作れます。入れると、押して測った時間がその案件に積まれます。'
+            : '押して測った時間が、選んだ案件の工数に積まれます。'}
+        </p>
+      </label>
 
       {picking && (
         <CategorySheet

@@ -27,6 +27,7 @@ export function TaskCard({
   onToggleRunning,
   workHours,
   categoryGroups,
+  jobName,
 }: {
   task: Task
   today: string
@@ -34,6 +35,8 @@ export function TaskCard({
   workHours?: WorkHours
   /** 区分の色を引くためのマスタ */
   categoryGroups: CategoryGroup[]
+  /** 案件の名前（工数の単位）。無いときは出さない */
+  jobName?: string | null
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
   /** 手順1つの済／未了を切り替える */
@@ -85,6 +88,11 @@ export function TaskCard({
             {task.repeat && (
               <span className="tp-chip-rep">
                 <Icon name="repeat" size={11} /> {repeatLabel(task.repeat)}
+              </span>
+            )}
+            {jobName && (
+              <span className="tp-chip-job">
+                <Icon name="checklist" size={11} /> {jobName}
               </span>
             )}
             {task.categories.map((c) => (

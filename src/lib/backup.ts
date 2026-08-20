@@ -1,7 +1,7 @@
 import { isDayKey, isTimeKey } from './date'
 import { ulid } from './ulid'
 import { cleanCategories, normalizeGroups } from './workCategories'
-import { PRIORITIES, type Plan, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task, type TimeboxKey } from '../types'
+import { PRIORITIES, type Job, type Plan, type Priority, type Repeat, type RepeatUnit, type Settings, type Source, type Subtask, type Task, type TimeboxKey } from '../types'
 
 /* =========================================================
  * JSON バックアップ（端末故障・キャッシュ削除への備え）
@@ -17,6 +17,8 @@ export interface BackupFile {
   tasks: Task[]
   /** 予定（打合せ・固定の業務）。v1.14.0 から。古いファイルには入っていない */
   plans?: Plan[]
+  /** 案件（工数の単位）。v1.25.0 から */
+  jobs?: Job[]
   settings?: Settings
 }
 
@@ -25,13 +27,19 @@ export interface BackupFile {
  * **実行ログ（開始・終了の記録）は入れない。** あれはその端末で動かした実績で、
  * 別の端末へ移して意味のあるものではない（移すと同じ時間が二重に立つ）。
  */
-export function makeBackup(tasks: Task[], settings: Settings, plans: Plan[] = []): string {
+export function makeBackup(
+  tasks: Task[],
+  settings: Settings,
+  plans: Plan[] = [],
+  jobs: Job[] = [],
+): string {
   const payload: BackupFile = {
     app: 'taskport',
     version: 1,
     exportedAt: new Date().toISOString(),
     tasks,
     plans,
+    jobs,
     settings,
   }
   return JSON.stringify(payload, null, 2)
@@ -81,6 +89,7 @@ function toTask(raw: unknown): Task | null {
     id,
     title,
     note: typeof o.note === 'string' ? o.note : '',
+    jobId: typeof o.jobId === 'string' ? o.jobId : null,
     due: isDayKey(o.due) ? o.due : null,
     dueTime: isTimeKey(o.dueTime) ? o.dueTime : null,
     estimateMin: typeof o.estimateMin === 'number' && o.estimateMin > 0 ? Math.round(o.estimateMin) : null,
@@ -119,6 +128,7 @@ function toPlan(raw: unknown): Plan | null {
     title,
     note: typeof o.note === 'string' ? o.note : '',
     place: typeof o.place === 'string' ? o.place : '',
+    jobId: typeof o.jobId === 'string' ? o.jobId : null,
     day: o.day,
     startTime,
     endTime: isTimeKey(o.endTime) ? o.endTime : null,
@@ -133,10 +143,34 @@ function toPlan(raw: unknown): Plan | null {
   }
 }
 
+/** 案件。名前が無いものは捨てる（何の工数か分からないものを入れない） */
+function toJob(raw: unknown): Job | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const o = raw as Record<string, unknown>
+  const id = typeof o.id === 'string' ? o.id : ''
+  const name = typeof o.name === 'string' ? o.name.trim() : ''
+  if (!id || !name) return null
+  const now = new Date().toISOString()
+  return {
+    id,
+    name,
+    code: typeof o.code === 'string' ? o.code : '',
+    client: typeof o.client === 'string' ? o.client : '',
+    plannedMin: typeof o.plannedMin === 'number' && o.plannedMin > 0 ? Math.round(o.plannedMin) : 0,
+    due: isDayKey(o.due) ? o.due : null,
+    closed: o.closed === true,
+    note: typeof o.note === 'string' ? o.note : '',
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : now,
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : now,
+  }
+}
+
 export interface RestoreResult {
   tasks: Task[]
   /** 予定。古いファイルには入っていないので空になる */
   plans: Plan[]
+  /** 案件。古いファイルには入っていないので空になる */
+  jobs: Job[]
   settings: Partial<Settings> | null
   /** 形が合わずに取り込めなかった件数 */
   skipped: number
@@ -173,6 +207,14 @@ export function readBackup(json: string): RestoreResult {
       else skipped++
     }
   }
+  const jobs: Job[] = []
+  if (typeof data === 'object' && data !== null && Array.isArray((data as BackupFile).jobs)) {
+    for (const item of (data as BackupFile).jobs as unknown[]) {
+      const j = toJob(item)
+      if (j) jobs.push(j)
+      else skipped++
+    }
+  }
   const raw =
     typeof data === 'object' && data !== null && typeof (data as BackupFile).settings === 'object'
       ? ((data as BackupFile).settings as Partial<Settings>)
@@ -181,5 +223,5 @@ export function readBackup(json: string): RestoreResult {
   const settings = raw
     ? { ...raw, categoryGroups: normalizeGroups(raw.categoryGroups) }
     : null
-  return { tasks, plans, settings, skipped }
+  return { tasks, plans, jobs, settings, skipped }
 }

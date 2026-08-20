@@ -17,6 +17,7 @@ import {
   toMinutes,
 } from '../lib/date'
 import { emptyDraft, filterByTab, LIST_TABS, sortTasks, type ListTab } from '../lib/tasks'
+import { jobOf } from '../lib/jobs'
 import { applyFilter, isFilterActive } from '../lib/taskFilter'
 import { applyTemplate, rank } from '../lib/templates'
 import { colorOf, detectCategories } from '../lib/workCategories'
@@ -35,6 +36,7 @@ import { activeRuns, runSeconds, type RunBox } from '../lib/runs'
 import type {
   CategoryGroup,
   Draft,
+  Job,
   SavedFilter,
   Settings,
   Task,
@@ -101,6 +103,7 @@ export function WorkLogView({
   onRemoveSavedFilter,
   onTriage,
   onWrapUp,
+  jobs,
   onNotify,
 }: {
   tasks: Task[]
@@ -131,6 +134,8 @@ export function WorkLogView({
   /** 朝の仕分け・明日の準備 */
   onTriage: () => void
   onWrapUp: () => void
+  /** 案件（工数の単位）。カードに名前を出すために使う */
+  jobs: Job[]
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [day, setDay] = useState(today)
@@ -700,6 +705,7 @@ export function WorkLogView({
                   onToggleRunning={onToggleRunning}
                   workHours={settings.workHours}
                   categoryGroups={settings.categoryGroups}
+                  jobName={jobOf(jobs, task.jobId)?.name ?? null}
                 />
               ))}
             </ul>

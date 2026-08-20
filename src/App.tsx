@@ -7,6 +7,9 @@ import { ScheduleView } from './views/ScheduleView'
 import { PlanSheet } from './views/PlanSheet'
 import { StartSheet, type StartMode } from './views/StartSheet'
 import { DashboardView } from './views/DashboardView'
+import { emptyJob } from './lib/jobs'
+import { JobsView } from './views/JobsView'
+import { JobSheet } from './views/JobSheet'
 import { SettingsView } from './views/SettingsView'
 import { ExportSheet } from './views/ExportSheet'
 import { ReviewSheet } from './views/ReviewSheet'
@@ -75,6 +78,7 @@ import {
   type CalendarEvent,
   type CategoryGroup,
   type Draft,
+  type Job,
   type Plan,
   type PlanOccurrence,
   type Recording,
@@ -93,7 +97,7 @@ import {
  * 自然文はどの入口から来ても parseToTasks を通り、必ず確認画面に出る。
  * =======================================================*/
 
-type ViewKey = 'worklog' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
+type ViewKey = 'worklog' | 'schedule' | 'jobs' | 'dashboard' | 'recordings' | 'settings'
 
 /**
  * 画面の並び。見出しは英語で置く（v1.24.0。利用者の指示）。
@@ -104,6 +108,8 @@ const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   // Run ＝いま動かす面と、その日の記録、台帳。1日のうちいちばん開くので最上段に置く
   { key: 'worklog', label: 'RUN', icon: 'play' },
   { key: 'schedule', label: 'SCHEDULE', icon: 'calendar' },
+  // 工数＝案件ごとの時間。日で見る ANALYSIS に対して、こちらは案件で見る
+  { key: 'jobs', label: 'JOBS', icon: 'checklist' },
   { key: 'dashboard', label: 'ANALYSIS', icon: 'chart' },
   { key: 'recordings', label: 'RECORDINGS', icon: 'mic' },
   { key: 'settings', label: 'SETTINGS', icon: 'gear' },
@@ -129,6 +135,10 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   /** 予定（打合せ・固定の業務）。台帳とは別に持つ */
   const [plans, setPlans] = useState<Plan[]>([])
+  /** 案件（工数の単位）。別のDBに置いてあるので、読めなくても台帳は動く */
+  const [jobs, setJobs] = useState<Job[]>([])
+  /** 案件を作る／直す面 */
+  const [jobEditing, setJobEditing] = useState<{ job: Job; existing: boolean } | null>(null)
   /** 実行ログ（開始・一時停止・終了）。新しい日ぶんだけ手元に置く */
   const [runs, setRuns] = useState<WorkRun[]>([])
   /** 直している予定。existing が false なら新しく入れるところ */
@@ -191,8 +201,14 @@ export default function App() {
   /** 続けて登録したときに控えを取りこぼさないよう、いまの控えを常に持っておく */
   const templatesRef = useRef<TaskTemplate[]>([])
   /** いまの台帳と設定。あとから走る処理（同期・リマインド）が古い値を掴まないようにする */
-  const liveRef = useRef({ tasks: [] as Task[], settings: DEFAULT_SETTINGS, runs: [] as WorkRun[] })
-  liveRef.current = { tasks, settings, runs }
+  const liveRef = useRef({
+    tasks: [] as Task[],
+    settings: DEFAULT_SETTINGS,
+    runs: [] as WorkRun[],
+    plans: [] as Plan[],
+    jobs: [] as Job[],
+  })
+  liveRef.current = { tasks, settings, runs, plans, jobs }
   const [today, setToday] = useState(dayKey())
   const [checking, setChecking] = useState(false)
 
@@ -224,6 +240,11 @@ export default function App() {
     setRuns(r)
   }, [])
 
+  /** 案件を読み直す。ここが開けなくても、タスクと予定は使える */
+  const reloadJobs = useCallback(async () => {
+    setJobs(await repository.listJobs())
+  }, [])
+
   /**
    * 保存データを読む。
    * 読めなかったときは必ず理由を画面に出す。
@@ -245,6 +266,7 @@ export default function App() {
       // 予定と実行ログは別のDB。読めなくても台帳は使えるので、ここで握って知らせる。
       try {
         await reloadWork()
+        await reloadJobs().catch(() => setJobs([]))
         void repository.pruneRuns(addDaysKey(dayKey(), -RUN_KEEP_DAYS)).catch(() => {
           /* 古い記録が残るだけ。画面は止めない */
         })
@@ -265,7 +287,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [reloadWork, notify])
+  }, [reloadWork, reloadJobs, notify])
 
   /**
    * 保存データが開けないときの最後の手段。**台帳の中身は消える。**
@@ -774,6 +796,52 @@ export default function App() {
     [],
   )
 
+  /* --- 案件（工数の単位）--- */
+
+  const saveJob = useCallback(
+    async (job: Job) => {
+      const next: Job = { ...job, updatedAt: new Date().toISOString() }
+      await repository.saveJob(next)
+      await reloadJobs()
+      setJobEditing(null)
+      notify(job.closed ? '案件を締めました' : '案件を保存しました')
+    },
+    [reloadJobs, notify],
+  )
+
+  /**
+   * 案件を消す。指していたタスクと予定は消さず、案件なしに戻す
+   * （働いた事実は案件を畳んでも変わらない）。
+   */
+  const removeJob = useCallback(
+    async (job: Job) => {
+      await repository.removeJob(job.id)
+      const mine = liveRef.current.tasks.filter((t) => t.jobId === job.id)
+      for (const t of mine) await repository.update(t.id, { jobId: null })
+      const plansOfJob = liveRef.current.plans.filter((p) => p.jobId === job.id)
+      for (const p of plansOfJob) {
+        await repository.savePlan({ ...p, jobId: null, updatedAt: new Date().toISOString() })
+      }
+      await reload()
+      await reloadWork()
+      await reloadJobs()
+      setJobEditing(null)
+      notify(`案件を消しました（${mine.length}件のタスクは案件なしに戻しました）`)
+    },
+    [reload, reloadWork, reloadJobs, notify],
+  )
+
+  /** タスクを案件に入れる／外す */
+  const assignJob = useCallback(
+    async (task: Task, jobId: string | null) => {
+      await repository.update(task.id, { jobId })
+      await reload()
+      const job = jobId ? liveRef.current.jobs.find((j) => j.id === jobId) : null
+      notify(job ? `「${job.name}」に入れました` : '案件から外しました')
+    },
+    [reload, notify],
+  )
+
   const savePlan = useCallback(
     async (plan: Plan, existing: boolean) => {
       await repository.savePlan(cleanPlan(plan))
@@ -976,10 +1044,16 @@ export default function App() {
   )
 
   const restore = useCallback(
-    async (next: Task[], nextPlans: Plan[], nextSettings: Partial<Settings> | null) => {
+    async (
+      next: Task[],
+      nextPlans: Plan[],
+      nextJobs: Job[],
+      nextSettings: Partial<Settings> | null,
+    ) => {
       await repository.replaceAll(next)
-      // 予定は別のDB。取り込んだファイルに入っていないとき（v1.13 以前の書き出し）は触らない
+      // 予定と案件は別のDB。取り込んだファイルに入っていないときは触らない
       if (nextPlans.length > 0) await repository.replaceAllPlans(nextPlans)
+      if (nextJobs.length > 0) await repository.replaceAllJobs(nextJobs)
       if (nextSettings) {
         const merged = { ...settings, ...nextSettings }
         setSettings(merged)
@@ -987,8 +1061,9 @@ export default function App() {
       }
       await reload()
       await reloadWork()
+      await reloadJobs()
     },
-    [reload, reloadWork, settings],
+    [reload, reloadWork, reloadJobs, settings],
   )
 
   /* --- 画面を消さない ---
@@ -1217,6 +1292,7 @@ export default function App() {
     else if (
       v === 'worklog' ||
       v === 'schedule' ||
+      v === 'jobs' ||
       v === 'dashboard' ||
       v === 'recordings' ||
       v === 'settings'
@@ -1471,7 +1547,21 @@ export default function App() {
             onRemoveSavedFilter={removeSavedFilter}
             onTriage={() => setTriaging(true)}
             onWrapUp={() => setWrappingUp(true)}
+            jobs={jobs}
             onNotify={notify}
+          />
+        ) : view === 'jobs' ? (
+          <JobsView
+            jobs={jobs}
+            tasks={tasks}
+            plans={plans}
+            runs={runs}
+            today={today}
+            settings={settings}
+            onNewJob={() => setJobEditing({ job: emptyJob(), existing: false })}
+            onEditJob={(job) => setJobEditing({ job, existing: true })}
+            onEditTask={setEditing}
+            onAssign={(t, id) => void guard(() => assignJob(t, id))}
           />
         ) : view === 'dashboard' ? (
           <DashboardView
@@ -1499,6 +1589,7 @@ export default function App() {
             settings={settings}
             tasks={tasks}
             plans={plans}
+            jobs={jobs}
             onSave={(s) => void guard(() => saveSettings(s))}
             onChangeCategoryGroups={saveCategoryGroups}
             sync={sync}
@@ -1539,6 +1630,7 @@ export default function App() {
           today={today}
           workHours={settings.workHours}
           categoryGroups={settings.categoryGroups}
+          jobs={jobs}
           onChangeCategoryGroups={saveCategoryGroups}
           onCommit={(d) => void guard(() => commitDrafts(d))}
           onCancel={() => setPending(null)}
@@ -1563,6 +1655,7 @@ export default function App() {
           initialDraft={seed ?? emptyDraft('form')}
           workHours={settings.workHours}
           categoryGroups={settings.categoryGroups}
+          jobs={jobs}
           onChangeCategoryGroups={saveCategoryGroups}
           onSave={(d) => void guard(() => saveEdit(d))}
           onDelete={(t) => void guard(() => removeTask(t))}
@@ -1622,6 +1715,7 @@ export default function App() {
           plan={planEditing.plan}
           existing={planEditing.existing}
           categoryGroups={settings.categoryGroups}
+          jobs={jobs}
           onChangeCategoryGroups={saveCategoryGroups}
           onSave={(p) => void guard(() => savePlan(p, planEditing.existing))}
           onDelete={(p) => void guard(() => removePlan(p))}
@@ -1660,6 +1754,16 @@ export default function App() {
         />
       )}
 
+      {jobEditing && (
+        <JobSheet
+          job={jobEditing.job}
+          existing={jobEditing.existing}
+          onSave={(j) => void guard(() => saveJob(j))}
+          onDelete={(j) => void guard(() => removeJob(j))}
+          onClose={() => setJobEditing(null)}
+        />
+      )}
+
       {exporting && (
         <ExportSheet
           tasks={tasks}
@@ -1667,6 +1771,7 @@ export default function App() {
           settings={settings}
           plans={plans}
           runs={runs}
+          jobs={jobs}
           onClose={() => setExporting(false)}
           onNotify={notify}
         />

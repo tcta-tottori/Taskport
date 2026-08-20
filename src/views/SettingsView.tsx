@@ -11,6 +11,7 @@ import {
   DEFAULT_WORK_HOURS,
   RUN_KEEP_DAYS,
   type CategoryGroup,
+  type Job,
   type Plan,
   type Settings,
   type Task,
@@ -57,6 +58,7 @@ export function SettingsView({
   settings,
   tasks,
   plans,
+  jobs,
   onSave,
   onRestore,
   onNotify,
@@ -70,8 +72,15 @@ export function SettingsView({
   tasks: Task[]
   /** 予定。書き出しに一緒に入れる（端末が変わっても定例が消えないように） */
   plans: Plan[]
+  /** 案件（工数の単位）。書き出し・取り込みに乗せる */
+  jobs: Job[]
   onSave: (s: Settings) => void
-  onRestore: (tasks: Task[], plans: Plan[], settings: Partial<Settings> | null) => Promise<void>
+  onRestore: (
+    tasks: Task[],
+    plans: Plan[],
+    jobs: Job[],
+    settings: Partial<Settings> | null,
+  ) => Promise<void>
   onNotify: (text: string, tone?: 'ok' | 'error') => void
   /** 同期の様子 */
   sync: { state: 'off' | 'idle' | 'running' | 'ok' | 'error'; at: string | null; message: string }
@@ -111,12 +120,12 @@ export function SettingsView({
     try {
       const text = await file.text()
       const result = readBackup(text)
-      await onRestore(result.tasks, result.plans, result.settings)
+      await onRestore(result.tasks, result.plans, result.jobs, result.settings)
       if (result.settings) setDraft((d) => ({ ...d, ...result.settings }))
       onNotify(
         result.skipped > 0
-          ? `タスク${result.tasks.length}件・予定${result.plans.length}件を取り込みました（${result.skipped}件は形が合わず取り込めませんでした）`
-          : `タスク${result.tasks.length}件・予定${result.plans.length}件を取り込みました`,
+          ? `タスク${result.tasks.length}件・予定${result.plans.length}件・案件${result.jobs.length}件を取り込みました（${result.skipped}件は形が合わず取り込めませんでした）`
+          : `タスク${result.tasks.length}件・予定${result.plans.length}件・案件${result.jobs.length}件を取り込みました`,
       )
     } catch (err) {
       onNotify(err instanceof Error ? err.message : '取り込みに失敗しました', 'error')
@@ -953,10 +962,10 @@ export function SettingsView({
               onClick={() => {
                 downloadText(
                   `taskport-backup-${dayKey()}.json`,
-                  makeBackup(tasks, settings, plans),
+                  makeBackup(tasks, settings, plans, jobs),
                   'application/json',
                 )
-                onNotify(`タスク${tasks.length}件・予定${plans.length}件を書き出しました`)
+                onNotify(`タスク${tasks.length}件・予定${plans.length}件・案件${jobs.length}件を書き出しました`)
               }}
             >
               <Icon name="download" size={16} />

@@ -3,7 +3,7 @@ import { Icon } from '../components/Icon'
 import { DraftFields } from './DraftFields'
 import { taskToDraft } from '../lib/tasks'
 import { dayOfIso } from '../lib/date'
-import { SOURCE_LABEL, type CategoryGroup, type Draft, type Task, type WorkHours } from '../types'
+import { SOURCE_LABEL, type CategoryGroup, type Draft, type Job, type Task, type WorkHours } from '../types'
 
 /* =========================================================
  * 既存タスクの編集 / 手描き（自分で書いて1件作る）
@@ -26,6 +26,7 @@ export function TaskEditor({
   onClose,
   workHours,
   categoryGroups,
+  jobs,
   onChangeCategoryGroups,
 }: {
   /** 既存タスクの編集なら渡す。新規作成なら undefined */
@@ -34,6 +35,8 @@ export function TaskEditor({
   initialDraft: Draft
   workHours: WorkHours
   categoryGroups: CategoryGroup[]
+  /** 案件（工数の単位） */
+  jobs: Job[]
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
   onSave: (draft: Draft) => void
   onDelete?: (task: Task) => void
@@ -58,6 +61,7 @@ export function TaskEditor({
             idPrefix="edit"
             workHours={workHours}
             categoryGroups={categoryGroups}
+            jobs={jobs}
             onChangeCategoryGroups={onChangeCategoryGroups}
             onChange={(p) => setDraft({ ...draft, ...p })}
           />

@@ -1,4 +1,4 @@
-import type { Plan, Recording, Settings, Task, TaskTemplate, WorkRun } from '../types'
+import type { Job, Plan, Recording, Settings, Task, TaskTemplate, WorkRun } from '../types'
 
 /**
  * 保存層の境界。
@@ -63,6 +63,15 @@ export interface Repository {
   removePlan(id: string): Promise<void>
   /** バックアップの取り込み用。丸ごと入れ替える */
   replaceAllPlans(plans: Plan[]): Promise<void>
+
+  /* --- 案件（工数の単位）。これも台帳とは別のDBに置く ---
+     どの仕事にどれだけ時間を使ったかをまとめる単位で、タスクと予定が案件を指す。 */
+
+  listJobs(): Promise<Job[]>
+  saveJob(job: Job): Promise<void>
+  removeJob(id: string): Promise<void>
+  /** バックアップの取り込み用。丸ごと入れ替える */
+  replaceAllJobs(jobs: Job[]): Promise<void>
 
   /* --- 予定の実行ログ（開始・一時停止・終了） ---
      タスクの実績は台帳（Task.startedAt / actualMin）が持つ。ここは予定ぶんだけ。

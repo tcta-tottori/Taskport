@@ -92,6 +92,16 @@ export function weekdayOf(key: string): number {
   return parseDayKey(key).getDay()
 }
 
+/**
+ * その週の頭（月曜）の日。工数の「今週」はここから7日ぶん。
+ * 日曜始まりにしないのは、勤務が月〜金だから（週の途中で切れて見える）。
+ */
+export function startOfWeek(key: string): string {
+  const wd = weekdayOf(key)
+  // 0=日 なので、月曜まで戻るぶんは 日=6 / 月=0 / 火=1 …
+  return addDaysKey(key, -((wd + 6) % 7))
+}
+
 export function weekdayLabel(key: string): string {
   return WEEKDAY_JA[weekdayOf(key)]
 }

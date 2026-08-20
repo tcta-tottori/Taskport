@@ -10,6 +10,7 @@ import {
   PRIORITY_LABEL,
   SOURCE_LABEL,
   type CategoryGroup,
+  type Job,
   type Draft,
   type WorkHours,
 } from '../types'
@@ -31,6 +32,7 @@ export function ReviewSheet({
   today,
   workHours,
   categoryGroups,
+  jobs,
   onChangeCategoryGroups,
   onCommit,
   onCancel,
@@ -51,6 +53,8 @@ export function ReviewSheet({
   today: string
   workHours: WorkHours
   categoryGroups: CategoryGroup[]
+  /** 案件（工数の単位） */
+  jobs: Job[]
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
   onCommit: (drafts: Draft[]) => void
   onCancel: () => void
@@ -203,6 +207,7 @@ export function ReviewSheet({
                     idPrefix={`rev-${d.tempId}`}
                     workHours={workHours}
                     categoryGroups={categoryGroups}
+                    jobs={jobs}
                     onChangeCategoryGroups={onChangeCategoryGroups}
                     onChange={(p) => patch(d.tempId, p)}
                   />

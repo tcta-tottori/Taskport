@@ -5,12 +5,13 @@ import { dayKey, formatMDShort } from '../lib/date'
 import { sortTasks } from '../lib/tasks'
 import { toCsv } from '../ports/out/toCsv'
 import { toBulletList, toDailyReport, toStandupText, toWorkLogTsv } from '../ports/out/toPlainText'
+import { toJobCsv } from '../ports/out/toCsv'
 import { toGoogleCalendarUrl, toIcs, workHoursIcs } from '../ports/out/toCalendar'
 import { pushTasks } from '../ports/out/toGoogleCalendar'
 import { copyText, downloadText } from '../ports/out/download'
 import { workHoursSummary } from '../lib/workday'
 import { occurrencesOn } from '../lib/plans'
-import type { Plan, Settings, Task, WorkRun } from '../types'
+import type { Job, Plan, Settings, Task, WorkRun } from '../types'
 
 /* =========================================================
  * 出力形式の選択
@@ -35,6 +36,7 @@ export function ExportSheet({
   settings,
   plans,
   runs,
+  jobs,
   onClose,
   onNotify,
 }: {
@@ -45,6 +47,8 @@ export function ExportSheet({
   plans: Plan[]
   /** その日の実行ログ。期限の無い仕事を日報から落とさないために渡す（ログ自体は書き出さない） */
   runs: WorkRun[]
+  /** 案件（工数の単位） */
+  jobs: Job[]
   onClose: () => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
@@ -257,6 +261,30 @@ export function ExportSheet({
             <>
               <p className="tp-note">
                 全項目を CSV で出します。Excel での集計や、上長への共有に使ってください。
+              </p>
+
+              {/* 工数（案件ごと）。見積と実績は別の列に出す */}
+              <div className="tp-row-end">
+                <button
+                  type="button"
+                  className="tp-btn-ghost"
+                  disabled={jobs.length === 0}
+                  onClick={() => {
+                    downloadText(
+                      `taskport-jobs-${dayKey()}.csv`,
+                      toJobCsv(jobs, tasks, plans, runs, settings.defaultEstimateMin),
+                      'text/csv',
+                    )
+                    onNotify(`案件 ${jobs.length}件の工数を書き出しました`)
+                  }}
+                >
+                  <Icon name="download" size={16} />
+                  工数（案件ごと）
+                </button>
+              </div>
+              <p className="tp-hint">
+                工数は<b>押して測った時間</b>だけを実績として出します（見積は別の列）。
+                {jobs.length === 0 && ' 案件がまだありません（JOBS の画面で作れます）。'}
               </p>
               <div className="tp-row-end">
                 <button

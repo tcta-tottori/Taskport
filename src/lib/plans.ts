@@ -40,6 +40,7 @@ export function emptyPlan(day: string, settings: Settings): Plan {
     title: '',
     note: '',
     place: '',
+    jobId: null,
     day,
     startTime: span.start,
     endTime: span.end,

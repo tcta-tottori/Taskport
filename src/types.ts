@@ -147,6 +147,12 @@ export interface Task {
    */
   timebox: TimeboxKey | null
   /**
+   * どの案件（Job）の工数か。null は案件なし。
+   * 工数の集計はこれを鍵にする（`lib/jobs.ts`）。区分（categories）とは別軸で、
+   * 「何の仕事か」＝区分、「どの案件のためか」＝これ。
+   */
+  jobId: string | null
+  /**
    * 繰り返しの設定。null は繰り返さない。
    * 完了にした時点で次回ぶんを別のタスクとして作る（自動で溜め込まない）。
    *
@@ -512,11 +518,44 @@ export interface Plan {
    * 既定は Settings.planAutoTrack。予定ごとに切り替えられる。
    */
   autoTrack: boolean
+  /** どの案件（Job）の工数か。打合せの時間も案件に積む。null は案件なし */
+  jobId: string | null
   /**
    * 繰り返し。**次回ぶんを作り置きしない**。
    * 画面に出すときに day から先へ展開する（週次の定例で台帳が埋まらない）。
    */
   repeat: Repeat | null
+  createdAt: string
+  updatedAt: string
+}
+
+/* ---------------------------------------------------------
+ * 案件（工数の単位）
+ *
+ * 「どの仕事にどれだけ時間を使ったか」をまとめる単位。
+ * 区分（categories）が**何をしたか**なら、案件は**何のためにしたか**。
+ * 同じ「伝票処理」でも、A社の立ち上げぶんと定常ぶんを分けて数えたい、が実際に起きる。
+ *
+ * 台帳（タスク）とは別のDBに置く（`taskport-jobs`）。
+ * 保存先が増えても台帳の版を上げない、という決まりに従う。
+ * ------------------------------------------------------- */
+
+export interface Job {
+  /** ULID */
+  id: string
+  /** 案件名。「AB-1234 立ち上げ」など */
+  name: string
+  /** 管理番号・品番など。空でよい */
+  code: string
+  /** 相手先（得意先・部署）。空でよい */
+  client: string
+  /** 見積工数（分）。0 は「決めていない」 */
+  plannedMin: number
+  /** 期限 "YYYY-MM-DD"。null は決めない */
+  due: string | null
+  /** 締めた案件は一覧の下へ畳む。実績は残す */
+  closed: boolean
+  note: string
   createdAt: string
   updatedAt: string
 }

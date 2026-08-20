@@ -7,6 +7,7 @@ import {
   DEFAULT_WORK_HOURS,
   RECORDING_KEEP,
   TEMPLATE_KEEP,
+  type Job,
   type Plan,
   type Recording,
   type Settings,
@@ -42,6 +43,12 @@ const MEDIA_DB = 'taskport-media'
  * アップグレード待ちで固まる（v1.2.0 の不具合）。DBを足すぶんには何も起きない。
  */
 const WORK_DB = 'taskport-work'
+/**
+ * 案件（工数の単位）。**また別のDB**にする。
+ * 予定のDBに足すとそちらの版を上げることになり、
+ * 古い版を掴んだタブがあるだけでアップグレード待ちで固まる（v1.2.0 の不具合）。
+ */
+const JOBS_DB = 'taskport-jobs'
 
 /** 開けなかったときに諦めるまでの回数（端末が寝起きのときは1回目だけ落ちることがある） */
 const OPEN_TRIES = 3
@@ -68,6 +75,13 @@ interface WorkDB extends DBSchema {
     key: string
     value: WorkRun
     indexes: { by_day: string; by_plan: string }
+  }
+}
+
+interface JobsDB extends DBSchema {
+  jobs: {
+    key: string
+    value: Job
   }
 }
 
@@ -388,6 +402,43 @@ function work(): Promise<IDBPDatabase<WorkDB>> {
   return workPromise
 }
 
+let jobsPromise: Promise<IDBPDatabase<JobsDB>> | null = null
+
+/** 案件。ここが開けなくても、台帳（タスク）と予定は読める。 */
+function jobs(): Promise<IDBPDatabase<JobsDB>> {
+  if (!jobsPromise) {
+    jobsPromise = openWithRetry<JobsDB>(
+      JOBS_DB,
+      1,
+      (d) => {
+        if (!d.objectStoreNames.contains('jobs')) {
+          d.createObjectStore('jobs', { keyPath: 'id' })
+        }
+      },
+      () => {
+        jobsPromise = null
+      },
+    ).catch((err) => {
+      jobsPromise = null
+      throw err
+    })
+  }
+  return jobsPromise
+}
+
+/** 案件。欠けている項目は既定で埋める（古い形でも読めるように） */
+function normalizeJob(raw: Job): Job {
+  return {
+    ...raw,
+    code: raw.code ?? '',
+    client: raw.client ?? '',
+    note: raw.note ?? '',
+    plannedMin: typeof raw.plannedMin === 'number' && raw.plannedMin > 0 ? Math.round(raw.plannedMin) : 0,
+    due: raw.due ?? null,
+    closed: raw.closed === true,
+  }
+}
+
 /** 区分。v1.10 以前の1つだけの形（category: string）も読めるようにする。 */
 function normalizeCategories(raw: Task & { category?: unknown }): string[] {
   if (Array.isArray(raw.categories)) {
@@ -603,6 +654,32 @@ export class LocalRepository implements Repository {
    */
   async removePlan(id: string): Promise<void> {
     await (await work()).delete('plans', id)
+  }
+
+  async listJobs(): Promise<Job[]> {
+    const all = await (await jobs()).getAll('jobs')
+    return all.map(normalizeJob)
+  }
+
+  async saveJob(job: Job): Promise<void> {
+    await (await jobs()).put('jobs', job)
+  }
+
+  /**
+   * 案件を消す。**タスクと予定の実績は消さない。**
+   * 案件を畳んでも、その時間に働いた事実は変わらない
+   * （指していたタスクは案件なしになる。呼び出し側で付け替える）。
+   */
+  async removeJob(id: string): Promise<void> {
+    await (await jobs()).delete('jobs', id)
+  }
+
+  async replaceAllJobs(list: Job[]): Promise<void> {
+    const d = await jobs()
+    const tx = d.transaction('jobs', 'readwrite')
+    await tx.store.clear()
+    for (const j of list) await tx.store.put(j)
+    await tx.done
   }
 
   async replaceAllPlans(plans: Plan[]): Promise<void> {
