@@ -233,11 +233,24 @@ export function WorkLogView({
                     {/* 出すのは経過時間だけ。始めた時刻や区分は下の記録で読める */}
                     <span className="tp-live-meta tp-mono">{clockLabel(runningSec(t, tick))}</span>
                   </button>
-                  <button type="button" className="tp-btn-ghost" onClick={() => onToggleRunning(t)}>
-                    止める
+                  {/* 記号だけにする（v1.18.1 と同じ扱い）。言葉は読み上げと長押しで出る */}
+                  <button
+                    type="button"
+                    className="tp-run-btn tp-run-pause"
+                    aria-label={`${t.title} の手を止める`}
+                    title="止める"
+                    onClick={() => onToggleRunning(t)}
+                  >
+                    <Icon name="pause" size={16} />
                   </button>
-                  <button type="button" className="tp-btn-primary" onClick={() => onToggle(t)}>
-                    完了
+                  <button
+                    type="button"
+                    className="tp-live-done"
+                    aria-label={`${t.title} を完了にする`}
+                    title="完了"
+                    onClick={() => onToggle(t)}
+                  >
+                    <Icon name="check" size={18} strokeWidth={2.6} />
                   </button>
                 </li>
               ))}
@@ -259,13 +272,21 @@ export function WorkLogView({
                   </span>
                   <button
                     type="button"
-                    className="tp-btn-ghost"
+                    className={`tp-run-btn ${r.state === 'running' ? 'tp-run-pause' : 'tp-run-start'}`}
+                    aria-label={`${r.title} を${r.state === 'running' ? '止める' : '再開する'}`}
+                    title={r.state === 'running' ? '止める' : '再開'}
                     onClick={() => (r.state === 'running' ? box.pause(r) : box.resume(r))}
                   >
-                    {r.state === 'running' ? '止める' : '再開'}
+                    <Icon name={r.state === 'running' ? 'pause' : 'play'} size={16} />
                   </button>
-                  <button type="button" className="tp-btn-primary" onClick={() => box.finish(r)}>
-                    終了
+                  <button
+                    type="button"
+                    className="tp-run-btn tp-run-stop"
+                    aria-label={`${r.title} を終了する`}
+                    title="終了"
+                    onClick={() => box.finish(r)}
+                  >
+                    <Icon name="stop" size={15} />
                   </button>
                 </li>
               ))}

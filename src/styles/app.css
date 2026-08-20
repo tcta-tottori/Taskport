@@ -2310,6 +2310,16 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   display: flex; flex-direction: column; gap: 2px; min-height: 44px; justify-content: center;
 }
 .tp-live-title { font-size: 14px; font-weight: 800; color: var(--ink); word-break: break-word; }
+/* 完了は実行中の行でいちばん強い操作なので、塗りの丸にする（ほかは輪郭だけ） */
+.tp-live-done {
+  flex: none; display: grid; place-items: center; width: 44px; height: 44px;
+  border-radius: 50%; background: var(--go); color: var(--on-brand);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--go) 32%, transparent);
+  transition: transform .12s ease, filter .16s;
+}
+.tp-live-done:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.tp-live-done:active { transform: scale(.95); }
+
 /* 出すのは経過時間だけ。1つしか無いぶん、離れていても読める大きさにする */
 .tp-live-meta { font-size: 15px; color: var(--rec); font-weight: 800; font-variant-numeric: tabular-nums; }
 .tp-live-plan .tp-live-meta { color: var(--brand1); }
