@@ -1409,7 +1409,7 @@ export default function App() {
             onNotify={notify}
           />
         ) : view === 'dashboard' ? (
-          <DashboardView tasks={tasks} today={today} settings={settings} />
+          <DashboardView tasks={tasks} plans={plans} today={today} settings={settings} />
         ) : view === 'recordings' ? (
           <RecordingsView
             onNotify={notify}

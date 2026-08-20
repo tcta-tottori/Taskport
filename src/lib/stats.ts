@@ -1,11 +1,15 @@
 import { addDaysKey, dayKey, dayOfIso, lastNDays } from './date'
 import { isWorkDay, taskMinutes, workMinutes } from './workday'
-import { loggedMinutes } from './worklog'
-import { groupOf, primaryCategory } from './workCategories'
+import { loggedMinutes, ofDay } from './worklog'
+import { planMinutes } from './plans'
+import { colorOfGroup, groupOf, primaryCategory } from './workCategories'
 import {
   PRIORITIES,
   UNCATEGORIZED,
+  UNGROUPED,
+  type CategoryColor,
   type CategoryGroup,
+  type PlanOccurrence,
   type Priority,
   type Settings,
   type Source,
@@ -267,4 +271,96 @@ export function categoryMinutes(
     .sort((a, b) => b.minutes - a.minutes)
 
   return { groups, total, actual }
+}
+
+/* ---------------------------------------------------------
+ * その日の区分の割合（円グラフ）
+ *
+ * 「その日、どの種類の仕事に何割を使ったか」だけを出す。
+ * 拾い方は日報と同じ（`worklog.ofDay`）で、実績が入っていればそれ、
+ * 無いものだけ見込みで埋める。**予定（打合せなど）の時間も足す**
+ * ——会議に出た時間が抜けると、その日の割合が実際と合わないため。
+ *
+ * 時間は主区分（先頭）にだけ積む。区分ごとに同じ時間を積むと
+ * 合計が実際の勤務時間を超える。
+ * ------------------------------------------------------- */
+
+/** 円グラフの1切れ */
+export interface DayShare {
+  /** グループ名（集計の単位） */
+  group: string
+  color: CategoryColor
+  minutes: number
+  /** 0〜1 */
+  share: number
+  /** うち予定（打合せなど）の分 */
+  planMinutes: number
+}
+
+/** 切れの数の上限。これを超えたぶんは「その他」へ畳む（色を作らない）。 */
+const SHARE_MAX = 8
+
+export function dayShares(
+  tasks: Task[],
+  plans: PlanOccurrence[],
+  day: string,
+  defaultEstimateMin: number,
+  master: CategoryGroup[],
+): { slices: DayShare[]; total: number; planMinutes: number; measured: number } {
+  const byGroup = new Map<string, { minutes: number; planMinutes: number }>()
+  let total = 0
+  let planTotal = 0
+  let measured = 0
+
+  const add = (group: string, minutes: number, fromPlan: boolean) => {
+    const cur = byGroup.get(group) ?? { minutes: 0, planMinutes: 0 }
+    cur.minutes += minutes
+    if (fromPlan) cur.planMinutes += minutes
+    byGroup.set(group, cur)
+    total += minutes
+    if (fromPlan) planTotal += minutes
+  }
+
+  for (const t of ofDay(tasks, day)) {
+    const min = loggedMinutes(t, defaultEstimateMin)
+    if (min <= 0) continue
+    if (typeof t.actualMin === 'number' && t.actualMin > 0) measured += t.actualMin
+    add(groupOf(master, primaryCategory(t.categories)), min, false)
+  }
+  for (const o of plans) {
+    if (o.day !== day) continue
+    const min = planMinutes(o.plan)
+    if (min <= 0) continue
+    add(groupOf(master, primaryCategory(o.plan.categories)), min, true)
+  }
+
+  const all = [...byGroup.entries()]
+    .map(([group, v]) => ({
+      group,
+      color: colorOfGroup(master, group),
+      minutes: v.minutes,
+      planMinutes: v.planMinutes,
+      share: total > 0 ? v.minutes / total : 0,
+    }))
+    .sort((a, b) => b.minutes - a.minutes)
+
+  // 多すぎるぶんは畳む。色を新しく作らない（design.md §10.1）
+  let slices = all
+  if (all.length > SHARE_MAX) {
+    const head = all.slice(0, SHARE_MAX - 1)
+    const rest = all.slice(SHARE_MAX - 1)
+    const minutes = rest.reduce((sum, r) => sum + r.minutes, 0)
+    slices = [
+      ...head,
+      {
+        group: UNGROUPED,
+        color: colorOfGroup(master, UNGROUPED),
+        minutes,
+        planMinutes: rest.reduce((sum, r) => sum + r.planMinutes, 0),
+        share: total > 0 ? minutes / total : 0,
+      },
+    ]
+  }
+
+  return { slices, total, planMinutes: planTotal, measured }
 }

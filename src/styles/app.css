@@ -924,6 +924,8 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   }
   .tp-reveal { opacity: 1; transform: none; }
   .tp-trend .tp-t-line-anim { stroke-dashoffset: 0; }
+  .tp-donut-seg { transition: none; }
+  .tp-reveal:not(.tp-reveal-in) .tp-donut-seg { stroke-dashoffset: 0 !important; }
   .tp-quick-btn { transition: none; }
   .tp-quick-add.is-on { transform: rotate(135deg); }
 }
@@ -2510,4 +2512,65 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   background: var(--surface); border: 1px solid var(--line-strong);
   box-shadow: var(--shadow-lg);
   font-size: 12.5px; font-weight: 700; color: var(--ink);
+}
+
+/* ---------- 円グラフ（その日の区分の割合） ----------
+   輪は上から時計回りに一周描く。切れは1つずつ「自分の開始位置から」伸び、
+   開始の遅い切れほど遅れて出るので、全体では 0 → 100% の一筆書きに見える。
+   動きは .tp-reveal の仕組みに乗せてある（画面に入った時に始まる）。 */
+.tp-donut {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center;
+  gap: clamp(12px, 3vw, 22px); position: relative;
+}
+.tp-donut-svg { width: clamp(148px, 42vw, 190px); height: auto; flex: none; overflow: visible; }
+.tp-donut-track { fill: none; stroke: var(--surface-3); }
+.tp-donut-seg {
+  fill: none;
+  stroke: var(--cat, var(--brand1));
+  stroke-linecap: butt;
+  /* 伸びる長さ・時間は切れごとに違うのでインラインで渡す。
+     薄くする動き（押して目立たせるとき）は待たせず、すぐ効かせる。 */
+  transition-property: stroke-dashoffset, opacity;
+  transition-duration: var(--dur, 400ms), 160ms;
+  transition-delay: var(--delay, 0ms), 0ms;
+  transition-timing-function: linear, ease;
+}
+.tp-donut-seg.is-dim { opacity: .25; }
+.tp-reveal:not(.tp-reveal-in) .tp-donut-seg { stroke-dashoffset: var(--len) !important; }
+
+/* 真ん中の合計。輪の中心に重ねる */
+.tp-donut-center {
+  position: absolute; left: clamp(74px, 21vw, 95px); top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; line-height: 1.15;
+  pointer-events: none; text-align: center;
+}
+.tp-donut-center b { font-size: clamp(15px, 4vw, 18px); font-weight: 800; color: var(--ink); }
+.tp-donut-center span { font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: .08em; }
+
+/* 名前と割合。色が見分けられなくても、ここを読めば分かる */
+.tp-donut-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tp-donut-row {
+  width: 100%; min-height: 34px; display: flex; align-items: center; gap: 7px;
+  padding: 4px 7px; border-radius: 8px; text-align: left; font-size: 12.5px;
+  border: 1px solid transparent; transition: background .14s, border-color .14s;
+}
+.tp-donut-row:hover { background: var(--surface-2); }
+.tp-donut-row.is-on {
+  background: color-mix(in srgb, var(--cat, var(--brand1)) 10%, transparent);
+  border-color: color-mix(in srgb, var(--cat, var(--brand1)) 34%, transparent);
+}
+.tp-donut-name {
+  flex: 1; min-width: 0; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tp-donut-pct { flex: none; font-size: 13px; font-weight: 800; color: var(--ink); }
+.tp-donut-min { flex: none; font-size: 11px; color: var(--muted); min-width: 56px; text-align: right; }
+.tp-share-day { font-size: 13px; font-weight: 800; }
+
+@media (max-width: 480px) {
+  /* 狭いときは輪を上、名前を下に積む（横に並べると名前が「…」になる） */
+  .tp-donut { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .tp-donut-center { left: 50%; top: clamp(74px, 21vw, 95px); }
+  .tp-donut-legend { width: 100%; }
 }

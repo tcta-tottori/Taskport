@@ -1,12 +1,13 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { Icon } from '../components/Icon'
 import { Reveal } from '../components/Reveal'
-import { durationLabel, formatMDShort } from '../lib/date'
+import { addDaysKey, diffDays, durationLabel, formatMD, formatMDShort } from '../lib/date'
 import {
   categoryMinutes,
   categoryStats,
   computeStreak,
   dailyPoints,
+  dayShares,
   overview,
   priorityDist,
   sourceStats,
@@ -15,9 +16,10 @@ import {
   type DayPoint,
 } from '../lib/stats'
 import { workHoursSummary } from '../lib/workday'
-import { addDaysKey } from '../lib/date'
+import { occurrencesOn } from '../lib/plans'
+import { DonutChart } from '../components/DonutChart'
 import { colorOf, colorOfGroup } from '../lib/workCategories'
-import { PRIORITIES, PRIORITY_LABEL, SOURCE_LABEL, type Settings, type Task } from '../types'
+import { PRIORITIES, PRIORITY_LABEL, SOURCE_LABEL, type Plan, type Settings, type Task } from '../types'
 
 /* =========================================================
  * 分析ビュー
@@ -31,13 +33,18 @@ import { PRIORITIES, PRIORITY_LABEL, SOURCE_LABEL, type Settings, type Task } fr
 
 export function DashboardView({
   tasks,
+  plans,
   today,
   settings,
 }: {
   tasks: Task[]
+  /** 予定。円グラフに会議などの時間も入れる（日報と同じ見方にする） */
+  plans: Plan[]
   today: string
   settings: Settings
 }) {
+  /** 円グラフに出す日。既定は今日。前後の日へ動かせる */
+  const [shareDay, setShareDay] = useState(today)
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
   const cats = useMemo(() => categoryStats(tasks), [tasks])
   const pri = useMemo(() => priorityDist(tasks), [tasks])
@@ -57,6 +64,21 @@ export function DashboardView({
       ),
     [tasks, today, settings.defaultEstimateMin, settings.categoryGroups],
   )
+  // その日の区分の割合（円グラフ）。予定の時間も足す
+  const dayPlans = useMemo(
+    () =>
+      occurrencesOn(plans, shareDay, {
+        workHours: settings.workHours,
+        workCalendar: settings.workCalendar,
+      }),
+    [plans, shareDay, settings.workHours, settings.workCalendar],
+  )
+  const share = useMemo(
+    () =>
+      dayShares(tasks, dayPlans, shareDay, settings.defaultEstimateMin, settings.categoryGroups),
+    [tasks, dayPlans, shareDay, settings.defaultEstimateMin, settings.categoryGroups],
+  )
+
   const wh = workHoursSummary(settings.workHours)
 
   const pct = Math.round(load.ratio * 100)
@@ -129,6 +151,58 @@ export function DashboardView({
               <h2 className="tp-panel-title">処理の推移</h2>
               <p className="tp-empty-body">
                 登録と完了を続けると、日ごとの件数と消化率の推移が出ます。
+              </p>
+            </>
+          )}
+        </section>
+      </Reveal>
+
+      {/* --- その日の区分の割合（円グラフ） ---
+          「今日は何にどれだけ使ったか」を一目で見るための面。
+          割合の数字を必ず添える（色だけで見分けさせない）。 */}
+      <Reveal>
+        <section className="tp-panel is-wide">
+          <div className="tp-panel-head">
+            <h2>その日の区分の割合</h2>
+            <div className="tp-head-acts">
+              <button
+                type="button"
+                className="tp-icon-btn"
+                aria-label="前の日"
+                onClick={() => setShareDay(addDaysKey(shareDay, -1))}
+              >
+                <Icon name="chevron" size={18} className="tp-flip" />
+              </button>
+              <b className="tp-mono tp-share-day">{formatMD(shareDay)}</b>
+              <button
+                type="button"
+                className="tp-icon-btn"
+                aria-label="次の日"
+                onClick={() => setShareDay(addDaysKey(shareDay, 1))}
+              >
+                <Icon name="chevron" size={18} />
+              </button>
+              {shareDay !== today && (
+                <button type="button" className="tp-btn-ghost tp-btn-sm" onClick={() => setShareDay(today)}>
+                  今日へ
+                </button>
+              )}
+            </div>
+          </div>
+
+          {share.total === 0 ? (
+            <p className="tp-empty-body">
+              {diffDays(shareDay, today) > 0
+                ? 'この日はまだ記録がありません。予定を入れておくと、その時間ぶんが先に出ます。'
+                : 'この日の記録がありません。実行の画面で始めるか、やったことを足すと、ここに割合が出ます。'}
+            </p>
+          ) : (
+            <>
+              <DonutChart slices={share.slices} total={share.total} />
+              <p className="tp-hint">
+                日報と同じ拾い方です（完了した日・手を付けた日・その日が期限のもの）。
+                実績が入っていない仕事は見込みの時間で数えます。
+                {share.planMinutes > 0 && ` 予定（打合せなど）の ${durationLabel(share.planMinutes)} を含みます。`}
               </p>
             </>
           )}
