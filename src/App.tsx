@@ -156,6 +156,9 @@ export default function App() {
     message: string
   }>({ state: 'off', at: null, message: '' })
   const [view, setView] = useState<ViewKey>('list')
+  /** いまの画面。コールバックの中から古い値を掴まないように控える */
+  const viewRef = useRef(view)
+  viewRef.current = view
   const [tab, setTab] = useState<ListTab>('today')
   const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER)
   const [drawer, setDrawer] = useState(false)
@@ -608,6 +611,22 @@ export default function App() {
    * いま手を付ける／手を止める。
    * 押した時刻を残すだけで、タイマーは持たない（画面を閉じても続く）。
    */
+  /**
+   * 実行の画面のいちばん上へ移す。
+   * 動かし始めたら、いちばん上の「いま動いているもの」がそのまま見えるようにする
+   * （一覧やカレンダーから始めると、押した直後にどこで数えているのか分からなかった）。
+   * 画面が変わるときは一気に、同じ画面にいるときは滑らせて上へ戻す。
+   */
+  const goRun = useCallback(() => {
+    const same = viewRef.current === 'worklog'
+    setDrawer(false)
+    setView('worklog')
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: same && !reduce ? 'smooth' : 'auto' })
+    })
+  }, [])
+
   const toggleRunning = useCallback(
     async (task: Task) => {
       if (isRunning(task)) {
@@ -621,10 +640,12 @@ export default function App() {
       } else {
         await repository.update(task.id, { startedAt: new Date().toISOString() })
         notify('始めました')
+        // 始めたときだけ移る（止めたときは、押した場所にとどまる）
+        goRun()
       }
       await reload()
     },
-    [reload, notify],
+    [reload, notify, goRun],
   )
 
   /** 実績を直す（かかった時間・開始時刻）。実績の画面からその場で使う。 */
@@ -755,8 +776,9 @@ export default function App() {
       await repository.saveRun(next)
       await reloadWork()
       notify(`「${occ.plan.title}」を始めました`)
+      goRun()
     },
-    [reloadWork, notify],
+    [reloadWork, notify, goRun],
   )
 
   const pauseRunning = useCallback(
@@ -773,8 +795,9 @@ export default function App() {
     async (run: PlanRun) => {
       await repository.saveRun(resumeRun(run))
       await reloadWork()
+      goRun()
     },
-    [reloadWork],
+    [reloadWork, goRun],
   )
 
   const finishRunning = useCallback(
@@ -805,8 +828,9 @@ export default function App() {
       await rememberAll([created])
       await reload()
       notify(start ? `「${category}」を立てて始めました` : `「${category}」を立てました`)
+      if (start) goRun()
     },
-    [today, reload, rememberAll, notify],
+    [today, reload, rememberAll, notify, goRun],
   )
 
   /** 実行の操作をまとめて画面へ渡す。画面ごとに名前が変わらないようにする。 */
