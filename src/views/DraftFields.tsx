@@ -238,7 +238,7 @@ export function DraftFields({
           ))}
         </div>
         <p className="tp-hint">
-          「何時ちょうど」ではなく「どの帯でやるか」を決めます。枠ごとの残り時間は一覧に出ます。
+          「何時ちょうど」ではなく「どの帯でやるか」を決めます。時刻を入れると、スケジュールの軸に並びます。
           {draft.dueTime && !draft.timebox && ' 時刻を入れてあるので、その時刻の枠として数えます。'}
         </p>
       </div>

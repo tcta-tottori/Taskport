@@ -3,9 +3,7 @@ import { Icon, type IconName } from './components/Icon'
 import { QuickBar, type SheetMode } from './components/QuickBar'
 import { Toast, type ToastMessage } from './components/Toast'
 import { TapWave } from './components/TapWave'
-import { ListView } from './views/ListView'
 import { ScheduleView } from './views/ScheduleView'
-import { CalendarView } from './views/CalendarView'
 import { PlanSheet } from './views/PlanSheet'
 import { StartSheet, type StartMode } from './views/StartSheet'
 import { DashboardView } from './views/DashboardView'
@@ -95,17 +93,20 @@ import {
  * 自然文はどの入口から来ても parseToTasks を通り、必ず確認画面に出る。
  * =======================================================*/
 
-type ViewKey = 'list' | 'worklog' | 'calendar' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
+type ViewKey = 'worklog' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
 
+/**
+ * 画面の並び。見出しは英語で置く（v1.24.0。利用者の指示）。
+ * v1.24.0 で一覧とカレンダーの画面をやめ、
+ * 一覧は Run（実行）へ、カレンダーは Schedule の最後の面へ集約した。
+ */
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
-  // 「実行」＝いま動かす面と、その日の記録。1日のうちいちばん開くので最上段に置く
-  { key: 'worklog', label: '実行', icon: 'play' },
-  { key: 'list', label: '一覧', icon: 'list' },
-  { key: 'calendar', label: 'カレンダー', icon: 'grid' },
-  { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
-  { key: 'dashboard', label: '分析', icon: 'chart' },
-  { key: 'recordings', label: '録音', icon: 'mic' },
-  { key: 'settings', label: '設定', icon: 'gear' },
+  // Run ＝いま動かす面と、その日の記録、台帳。1日のうちいちばん開くので最上段に置く
+  { key: 'worklog', label: 'RUN', icon: 'play' },
+  { key: 'schedule', label: 'SCHEDULE', icon: 'calendar' },
+  { key: 'dashboard', label: 'ANALYSIS', icon: 'chart' },
+  { key: 'recordings', label: 'RECORDINGS', icon: 'mic' },
+  { key: 'settings', label: 'SETTINGS', icon: 'gear' },
 ]
 
 /** 録音を取り直すときの相手。端末内で聞き直すか、Gemini へ送るか。 */
@@ -159,7 +160,7 @@ export default function App() {
     at: string | null
     message: string
   }>({ state: 'off', at: null, message: '' })
-  const [view, setView] = useState<ViewKey>('list')
+  const [view, setView] = useState<ViewKey>('worklog')
   /** いまの画面。コールバックの中から古い値を掴まないように控える */
   const viewRef = useRef(view)
   viewRef.current = view
@@ -337,7 +338,7 @@ export default function App() {
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === '/') {
         e.preventDefault()
-        setView('list')
+        setView('worklog')
         document.querySelector<HTMLInputElement>('.tp-search-input')?.focus()
       } else if (e.key === 'n') {
         e.preventDefault()
@@ -347,7 +348,7 @@ export default function App() {
         setExporting(true)
       } else if (e.key >= '1' && e.key <= '4') {
         e.preventDefault()
-        setView('list')
+        setView('worklog')
         setTab(LIST_TABS[Number(e.key) - 1].key)
       }
     }
@@ -584,7 +585,7 @@ export default function App() {
       await reload()
       setPending(null)
       notify(`${newTasks.length}件を登録しました`)
-      setView('list')
+      setView('worklog')
     },
     [reload, notify, pending, rememberAll],
   )
@@ -789,17 +790,6 @@ export default function App() {
       await reloadWork()
       setPlanEditing(null)
       notify('予定を消しました')
-    },
-    [reloadWork, notify],
-  )
-
-  /** 自動で計上するかを切り替える。実行の画面からその場で押せる。 */
-  const togglePlanAuto = useCallback(
-    async (plan: Plan) => {
-      const next: Plan = { ...plan, autoTrack: !plan.autoTrack, updatedAt: new Date().toISOString() }
-      await repository.savePlan(next)
-      await reloadWork()
-      notify(next.autoTrack ? '時間を自動で計上します' : '開始と終了を手で押します')
     },
     [reloadWork, notify],
   )
@@ -1220,11 +1210,12 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const v = params.get('view')
-    // 「実行」は ?view=run でも開ける（v1.14 のショートカットを残してある）
-    if (v === 'run') setView('worklog')
+    // 「実行」は ?view=run でも開ける（v1.14 のショートカットを残してある）。
+    // 無くなった画面（一覧・カレンダー）の URL は、集約した先へ送る（v1.24.0）
+    if (v === 'run' || v === 'list') setView('worklog')
+    else if (v === 'calendar') setView('schedule')
     else if (
       v === 'worklog' ||
-      v === 'calendar' ||
       v === 'schedule' ||
       v === 'dashboard' ||
       v === 'recordings' ||
@@ -1319,7 +1310,7 @@ export default function App() {
           >
             <Icon name={n.icon} size={19} />
             <span>{n.label}</span>
-            {n.key === 'list' && ov.overdue > 0 && <b className="tp-drawer-n">{ov.overdue}</b>}
+            {n.key === 'worklog' && ov.overdue > 0 && <b className="tp-drawer-n">{ov.overdue}</b>}
             {/* 動かしたまま忘れないよう、実行中の本数は引き出しにも出す */}
             {n.key === 'worklog' && runningCount > 0 && (
               <b className="tp-drawer-n is-running">{runningCount}</b>
@@ -1328,7 +1319,7 @@ export default function App() {
         ))}
         <button type="button" className="tp-drawer-item" onClick={() => { setExporting(true); setDrawer(false) }}>
           <Icon name="export" size={19} />
-          <span>書き出し</span>
+          <span>EXPORT</span>
         </button>
         <div className="tp-drawer-foot">
           {/* 同期の様子。動いているのか失敗しているのかを、押さずに分かるようにする */}
@@ -1438,42 +1429,6 @@ export default function App() {
 
         {loading && dbStatus !== 'slow' && dbStatus !== 'blocked' ? (
           <p className="tp-loading">読み込んでいます…</p>
-        ) : view === 'list' ? (
-          <ListView
-            tasks={tasks}
-            today={today}
-            settings={settings}
-            tab={tab}
-            onTabChange={setTab}
-            onToggle={(t) => void guard(() => toggleDone(t))}
-            onEdit={setEditing}
-            onToggleSubtask={(t, id) => void guard(() => toggleSubtask(t, id))}
-            onToggleRunning={(t) => void guard(() => toggleRunning(t))}
-            filter={filter}
-            onFilterChange={setFilter}
-            saved={settings.savedFilters}
-            onSaveFilter={saveFilter}
-            onRemoveSavedFilter={removeSavedFilter}
-            nowMin={nowMin}
-            onTriage={() => setTriaging(true)}
-            onWrapUp={() => setWrappingUp(true)}
-          />
-        ) : view === 'calendar' ? (
-          <CalendarView
-            tasks={tasks}
-            plans={plans}
-            today={today}
-            settings={settings}
-            runBox={runBox}
-            onEditTask={setEditing}
-            onToggleTask={(t) => void guard(() => toggleDone(t))}
-            onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
-            onAddPlan={openNewPlan}
-            onAddTask={(day) => {
-              setSeed({ ...emptyDraft('form'), due: day })
-              setCreating('form')
-            }}
-          />
         ) : view === 'schedule' ? (
           <ScheduleView
             tasks={tasks}
@@ -1485,27 +1440,37 @@ export default function App() {
             onEdit={setEditing}
             onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
             onAddPlan={openNewPlan}
+            onAddTask={(day) => {
+              setSeed({ ...emptyDraft('form'), due: day })
+              setCreating('form')
+            }}
             onImportEvent={importEvent}
             onNotify={notify}
           />
         ) : view === 'worklog' ? (
           <WorkLogView
             tasks={tasks}
-            plans={plans}
             today={today}
             settings={settings}
             templates={templates}
-            nowMin={nowMin}
             runBox={runBox}
             onEdit={setEditing}
             onToggle={(t) => void guard(() => toggleDone(t))}
             onToggleRunning={(t) => void guard(() => toggleRunning(t))}
             onPatch={(t, p) => void guard(() => patchTask(t, p))}
             onAddLog={(e) => void guard(() => addLog(e))}
-            onEditPlan={(p) => setPlanEditing({ plan: p, existing: true })}
-            onTogglePlanAuto={(p) => void guard(() => togglePlanAuto(p))}
             onQuickTask={(c, start) => void guard(() => quickTask(c, start))}
             onChangeCategoryGroups={saveCategoryGroups}
+            onToggleSubtask={(t, id) => void guard(() => toggleSubtask(t, id))}
+            tab={tab}
+            onTabChange={setTab}
+            filter={filter}
+            onFilterChange={setFilter}
+            saved={settings.savedFilters}
+            onSaveFilter={saveFilter}
+            onRemoveSavedFilter={removeSavedFilter}
+            onTriage={() => setTriaging(true)}
+            onWrapUp={() => setWrappingUp(true)}
             onNotify={notify}
           />
         ) : view === 'dashboard' ? (

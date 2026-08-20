@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { CategoryChip, catStyle } from '../components/CategoryChip'
 import { CategorySheet } from './CategorySheet'
-import { PlanRow } from './CalendarView'
+import { FilterBar } from '../components/FilterBar'
+import { Segmented } from '../components/Segmented'
+import { TaskCard } from '../components/TaskCard'
 import {
   addDaysKey,
   clockLabel,
@@ -14,10 +16,11 @@ import {
   isoAt,
   toMinutes,
 } from '../lib/date'
-import { emptyDraft, sortTasks } from '../lib/tasks'
+import { emptyDraft, filterByTab, LIST_TABS, sortTasks, type ListTab } from '../lib/tasks'
+import { applyFilter, isFilterActive } from '../lib/taskFilter'
 import { applyTemplate, rank } from '../lib/templates'
 import { colorOf, detectCategories } from '../lib/workCategories'
-import { isWorkDay, taskMinutes, workMinutes } from '../lib/workday'
+import { taskMinutes } from '../lib/workday'
 import {
   daySpent,
   isRunning,
@@ -28,14 +31,16 @@ import {
   runningMin,
   runningSec,
 } from '../lib/worklog'
-import {
-  currentOccurrence,
-  nextOccurrenceOf,
-  occurrencesOn,
-  planSpan,
-} from '../lib/plans'
-import { activeRuns, dayMinutes, runSeconds, type RunBox } from '../lib/runs'
-import type { CategoryGroup, Draft, Plan, Settings, Task, TaskTemplate } from '../types'
+import { activeRuns, runSeconds, type RunBox } from '../lib/runs'
+import type {
+  CategoryGroup,
+  Draft,
+  SavedFilter,
+  Settings,
+  Task,
+  TaskFilter,
+  TaskTemplate,
+} from '../types'
 
 /* =========================================================
  * 実行（いま動かす・その日の記録）
@@ -75,31 +80,33 @@ const QUICK_MIN = [15, 30, 45, 60, 90, 120]
 
 export function WorkLogView({
   tasks,
-  plans,
   today,
   settings,
   templates,
-  nowMin,
   runBox,
   onEdit,
   onToggle,
   onToggleRunning,
   onPatch,
   onAddLog,
-  onEditPlan,
-  onTogglePlanAuto,
   onQuickTask,
   onChangeCategoryGroups,
+  onToggleSubtask,
+  tab,
+  onTabChange,
+  filter,
+  onFilterChange,
+  saved,
+  onSaveFilter,
+  onRemoveSavedFilter,
+  onTriage,
+  onWrapUp,
   onNotify,
 }: {
   tasks: Task[]
-  /** 予定。繰り返しは画面に出すときに展開する（作り置きしない） */
-  plans: Plan[]
   today: string
   settings: Settings
   templates: TaskTemplate[]
-  /** いまの時刻（0時からの分） */
-  nowMin: number
   /** 予定の実行の操作。タスクのほうは onToggleRunning */
   runBox: RunBox
   onEdit: (task: Task) => void
@@ -109,12 +116,21 @@ export function WorkLogView({
   /** 実績（開始時刻・かかった時間）を直す */
   onPatch: (task: Task, patch: Partial<Task>) => void
   onAddLog: (entry: LogEntry) => void
-  onEditPlan: (plan: Plan) => void
-  /** 予定の自動計上を切り替える */
-  onTogglePlanAuto: (plan: Plan) => void
   /** 区分から1件立てる。start が true ならそのまま始める */
   onQuickTask: (category: string, start: boolean) => void
   onChangeCategoryGroups: (next: CategoryGroup[]) => void
+  /** 台帳（TASKS）の操作。一覧の画面をここへ集約した（v1.24.0） */
+  onToggleSubtask: (task: Task, subtaskId: string) => void
+  tab: ListTab
+  onTabChange: (tab: ListTab) => void
+  filter: TaskFilter
+  onFilterChange: (next: TaskFilter) => void
+  saved: SavedFilter[]
+  onSaveFilter: (name: string) => void
+  onRemoveSavedFilter: (id: string) => void
+  /** 朝の仕分け・明日の準備 */
+  onTriage: () => void
+  onWrapUp: () => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [day, setDay] = useState(today)
@@ -144,17 +160,7 @@ export function WorkLogView({
   }, [anyRunning])
   const box: RunBox = { ...runBox, nowMs: anyRunning ? tick : runBox.nowMs }
 
-  const occurrences = useMemo(
-    () =>
-      occurrencesOn(plans, day, {
-        workHours: settings.workHours,
-        workCalendar: settings.workCalendar,
-      }),
-    [plans, day, settings.workHours, settings.workCalendar],
-  )
   const isToday = day === today
-  const nowPlan = isToday ? currentOccurrence(occurrences, nowMin) : null
-  const nextPlan = isToday ? nextOccurrenceOf(occurrences, nowMin) : null
 
   const open = useMemo(() => tasks.filter((t) => t.status === 'open'), [tasks])
   /** 今日締め（超過ぶんを含む）。動かしている最中のものは外す（同じ物が2か所に出ると迷う） */
@@ -183,11 +189,6 @@ export function WorkLogView({
       ),
     [open, today],
   )
-  /** 予定ぶんの実働。台帳の実績とは別に数え、画面でも分けて書く */
-  const planWorked = useMemo(
-    () => dayMinutes(box.runs.filter((r) => r.kind === 'plan'), day, box.nowMs),
-    [box.runs, day, box.nowMs],
-  )
   const spent = useMemo(
     () => daySpent(tasks, day, settings.defaultEstimateMin, box.runs),
     [tasks, day, settings.defaultEstimateMin, box.runs],
@@ -211,11 +212,32 @@ export function WorkLogView({
   /** 済ませたもの。件数だけ出し、押したときに開く */
   const doneRecords = useMemo(() => spent.tasks.filter((t) => t.status === 'done'), [spent.tasks])
 
-  const capacity = isWorkDay(day, settings.workHours, settings.workCalendar)
-    ? workMinutes(settings.workHours)
-    : 0
-  const pct = capacity > 0 ? Math.round((spent.total / capacity) * 100) : 0
   const ahead = diffDays(day, today) > 0
+  /** 期限を過ぎた未完了の件数（朝の仕分けに出す） */
+  const overdueCount = useMemo(
+    () => open.filter((t) => !!t.due && diffDays(t.due, today) < 0).length,
+    [open, today],
+  )
+
+  /* --- 台帳（TASKS）。一覧の画面をここへ集約した --- */
+  const counts = useMemo(
+    () =>
+      LIST_TABS.reduce<Record<string, number>>((acc, t) => {
+        acc[t.key] = filterByTab(tasks, t.key, today).length
+        return acc
+      }, {}),
+    [tasks, today],
+  )
+  const searching = isFilterActive(filter)
+  // 絞り込み中はタブを離れ、台帳の全件から探す
+  const found = useMemo(
+    () => (searching ? applyFilter(tasks, filter, today, settings.categoryGroups) : []),
+    [tasks, filter, today, searching, settings.categoryGroups],
+  )
+  const shown = useMemo(
+    () => (searching ? found : filterByTab(tasks, tab, today)),
+    [searching, found, tasks, tab, today],
+  )
 
   return (
     <div className="tp-view tp-cols">
@@ -257,15 +279,28 @@ export function WorkLogView({
           )}
         </section>
 
-        {/* --- いま動いているもの --- */}
+        {/* 朝の仕分け・明日の準備。一覧の画面から移した（v1.24.0） */}
+        {isToday && (
+          <div className="tp-flow-acts tp-log-acts">
+            <button type="button" className="tp-btn-ghost" onClick={onTriage} disabled={overdueCount === 0}>
+              <Icon name="alert" size={15} />
+              朝の仕分け
+              {overdueCount > 0 && <span className="tp-flow-n tp-mono">{overdueCount}</span>}
+            </button>
+            <button type="button" className="tp-btn-ghost" onClick={onWrapUp}>
+              <Icon name="sun" size={15} />
+              明日の準備
+            </button>
+          </div>
+        )}
+
+        {/* --- RUNNING（いま動いているもの）---
+            **1件も動いていないときは面ごと出さない**（v1.24.0。利用者の指示）。
+            空の枠が常に居座ると、次に見る「UP NEXT」が下がるだけになる。 */}
+        {(live.length > 0 || livePlans.length > 0) && (
         <section className="tp-live">
-          <p className="tp-label">いま動いているもの</p>
-          {live.length === 0 ? (
-            <p className="tp-live-empty">
-              手を付けているものはありません。一覧のカードか下の記録から「始める」を押すと、
-              押した時刻から数えます。
-            </p>
-          ) : (
+          <p className="tp-label">RUNNING</p>
+          {live.length === 0 ? null : (
             <ul className="tp-live-list">
               {live.map((t) => (
                 <li key={t.id} className="tp-live-row">
@@ -336,11 +371,12 @@ export function WorkLogView({
           )}
 
         </section>
+        )}
 
-        {/* --- 止めてあるもの。押せばその場から続きを数える --- */}
+        {/* --- PAUSED（止めてあるもの）。押せばその場から続きを数える --- */}
         {(pausedTasks.length > 0 || pausedPlans.length > 0) && (
           <section className="tp-live tp-paused">
-            <p className="tp-label">止めてあるもの</p>
+            <p className="tp-label">PAUSED</p>
             <ul className="tp-live-list">
               {pausedTasks.map((t) => (
                 <li key={t.id} className="tp-live-row is-paused">
@@ -412,7 +448,7 @@ export function WorkLogView({
         {isToday && (
           <section className="tp-panel">
             <div className="tp-panel-head">
-              <h2>次にやる</h2>
+              <h2>UP NEXT</h2>
               <span className="tp-badge tp-mono">{upNext.length}</span>
             </div>
             {upNext.length === 0 ? (
@@ -461,67 +497,16 @@ export function WorkLogView({
               </ul>
             )}
             {upNext.length > 8 && (
-              <p className="tp-hint">ほか {upNext.length - 8} 件は一覧の「今日」で見られます。</p>
+              <p className="tp-hint">ほか {upNext.length - 8} 件は下の TASKS で見られます。</p>
             )}
           </section>
         )}
-
-        {/* --- その日の予定 --- */}
-        <section className="tp-panel">
-          <div className="tp-panel-head">
-            <h2>{isToday ? '今日の予定' : `${formatMDShort(day)}の予定`}</h2>
-            <span className="tp-badge tp-mono">{occurrences.length}</span>
-          </div>
-          {occurrences.length === 0 ? (
-            <p className="tp-empty-body">
-              この日の予定はありません。打合せや来客はカレンダーの「予定を入れる」から足せます。
-            </p>
-          ) : (
-            <>
-              {nextPlan && (
-                <p className="tp-run-next-plan tp-mono">
-                  <Icon name="clock" size={13} />
-                  次の予定 {planSpan(nextPlan.plan)}「{nextPlan.plan.title}」
-                  {(() => {
-                    const from = nextPlan.plan.startTime ? toMinutes(nextPlan.plan.startTime) : null
-                    return from !== null ? `（あと${durationLabel(from - nowMin)}）` : ''
-                  })()}
-                </p>
-              )}
-              <ul className="tp-daylist">
-                {occurrences.map((o) => (
-                  <PlanRow
-                    key={o.key}
-                    occ={o}
-                    settings={settings}
-                    runBox={box}
-                    now={o.key === nowPlan?.key}
-                    onEdit={() => onEditPlan(o.plan)}
-                    extra={
-                      o.plan.allDay ? undefined : (
-                        <button
-                          type="button"
-                          className={`tp-auto-toggle${o.plan.autoTrack ? ' is-on' : ''}`}
-                          aria-pressed={o.plan.autoTrack}
-                          onClick={() => onTogglePlanAuto(o.plan)}
-                        >
-                          <Icon name={o.plan.autoTrack ? 'repeat' : 'clock'} size={12} />
-                          {o.plan.autoTrack ? '自動で計上（押すと手動に）' : '手で開始・終了（押すと自動に）'}
-                        </button>
-                      )
-                    }
-                  />
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
 
         {/* --- 近日の締め --- */}
         {isToday && soon.length > 0 && (
           <section className="tp-panel">
             <div className="tp-panel-head">
-              <h2>近日の締め</h2>
+              <h2>DUE SOON</h2>
               <span className="tp-badge tp-mono">{soon.length}</span>
             </div>
             <ul className="tp-daylist">
@@ -550,36 +535,10 @@ export function WorkLogView({
               ))}
             </ul>
             {soon.length > 6 && (
-              <p className="tp-hint">ほか {soon.length - 6} 件は一覧の「今週」で見られます。</p>
+              <p className="tp-hint">ほか {soon.length - 6} 件は下の TASKS の「今週」で見られます。</p>
             )}
           </section>
         )}
-
-        {/* --- その日の積み上がり --- */}
-        <section className="tp-today-card">
-          <div className="tp-today-row">
-            <p className="tp-label tp-today-label">SPENT</p>
-            <p className="tp-today-num">
-              <b>{durationLabel(spent.total)}</b>
-              <span>/ {capacity > 0 ? durationLabel(capacity) : '休み'}</span>
-            </p>
-          </div>
-          <div className="tp-progress">
-            <span
-              className={pct > 100 ? 'is-over' : pct > 80 ? 'is-tight' : ''}
-              style={{ width: `${Math.min(100, pct)}%` }}
-            />
-          </div>
-          <p className="tp-today-note">
-            {spent.tasks.length === 0
-              ? 'この日の記録はまだありません。'
-              : spent.measured === spent.tasks.length
-                ? `${spent.tasks.length}件すべてに実績が入っています。`
-                : `${spent.tasks.length}件のうち${spent.measured}件が実績。残りは見込みで埋めた数字です。`}
-            {/* 予定ぶんは台帳に入らないので、上の数字とは別に出す（黙って混ぜない） */}
-            {planWorked > 0 && ` ほかに予定で ${durationLabel(planWorked)}。`}
-          </p>
-        </section>
       </div>
 
       <div className="tp-col">
@@ -604,17 +563,18 @@ export function WorkLogView({
           </button>
         )}
 
-        {/* --- その日の記録 ---
+        {/* --- TODAY'S LOG（その日の記録）---
             完了したものは出さない（実行の面に済んだ仕事が積み上がると、
             いま手を動かすものが埋もれる）。実績を直したいときのために、
             件数だけは残して押すと開けるようにしてある。 */}
+        <p className="tp-label tp-log-head">{isToday ? "TODAY'S LOG" : 'LOG'}</p>
         {spent.tasks.length === 0 ? (
           <div className="tp-empty">
             <Icon name="clock" size={26} />
             <p className="tp-empty-head">{formatMD(day)}の記録はありません</p>
             <p className="tp-empty-body">
               上の「やったことを足す」で、終わった仕事を後から入れられます。
-              一覧のカードから「始める」を押した仕事も、ここに出ます。
+              下の TASKS から「始める」を押した仕事も、ここに出ます。
             </p>
           </div>
         ) : (
@@ -681,7 +641,7 @@ export function WorkLogView({
         {isToday && (
           <section className="tp-panel tp-launch-panel">
             <div className="tp-panel-head">
-              <h2>区分から始める</h2>
+              <h2>START BY CATEGORY</h2>
               <Icon name="grid" size={16} />
             </div>
             <p className="tp-note">
@@ -691,6 +651,60 @@ export function WorkLogView({
             <CategoryLauncher groups={settings.categoryGroups} onPick={onQuickTask} />
           </section>
         )}
+
+        {/* --- TASKS（台帳）---
+            v1.24.0 で一覧の画面をやめ、ここへ集約した（利用者の指示）。
+            「いま動かす」と「台帳から探す」を行き来するのに画面を変えなくて済む。 */}
+        <section className="tp-panel tp-tasks-panel">
+          <div className="tp-panel-head">
+            <h2>TASKS</h2>
+            <span className="tp-badge tp-mono">{shown.length}</span>
+          </div>
+
+          <div className="tp-sticky">
+            <FilterBar
+              filter={filter}
+              categoryGroups={settings.categoryGroups}
+              onChange={onFilterChange}
+              saved={saved}
+              onSave={onSaveFilter}
+              onRemoveSaved={onRemoveSavedFilter}
+              hits={found.length}
+            />
+            {!searching && (
+              <Segmented
+                items={LIST_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))}
+                value={tab}
+                onChange={onTabChange}
+                ariaLabel="表示するタスクの範囲"
+              />
+            )}
+          </div>
+
+          {shown.length === 0 ? (
+            <p className="tp-empty-body">
+              {searching
+                ? '当てはまるタスクはありません。語を短くするか、区分・優先度・期限の条件を外してみてください。'
+                : '出すものがありません。右下の ＋ から、歩きながらならマイク、机の前なら手描き。'}
+            </p>
+          ) : (
+            <ul className="tp-list">
+              {shown.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  today={today}
+                  onToggle={onToggle}
+                  onEdit={onEdit}
+                  onToggleSubtask={onToggleSubtask}
+                  onToggleRunning={onToggleRunning}
+                  workHours={settings.workHours}
+                  categoryGroups={settings.categoryGroups}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
 
         <p className="tp-list-foot">
           日報の書き出しはこの記録から作ります。実績が入っていない仕事は見込みの時間で並びます。
@@ -852,7 +866,7 @@ function AddLogForm({
   return (
     <section className="tp-log-form">
       <header className="tp-log-form-head">
-        <h2>やったことを足す</h2>
+        <h2>ADD LOG</h2>
         <span className="tp-mono">{formatMD(day)}</span>
       </header>
 

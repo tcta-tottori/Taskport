@@ -2789,3 +2789,100 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-span-body .tp-actual-row { border: none; padding: 0; background: none; }
 /* 件名は上の行に出ているので、開いた中では繰り返さない */
 .tp-span-body .tp-actual-title { display: none; }
+
+
+/* =========================================================
+ * スケジュール: その日の縦軸（v1.24.0）
+ *
+ * 2時間の枠に畳む形をやめ、始業から終業までを1本の軸にした。
+ * 重なった時間は横に分ける（時間帯の帯と同じ考え）。
+ * =======================================================*/
+.tp-tline {
+  position: relative; margin: 10px 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+/* 勤務している時間の地。休憩はここが抜けて見える */
+.tp-tline-work { position: absolute; left: var(--gutter); right: 0; background: var(--surface-2); }
+/* 左の時刻の帯。ここは仕事の地を敷かず、数字だけを置く */
+.tp-tline-gutter {
+  position: absolute; left: 0; top: 0; bottom: 0; width: var(--gutter);
+  background: var(--surface-3); border-right: 1px solid var(--line);
+}
+.tp-tline-hour {
+  position: absolute; left: var(--gutter); right: 0; height: 0;
+  border-top: 1px solid var(--line);
+}
+.tp-tline-hour > span {
+  position: absolute; left: calc(var(--gutter) * -1 + 5px); top: -6px;
+  font-size: 10px; font-weight: 700; color: var(--faint);
+}
+.tp-tline-break {
+  position: absolute; left: var(--gutter); right: 0;
+  display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 6px;
+  background: repeating-linear-gradient(135deg, var(--surface-3) 0 6px, var(--surface-2) 6px 12px);
+}
+.tp-tline-break > span { font-size: 10px; font-weight: 700; color: var(--faint); }
+.tp-tline-now {
+  position: absolute; left: var(--gutter); right: 0; height: 0; z-index: 3;
+  border-top: 2px solid var(--rec);
+}
+.tp-tline-now > b {
+  position: absolute; left: calc(var(--gutter) * -1 + 2px); top: -8px;
+  font-size: 9.5px; font-weight: 800; color: var(--on-brand);
+  background: var(--rec); border-radius: 999px; padding: 1px 5px;
+}
+.tp-tline-item {
+  position: absolute; z-index: 2;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 4px 6px; text-align: left; overflow: hidden;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cat, var(--brand1)) 16%, var(--surface));
+  border-left: 3px solid var(--cat, var(--brand1));
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+}
+.tp-tline-item:hover { filter: brightness(.98); }
+.tp-tline-item.is-event {
+  background: repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--brand2) 10%, var(--surface)) 0 5px,
+    var(--surface) 5px 10px);
+  border-left-color: var(--brand2);
+}
+/* いま動かしているタスクは枠を光らせる（実行の画面と同じ扱い） */
+.tp-tline-item.is-running { box-shadow: 0 0 0 2px var(--rec); }
+.tp-tline-time { font-size: 9.5px; font-weight: 700; color: var(--muted); }
+.tp-tline-title {
+  font-size: 12px; font-weight: 700; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.tp-tline-sub { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.tp-tline-ico { position: absolute; right: 4px; top: 4px; color: var(--brand2); }
+
+/* 1週間（予定のある日だけ） */
+.tp-week { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.tp-week-row {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.tp-week-row.is-today { border-color: color-mix(in srgb, var(--brand1) 45%, transparent); background: var(--surface); }
+.tp-week-row.is-off { opacity: .72; }
+.tp-week-date {
+  display: flex; align-items: baseline; gap: 8px; min-height: 32px;
+  font-size: 13px; font-weight: 800; color: var(--ink);
+}
+.tp-week-wd { font-size: 11px; color: var(--muted); }
+.tp-week-date > b { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+/* 実行の画面: 朝の仕分け・明日の準備 */
+.tp-log-acts { margin-top: 2px; }
+.tp-log-head { margin: 14px 0 2px; }
+.tp-tasks-panel .tp-sticky { margin-bottom: 8px; }
+
+@media (min-width: 1024px) {
+  /* 台帳は幅が要る（カードが2行に折れる） */
+  .tp-tasks-panel { grid-column: 1 / -1; }
+}
