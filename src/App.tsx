@@ -8,7 +8,6 @@ import { PlanSheet } from './views/PlanSheet'
 import { StartSheet, type StartMode } from './views/StartSheet'
 import { DashboardView } from './views/DashboardView'
 import { emptyJob } from './lib/jobs'
-import { JobsView } from './views/JobsView'
 import { JobSheet } from './views/JobSheet'
 import { SettingsView } from './views/SettingsView'
 import { ExportSheet } from './views/ExportSheet'
@@ -45,11 +44,12 @@ import {
   runOf,
   runSeconds,
   runsOf,
+  staleRuns,
   type RunBox,
 } from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
 import { overview } from './lib/stats'
-import { isRunning, logToTask, running, runningMin, runningSec } from './lib/worklog'
+import { isRunning, logToTask, running, runningSec } from './lib/worklog'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
 import { clearRemote, syncOnce } from './lib/driveSync'
 import { isConnected } from './lib/googleAuth'
@@ -99,19 +99,19 @@ import {
  * 自然文はどの入口から来ても parseToTasks を通り、必ず確認画面に出る。
  * =======================================================*/
 
-type ViewKey = 'worklog' | 'schedule' | 'jobs' | 'dashboard' | 'recordings' | 'settings'
+type ViewKey = 'worklog' | 'schedule' | 'dashboard' | 'recordings' | 'settings'
 
 /**
  * 画面の並び。見出しはカタカナ、無ければ漢字（v1.26.0。利用者の指示）。
  * v1.24.0 で一覧とカレンダーの画面をやめ、
  * 一覧は Run（実行）へ、カレンダーは Schedule の最後の面へ集約した。
+ * v1.30.0 で工数の画面もやめ、案件ごとの時間は分析の面に入れた（利用者の指示）。
  */
 const NAV: { key: ViewKey; label: string; icon: IconName }[] = [
   // Run ＝いま動かす面と、その日の記録、台帳。1日のうちいちばん開くので最上段に置く
   { key: 'worklog', label: '実行', icon: 'play' },
   { key: 'schedule', label: 'スケジュール', icon: 'calendar' },
-  // 工数＝案件ごとの時間。日で見る ANALYSIS に対して、こちらは案件で見る
-  { key: 'jobs', label: '工数', icon: 'checklist' },
+  // 分析＝期間（日・週・月・全体）で見る面。案件ごとの工数もここに入っている
   { key: 'dashboard', label: '分析', icon: 'chart' },
   { key: 'recordings', label: '録音', icon: 'mic' },
   { key: 'settings', label: '設定', icon: 'gear' },
@@ -242,6 +242,7 @@ export default function App() {
     ])
     setPlans(p)
     setRuns(r)
+    return r
   }, [])
 
   /** 案件を読み直す。ここが開けなくても、タスクと予定は使える */
@@ -269,7 +270,16 @@ export default function App() {
       templatesRef.current = tpl
       // 予定と実行ログは別のDB。読めなくても台帳は使えるので、ここで握って知らせる。
       try {
-        await reloadWork()
+        const loadedRuns = await reloadWork()
+        // 止め忘れ（過ぎた日に開いたままの区間）を、その日の終業で閉じる（v1.30.0）。
+        // 開いたままだと「いまも動いている」ものとして数えるので、
+        // 分析の稼働と時間帯が深夜まで伸びる（利用者の指摘）。
+        const stale = staleRuns(loadedRuns, dayKey(), s.workHours)
+        if (stale.length > 0) {
+          await repository.saveRuns(stale)
+          await reloadWork()
+          notify(`止め忘れの記録 ${stale.length}件を、その日の終業（${s.workHours.end}）で閉じました`)
+        }
         await reloadJobs().catch(() => setJobs([]))
         void repository.pruneRuns(addDaysKey(dayKey(), -RUN_KEEP_DAYS)).catch(() => {
           /* 古い記録が残るだけ。画面は止めない */
@@ -619,14 +629,42 @@ export default function App() {
   const toggleDone = useCallback(
     async (task: Task) => {
       const done = task.status === 'done'
-      // 実行中のまま完了にしたら、着手からの経過を実績として残す。
-      // すでに実績が入っているときは触らない（人が入れた値を上書きしない）。
-      const measured =
-        !done && isRunning(task) && task.actualMin === null ? runningMin(task) : null
+      const at = new Date().toISOString()
+
+      // 動かしたまま完了にしたら、**実行の記録も同じ時刻で閉じる**（v1.30.0）。
+      // 閉じないと「まだ動いている区間」として残り、分析の時間帯と稼働が
+      // その日の終わりまで伸びた形になる（利用者の指摘。合計が24時間を超える）。
+      let measured: number | null = null
+      if (!done) {
+        const openRun = runOf(liveRef.current.runs, task.id)
+        let closed: WorkRun | null = null
+        if (openRun && openRun.state !== 'done') {
+          // 前の日に押したままなら、その日の終業で閉じる（日をまたいだ区間を作らない）
+          closed =
+            openRun.day < today
+              ? (staleRuns([openRun], today, settings.workHours)[0] ?? finishRun(openRun, at))
+              : finishRun(openRun, at)
+          await repository.saveRun(closed)
+        }
+        const runDay = closed?.day ?? today
+        const mine = runsOf(liveRef.current.runs, task.id, runDay)
+        const sec =
+          mine.length > 0
+            ? mine.reduce((sum, r) => sum + runSeconds(r.id === closed?.id ? closed : r), 0)
+            : isRunning(task) && runDay === today
+              ? runningSec(task)
+              : 0
+        // すでに実績が入っているときは触らない（人が入れた値を上書きしない）
+        if (task.actualMin === null && sec >= 20) measured = Math.max(1, Math.floor(sec / 60))
+      }
+
       await repository.update(task.id, {
         status: done ? 'open' : 'done',
-        doneAt: done ? null : new Date().toISOString(),
+        doneAt: done ? null : at,
         ...(measured !== null && measured > 0 ? { actualMin: measured } : {}),
+        // 完了を取り消すときは着手の印を落とす。残すと「いま動いている」ことになり、
+        // 押していない時間まで稼働に積み上がる（実績 actualMin はそのまま残る）
+        ...(done ? { startedAt: null } : {}),
       })
       // 繰り返しのタスクを完了にしたら、次の1件だけをここで作る。
       // 完了したほうは履歴として残し、触らない。
@@ -636,9 +674,10 @@ export default function App() {
         if (next) await repository.add([next])
       }
       await reload()
+      await reloadWork()
       if (next) notify(`完了。次は ${formatMD(next.due ?? '')}（${repeatLabel(task.repeat)}）`)
     },
-    [reload, today, settings.workHours, settings.workCalendar, notify],
+    [reload, reloadWork, today, settings.workHours, settings.workCalendar, notify],
   )
 
   /**
@@ -1306,10 +1345,11 @@ export default function App() {
     // 無くなった画面（一覧・カレンダー）の URL は、集約した先へ送る（v1.24.0）
     if (v === 'run' || v === 'list') setView('worklog')
     else if (v === 'calendar') setView('schedule')
+    // 無くなった工数の画面は分析へ送る（案件ごとの時間はそこに入っている。v1.30.0）
+    else if (v === 'jobs') setView('dashboard')
     else if (
       v === 'worklog' ||
       v === 'schedule' ||
-      v === 'jobs' ||
       v === 'dashboard' ||
       v === 'recordings' ||
       v === 'settings'
@@ -1526,6 +1566,7 @@ export default function App() {
           <ScheduleView
             tasks={tasks}
             plans={plans}
+            runs={runs}
             today={today}
             settings={settings}
             nowMin={nowMin}
@@ -1535,6 +1576,7 @@ export default function App() {
             onImportEvent={importEvent}
             onAddLog={setLogging}
             onPlace={(t, time) => void guard(() => placeTask(t, time))}
+            onPatch={(t, p) => void guard(() => patchTask(t, p))}
             onNotify={notify}
           />
         ) : view === 'worklog' ? (
@@ -1558,29 +1600,20 @@ export default function App() {
             onWrapUp={() => setWrappingUp(true)}
             jobs={jobs}
           />
-        ) : view === 'jobs' ? (
-          <JobsView
-            jobs={jobs}
-            tasks={tasks}
-            plans={plans}
-            runs={runs}
-            today={today}
-            settings={settings}
-            onNewJob={() => setJobEditing({ job: emptyJob(), existing: false })}
-            onEditJob={(job) => setJobEditing({ job, existing: true })}
-            onEditTask={setEditing}
-            onAssign={(t, id) => void guard(() => assignJob(t, id))}
-          />
         ) : view === 'dashboard' ? (
           <DashboardView
             tasks={tasks}
             plans={plans}
             runs={runs}
+            jobs={jobs}
             today={today}
+            nowMin={nowMin}
             settings={settings}
             onPatch={(t, p) => void guard(() => patchTask(t, p))}
-            onAddLog={setLogging}
             onSaveOrder={(dashOrder) => void guard(() => saveSettings({ ...settings, dashOrder }))}
+            onNewJob={() => setJobEditing({ job: emptyJob(), existing: false })}
+            onEditJob={(job) => setJobEditing({ job, existing: true })}
+            onAssignJob={(t, id) => void guard(() => assignJob(t, id))}
           />
         ) : view === 'recordings' ? (
           <RecordingsView

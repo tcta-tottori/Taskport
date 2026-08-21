@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { Icon } from '../components/Icon'
 import { CategoryChip } from '../components/CategoryChip'
 import { TimeField } from '../components/TimeField'
-import { durationLabel, formatMD, isoAt } from '../lib/date'
-import { logStartTime, loggedMinutes } from '../lib/worklog'
+import { durationLabel, formatMD, formatMDShort, isoAt } from '../lib/date'
+import { logDay, logStartTime, loggedMinutes } from '../lib/worklog'
 import { colorOf } from '../lib/workCategories'
 import type { CategoryGroup, Task } from '../types'
 
@@ -29,6 +29,7 @@ const QUICK = [15, 30, 45, 60, 90, 120]
 export function ActualSheet({
   tasks,
   day,
+  label,
   title,
   categoryGroups,
   defaultEstimateMin,
@@ -37,7 +38,10 @@ export function ActualSheet({
 }: {
   /** 直せる仕事（その日の記録から絞ったもの） */
   tasks: Task[]
+  /** 日が分からない記録の受け皿（週・月で開いたときは期間の始まり） */
   day: string
+  /** 見出しに出す期間の名前。無ければ day を出す */
+  label?: string
   /** 見出しの補足（区分の名前など） */
   title?: string
   categoryGroups: CategoryGroup[]
@@ -57,7 +61,7 @@ export function ActualSheet({
 
         <div className="tp-sheet-body">
           <p className="tp-note">
-            {formatMD(day)}
+            {label ?? formatMD(day)}
             {title ? ` ／ ${title}` : ''} の記録です。
             <b>かかった時間</b>と<b>開始時刻</b>を直せます。件名や期限はカードから。
           </p>
@@ -102,11 +106,15 @@ export function ActualRow({
   onPatch,
 }: {
   task: Task
+  /** 日が分からないときの受け皿。記録そのものが日を持っていればそちらを使う */
   day: string
   categoryGroups: CategoryGroup[]
   defaultEstimateMin: number
   onPatch: (task: Task, patch: Partial<Task>) => void
 }) {
+  // 期間（週・月）で開いたときは、行ごとに日が違う。
+  // 開始時刻を直すときは**その記録の日**で組み立てる（違う日に飛ばさない）。
+  const rowDay = logDay(task) ?? day
   const [min, setMin] = useState<string>(
     typeof task.actualMin === 'number' && task.actualMin > 0 ? String(task.actualMin) : '',
   )
@@ -121,7 +129,10 @@ export function ActualRow({
 
   return (
     <li className={`tp-actual-row tp-pri-${task.priority}`}>
-      <p className="tp-actual-title">{task.title}</p>
+      <p className="tp-actual-title">
+        {rowDay !== day && <span className="tp-mono tp-actual-day">{formatMDShort(rowDay)}</span>}
+        {task.title}
+      </p>
       <p className="tp-actual-cats">
         {task.categories.map((c) => (
           <CategoryChip key={c} label={c} color={colorOf(categoryGroups, c)} />
@@ -135,7 +146,7 @@ export function ActualRow({
           <TimeField
             value={start}
             ariaLabel={`${task.title} の開始時刻`}
-            onChange={(v) => onPatch(task, { startedAt: v ? isoAt(day, v) : null })}
+            onChange={(v) => onPatch(task, { startedAt: v ? isoAt(rowDay, v) : null })}
           />
         </label>
         <label className="tp-field">

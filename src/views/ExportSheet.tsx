@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
-import { dayKey, formatMDShort } from '../lib/date'
+import { dayKey, durationLabel, formatMDShort } from '../lib/date'
 import { sortTasks } from '../lib/tasks'
 import { toCsv } from '../ports/out/toCsv'
 import { toBulletList, toDailyReport, toStandupText, toWorkLogTsv } from '../ports/out/toPlainText'
-import { toJobCsv } from '../ports/out/toCsv'
+import { toEffortCsv, toJobCsv } from '../ports/out/toCsv'
+import { analyzeRange, periodOf, SPANS, type Span } from '../lib/analysis'
 import { toGoogleCalendarUrl, toIcs, workHoursIcs } from '../ports/out/toCalendar'
 import { pushTasks } from '../ports/out/toGoogleCalendar'
 import { copyText, downloadText } from '../ports/out/download'
 import { workHoursSummary } from '../lib/workday'
+import { logDay } from '../lib/worklog'
 import { occurrencesOn } from '../lib/plans'
 import type { Job, Plan, Settings, Task, WorkRun } from '../types'
 
@@ -54,6 +56,8 @@ export function ExportSheet({
 }) {
   const [kind, setKind] = useState<Kind>('text')
   const [form, setForm] = useState<TextForm>('worklog')
+  /** 工数を数える期間。既定は今日（日報と同じ単位） */
+  const [span, setSpan] = useState<Span>('day')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [pushing, setPushing] = useState(false)
 
@@ -69,6 +73,23 @@ export function ExportSheet({
         workCalendar: settings.workCalendar,
       }),
     [plans, today, settings.workHours, settings.workCalendar],
+  )
+
+  /* 作業ごとの工数（v1.30.0。利用者の指示）。
+     数え方は分析の画面とまったく同じにする（画面と書き出しで数字が違うと突き合わせができない）。 */
+  const firstDay = useMemo(() => {
+    let first = today
+    for (const t of tasks) {
+      const d = logDay(t)
+      if (d && d < first) first = d
+    }
+    for (const r of runs) if (r.day < first) first = r.day
+    return first
+  }, [tasks, runs, today])
+  const period = useMemo(() => periodOf(span, today, today, firstDay), [span, today, firstDay])
+  const effort = useMemo(
+    () => analyzeRange({ tasks, plans, runs, period, settings }),
+    [tasks, plans, runs, period, settings],
   )
 
   const preview =
@@ -263,6 +284,39 @@ export function ExportSheet({
                 全項目を CSV で出します。Excel での集計や、上長への共有に使ってください。
               </p>
 
+              {/* 作業ごとの工数（v1.30.0）。実績＝押して測った時間だけで数える */}
+              <p className="tp-label">工数を数える期間</p>
+              <Segmented
+                items={SPANS}
+                value={span}
+                onChange={(v) => setSpan(v as Span)}
+                ariaLabel="工数を数える期間"
+              />
+              <div className="tp-row-end">
+                <button
+                  type="button"
+                  className="tp-btn-ghost"
+                  disabled={effort.effort.length === 0}
+                  onClick={() => {
+                    downloadText(
+                      `taskport-effort-${period.from}_${period.to}.csv`,
+                      toEffortCsv(effort.effort, jobs, period.label),
+                      'text/csv',
+                    )
+                    onNotify(`作業 ${effort.effort.length}件の工数を書き出しました`)
+                  }}
+                >
+                  <Icon name="download" size={16} />
+                  工数（作業ごと）
+                </button>
+              </div>
+              <p className="tp-hint">
+                {period.label}に<b>実際に測った時間</b>は {durationLabel(effort.total)}（作業{' '}
+                {effort.effort.length}件）。件名と区分ごとに、かかった時間・回数・日数を出します。
+                {effort.unmeasured > 0 &&
+                  ` 時間を数えていない仕事が ${effort.unmeasured}件あります（入っていません）。`}
+              </p>
+
               {/* 工数（案件ごと）。見積と実績は別の列に出す */}
               <div className="tp-row-end">
                 <button
@@ -283,8 +337,8 @@ export function ExportSheet({
                 </button>
               </div>
               <p className="tp-hint">
-                工数は<b>押して測った時間</b>だけを実績として出します（見積は別の列）。
-                {jobs.length === 0 && ' 案件がまだありません（JOBS の画面で作れます）。'}
+                案件ごとの工数も<b>押して測った時間</b>だけを実績として出します（見積は別の列）。
+                {jobs.length === 0 && ' 案件がまだありません（分析の「案件ごとの工数」で作れます）。'}
               </p>
               <div className="tp-row-end">
                 <button

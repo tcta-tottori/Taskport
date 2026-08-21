@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { catStyle } from './CategoryChip'
 import { durationLabel } from '../lib/date'
-import type { DayShare } from '../lib/stats'
+import type { CategoryColor } from '../types'
 
 /* =========================================================
  * 円グラフ（その日の区分の割合）
@@ -22,6 +22,16 @@ import type { DayShare } from '../lib/stats'
  * `prefers-reduced-motion` では動かさず、最初から全部出す。
  * =======================================================*/
 
+/** 1切れ。集計側（`lib/analysis.ts`）の形をそのまま受け取れるようにしてある */
+export interface DonutSlice {
+  /** 集計の単位（グループ名） */
+  group: string
+  color: CategoryColor
+  minutes: number
+  /** 0〜1 */
+  share: number
+}
+
 /** 円の半径（viewBox 座標）。太さと合わせてドーナツの見え方を決める */
 const R = 44
 const STROKE = 18
@@ -38,7 +48,7 @@ export function DonutChart({
   centerLabel = '実働',
   onPick,
 }: {
-  slices: DayShare[]
+  slices: DonutSlice[]
   /** 合計（分）。真ん中に出す */
   total: number
   centerLabel?: string

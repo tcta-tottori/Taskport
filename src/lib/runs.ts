@@ -1,7 +1,7 @@
-import { dayKey, isoAt, toMinutes } from './date'
+import { dayKey, fromMinutes, isoAt, timeOfIso, toMinutes } from './date'
 import { occurrenceKey, planEnd } from './plans'
 import { ulid } from './ulid'
-import type { PlanOccurrence, RunKind, Task, WorkRun } from '../types'
+import type { PlanOccurrence, RunKind, Task, WorkHours, WorkRun } from '../types'
 
 /* =========================================================
  * 実行（開始・一時停止・終了）
@@ -143,6 +143,42 @@ export function pauseRun(run: WorkRun, at: string = new Date().toISOString()): W
 export function resumeRun(run: WorkRun, at: string = new Date().toISOString()): WorkRun {
   if (run.state === 'running') return run
   return { ...run, segments: [...run.segments, { start: at, end: null }], state: 'running', updatedAt: at }
+}
+
+/**
+ * 止め忘れた記録（過ぎた日に開いたままの区間）を、その日の**終業**で閉じる。
+ *
+ * 開いたままの区間は「いまも動いている」ものとして数えるので、
+ * 昨日の押しっぱなしが1件あるだけで、その日の稼働も時間帯も
+ * 深夜まで伸びた形になる（合計が24時間を超える）。
+ * いつ止めたかは分からないので、**終業で切ったことが分かる形**にして残す
+ * （直したいときは実績の欄から入れ直す）。
+ *
+ * 触るのは過ぎた日のものだけ。今日の記録は動いていて当然なので触らない。
+ * 返すのは閉じ直した記録だけ（保存する側がそのまま渡せる形）。
+ */
+export function staleRuns(runs: WorkRun[], today: string, wh: WorkHours): WorkRun[] {
+  const endMin = toMinutes(wh.end)
+  const out: WorkRun[] = []
+  for (const run of runs) {
+    if (run.day >= today) continue
+    if (!run.segments.some((s) => s.end === null)) continue
+    const segments = run.segments.map((s) => {
+      if (s.end !== null) return s
+      const startHm = timeOfIso(s.start)
+      const start = startHm ? toMinutes(startHm) : null
+      // 終業より後に始めていたときは、1分だけ数えて閉じる（0分だと記録ごと消える）
+      const stop =
+        start === null || endMin === null || endMin <= start
+          ? start === null
+            ? null
+            : Math.min(24 * 60 - 1, start + 1)
+          : endMin
+      return { ...s, end: stop === null ? s.start : isoAt(run.day, fromMinutes(stop)) }
+    })
+    out.push({ ...run, segments, state: 'done', updatedAt: new Date().toISOString() })
+  }
+  return out
 }
 
 /** 終える。動いている区間があれば閉じる。 */

@@ -11,50 +11,70 @@ import type { DaySegment } from './worklog'
  * =======================================================*/
 
 export type DashCard =
-  | 'hero'
-  | 'band'
   | 'share'
+  | 'band'
   | 'catTime'
-  | 'progress'
   | 'trend'
+  | 'hero'
+  | 'effort'
+  | 'jobs'
+  | 'estimate'
+  | 'weekday'
+  | 'progress'
   | 'priority'
   | 'source'
 
 /** 面の見出し。カタカナ、無ければ漢字（v1.26.0。利用者の指示） */
 export const DASH_LABEL: Record<DashCard, string> = {
-  hero: '本日の稼働',
-  band: '時間帯',
   share: '区分の割合',
+  band: '時間帯',
   catTime: '区分ごとの時間',
-  progress: '区分別の進捗',
   trend: '推移',
+  hero: '稼働',
+  effort: '作業ごとの工数',
+  jobs: '案件ごとの工数',
+  estimate: '見込みと実績',
+  weekday: '曜日ごと',
+  progress: '区分別の進捗',
   priority: '優先度',
   source: '入口別',
 }
 
 /**
  * 既定の並び。
- * 上から「今日どうだったか」→「その日の中身」→「積み重ね」の順。
+ * 上の4つ（区分の割合・時間帯・区分ごとの時間・推移）は利用者の指示（v1.30.0）。
+ * そのあとに「どれだけ働いたか」→「何にかかったか」→「台帳の偏り」を置く。
  */
 export const DEFAULT_DASH_ORDER: DashCard[] = [
-  'hero',
-  'band',
   'share',
+  'band',
   'catTime',
-  'progress',
   'trend',
+  'hero',
+  'effort',
+  'jobs',
+  'estimate',
+  'weekday',
+  'progress',
   'priority',
   'source',
 ]
 
-/** 保存された並びを、いまあるカードに合わせて整える（欠けは既定の位置に足す） */
+/**
+ * 保存された並びを、いまあるカードに合わせて整える。
+ *
+ * 面が増えたときは**既定の並びに戻す**（v1.30.0）。
+ * 欠けたぶんを後ろへ足すだけだと、増えた面がいつも最後に付き、
+ * 並びを決め直した意味が消える（利用者が並べ替え直すまで古い並びのまま）。
+ * 並べ替えは画面からいつでもやり直せる。
+ */
 export function normalizeDashOrder(saved: readonly string[] | undefined): DashCard[] {
   const known = new Set<string>(DEFAULT_DASH_ORDER)
   const out: DashCard[] = []
   for (const key of saved ?? []) {
     if (known.has(key) && !out.includes(key as DashCard)) out.push(key as DashCard)
   }
-  for (const key of DEFAULT_DASH_ORDER) if (!out.includes(key)) out.push(key)
+  if (out.length < DEFAULT_DASH_ORDER.length) return DEFAULT_DASH_ORDER
   return out
 }
 

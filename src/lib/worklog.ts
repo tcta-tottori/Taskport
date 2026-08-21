@@ -50,6 +50,14 @@ export function logStartTime(task: Task): string | null {
 }
 
 /**
+ * その記録がどの日のものか。完了した日 → 手を付けた日 → 期限 の順に見る。
+ * 実績を直すとき（開始時刻）にも、この日を使って組み立てる。
+ */
+export function logDay(task: Task): string | null {
+  return dayOfIso(task.doneAt) ?? dayOfIso(task.startedAt) ?? task.due
+}
+
+/**
  * その日の記録（やったこと・やっていること）に出すか。
  *
  *   - 完了したもの … **完了した日**で見る（期限がいつだったかは関係ない）
@@ -209,27 +217,205 @@ export function measuredOfDay(
   }
 }
 
+
 /* ---------------------------------------------------------
- * その日の時間帯（何時に何をしていたか）
+ * 実績の1件（時間帯・集計の共通の素）
  *
- * 分析の帯に出す。拾うのは**実際に測れたものだけ**。
- *   予定・タスクの実行 … 実行ログの区間（開始と終了の時刻がそのまま入っている）
- *   あとから足した記録 … 開始時刻＋かかった時間（`やったことを足す`）
+ * 分析はどれも「いつ・何を・どれだけ」を数えるだけなので、
+ * 拾い方をここに1つだけ持ち、円グラフ・時間帯・区分ごとの時間・工数は
+ * すべて**同じ配列**から出す（画面ごとに数え方が変わると数字が食い違う）。
+ *
+ * 拾うのは**実際に測れたものだけ**。
+ *   実行の記録（`runs`） … 押した時刻から止めた時刻までの区間
+ *   あとから足した記録   … 開始時刻＋かかった時間（`やったことを足す`）
  * 見込みしか無い仕事は置かない（何時にやったか分からないため）。
+ *
+ * 時刻の分からない実績（開始時刻を消して時間だけ入れたもの）は
+ * `from` を null にして残す。**時間の合計には入るが、帯には置かない**
+ * （置き場が無いものを 0:00 に置くと、朝いちばんに働いたことになる）。
  * ------------------------------------------------------- */
 
-export interface DaySegment {
-  /** 0時からの分 */
-  from: number
-  to: number
+export interface WorkEntry {
+  /** "YYYY-MM-DD" */
+  day: string
+  /** 0時からの分。時刻が分からない実績は null */
+  from: number | null
+  /** 終わり（0時からの分）。from が null なら null */
+  to: number | null
+  /** 数えた分。帯の長さ（to-from）とは別に持つ（秒で足してから丸めるため） */
+  minutes: number
   title: string
+  /** 主区分（先頭） */
+  category: string
   /** 集計の単位（グループ名） */
   group: string
   kind: 'task' | 'plan'
   /** 実績を直すときの相手。予定は直せないので null */
   taskId: string | null
+  /** 予定のID（工数の集計に使う）。タスクは null */
+  planId: string | null
+  /** まだ動いている区間か */
+  live: boolean
 }
 
+/** 帯に置ける1件（時刻が分かっているもの） */
+export interface DaySegment extends WorkEntry {
+  from: number
+  to: number
+}
+
+/** 秒 → 分。20秒以上は1分として数える（台帳の数え方に合わせる） */
+function minutesOfSec(sec: number): number {
+  return sec >= 20 ? Math.max(1, Math.round(sec / 60)) : 0
+}
+
+/** 区間1つの秒数。閉じていない区間は now まで */
+function segmentSec(start: string, end: string | null, now: number): number {
+  const from = new Date(start).getTime()
+  if (Number.isNaN(from)) return 0
+  const to = end ? new Date(end).getTime() : now
+  if (Number.isNaN(to) || to <= from) return 0
+  return Math.floor((to - from) / 1000)
+}
+
+/**
+ * 期間（from〜to、両端を含む）の実績を1件ずつ並べる。
+ * 並びは日→開始時刻の順。時刻の分からないものは、その日の最後に置く。
+ */
+export function entriesInRange(
+  tasks: Task[],
+  runs: WorkRun[],
+  from: string,
+  to: string,
+  groupOfCategory: (category: string) => string,
+  now = Date.now(),
+): WorkEntry[] {
+  const out: WorkEntry[] = []
+  /** 実行の記録がある仕事。台帳の実績と二重に数えないための控え */
+  const logged = new Set<string>()
+
+  for (const r of runs) {
+    if (r.day < from || r.day > to) continue
+    if (r.kind === 'task') logged.add(r.targetId)
+    const category = primaryCategory(r.categories)
+    const group = groupOfCategory(category)
+    for (const seg of r.segments) {
+      const startHm = timeOfIso(seg.start)
+      const start = startHm ? toMinutes(startHm) : null
+      if (start === null) continue
+      const sec = segmentSec(seg.start, seg.end, now)
+      const minutes = minutesOfSec(sec)
+      // 押し間違い（20秒未満）は置かない。合計にも入っていない
+      if (minutes <= 0) continue
+      const endHm = seg.end ? timeOfIso(seg.end) : timeOfIso(new Date(now).toISOString())
+      const end = endHm ? toMinutes(endHm) : null
+      // 日をまたいだ区間は、その日の終わりまでで切る
+      const stop = end === null || end < start ? 24 * 60 - 1 : Math.max(end, start + 1)
+      out.push({
+        day: r.day,
+        from: start,
+        to: stop,
+        minutes,
+        title: r.title,
+        category,
+        group,
+        kind: r.kind,
+        taskId: r.kind === 'task' ? r.targetId : null,
+        planId: r.kind === 'plan' ? r.targetId.split(':')[0] : null,
+        live: seg.end === null,
+      })
+    }
+  }
+
+  // あとから足した記録（実行の記録を持たないもの）。開始時刻＋かかった時間で置く
+  for (const t of tasks) {
+    if (logged.has(t.id)) continue
+    const minutes = measuredMin(t, now)
+    if (minutes <= 0) continue
+    const day = logDay(t)
+    if (!day || day < from || day > to) continue
+    const hm = logStartTime(t)
+    const start = hm ? toMinutes(hm) : null
+    const category = primaryCategory(t.categories)
+    out.push({
+      day,
+      from: start,
+      to: start === null ? null : Math.min(24 * 60 - 1, start + minutes),
+      minutes,
+      title: t.title,
+      category,
+      group: groupOfCategory(category),
+      kind: 'task',
+      taskId: t.id,
+      planId: null,
+      live: isRunning(t),
+    })
+  }
+
+  applyFixedTotals(out, tasks, runs)
+
+  return out.sort(
+    (a, b) =>
+      (a.day < b.day ? -1 : a.day > b.day ? 1 : 0) ||
+      (a.from ?? 9999) - (b.from ?? 9999) ||
+      (a.to ?? 9999) - (b.to ?? 9999),
+  )
+}
+
+/**
+ * 人が直した実績（台帳の `actualMin`）があれば、**そちらを正**として合計を合わせる。
+ *
+ * 実行の記録（区間）は「実際に押した時刻」なので書き換えない（CLAUDE.md §9）。
+ * 直せるのは台帳の合計だけなので、区間の位置はそのままに、
+ * 数える分だけを比で寄せる（帯は動かず、時間の合計だけが直した値になる）。
+ *
+ * 直すのは**その日の記録がここに全部そろっているとき**だけ。
+ * `actualMin` はその日の合計なので、別の日の記録も持つ仕事に当てると比が狂う。
+ * 動いている最中のもの（まだ伸びる）にも当てない。
+ */
+function applyFixedTotals(entries: WorkEntry[], tasks: Task[], runs: WorkRun[]): void {
+  const mine = new Map<string, WorkEntry[]>()
+  for (const e of entries) {
+    if (e.kind !== 'task' || !e.taskId) continue
+    if (e.live) {
+      mine.delete(e.taskId)
+      continue
+    }
+    const list = mine.get(e.taskId)
+    if (list) list.push(e)
+    else mine.set(e.taskId, [e])
+  }
+  if (mine.size === 0) return
+
+  const taskById = new Map(tasks.map((t) => [t.id, t]))
+  for (const [id, list] of mine) {
+    const task = taskById.get(id)
+    if (!task) continue
+    const fixed = typeof task.actualMin === 'number' ? task.actualMin : 0
+    if (fixed <= 0) continue
+    const days = new Set(list.map((e) => e.day))
+    if (days.size !== 1) continue
+    const day = [...days][0]
+    // 別の日にも記録がある仕事は触らない（actualMin がどの日のぶんか決められない）
+    if (runs.some((r) => r.kind === 'task' && r.targetId === id && r.day !== day)) continue
+    const sum = list.reduce((s, e) => s + e.minutes, 0)
+    if (sum <= 0 || sum === fixed) continue
+    // 端数は最後の1件へ寄せて、合計が直した値とぴったり合うようにする
+    let left = fixed
+    list.forEach((e, i) => {
+      const share = i === list.length - 1 ? left : Math.max(1, Math.round((e.minutes / sum) * fixed))
+      e.minutes = Math.max(0, i === list.length - 1 ? left : Math.min(share, left))
+      left -= e.minutes
+    })
+  }
+}
+
+/** 帯に置けるものだけ（時刻の分かっているもの） */
+export function timed(entries: WorkEntry[]): DaySegment[] {
+  return entries.filter((e): e is DaySegment => e.from !== null && e.to !== null)
+}
+
+/** その日の時間帯。帯に置ける形で返す */
 export function dayBand(
   tasks: Task[],
   runs: WorkRun[],
@@ -237,51 +423,5 @@ export function dayBand(
   groupOfCategory: (category: string) => string,
   now = Date.now(),
 ): DaySegment[] {
-  const out: DaySegment[] = []
-
-  // 1. 実行ログの区間。タスクも予定も同じ形で入っている
-  for (const r of runs) {
-    if (r.day !== day) continue
-    for (const seg of r.segments) {
-      const from = timeOfIso(seg.start)
-      if (!from) continue
-      const start = toMinutes(from)
-      if (start === null) continue
-      const endIso = seg.end ?? new Date(now).toISOString()
-      const endHm = timeOfIso(endIso)
-      const end = endHm ? toMinutes(endHm) : null
-      // 日をまたいだ区間は、その日の終わりまでで切る。
-      // 1分に満たない区間も 1分ぶんの幅で置く（合計には入っているので、帯から消すと食い違う）
-      const to = end === null || end < start ? 24 * 60 : Math.max(end, start + 1)
-      out.push({
-        from: start,
-        to,
-        title: r.title,
-        group: groupOfCategory(primaryCategory(r.categories)),
-        kind: r.kind,
-        taskId: r.kind === 'task' ? r.targetId : null,
-      })
-    }
-  }
-
-  // 2. あとから足した記録（実行ログを持たないもの）。開始時刻＋かかった時間で置く
-  const logged = new Set(runs.filter((r) => r.day === day).map((r) => r.targetId))
-  for (const t of ofDay(tasks, day, runs)) {
-    if (logged.has(t.id)) continue
-    const min = typeof t.actualMin === 'number' && t.actualMin > 0 ? t.actualMin : 0
-    if (min <= 0) continue
-    const hm = logStartTime(t)
-    const start = hm ? toMinutes(hm) : null
-    if (start === null) continue
-    out.push({
-      from: start,
-      to: Math.min(24 * 60, start + min),
-      title: t.title,
-      group: groupOfCategory(primaryCategory(t.categories)),
-      kind: 'task',
-      taskId: t.id,
-    })
-  }
-
-  return out.sort((a, b) => a.from - b.from || a.to - b.to)
+  return timed(entriesInRange(tasks, runs, day, day, groupOfCategory, now))
 }

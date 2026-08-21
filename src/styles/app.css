@@ -2716,7 +2716,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 }
 .tp-donut-pct { flex: none; font-size: 13px; font-weight: 800; color: var(--ink); }
 .tp-donut-min { flex: none; font-size: 11px; color: var(--muted); min-width: 56px; text-align: right; }
-.tp-share-day { font-size: 13px; font-weight: 800; }
+.tp-actual-day { margin-right: 6px; font-size: 11px; font-weight: 700; color: var(--faint); }
 
 @media (max-width: 480px) {
   /* 狭いときは輪を上、名前を下に積む（横に並べると名前が「…」になる） */
@@ -2725,34 +2725,27 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   .tp-donut-legend { width: 100%; }
 }
 
-/* ---------- 時間帯の帯（分析） ---------- */
-.tp-band-block { margin-top: 18px; }
-.tp-band-wrap { position: relative; margin-top: 6px; }
-.tp-band-rail {
-  position: relative; width: 100%;
-  background: var(--surface-3); border-radius: 6px; overflow: hidden;
+/* ---------- 時刻ごとの合計（週・月・全体の時間帯）----------
+   1日ぶんなら実物の縦軸（`TimelineAxis`）を出せるが、日をまたぐと帯にならない。
+   **縦軸はそのまま時刻**にして、横に伸びる棒で合計を出す（v1.30.0）。 */
+.tp-hourbars { list-style: none; margin: 8px 0 0; padding: 0; }
+.tp-hourbars > li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 0;
 }
-.tp-band-work { position: absolute; top: 0; bottom: 0; background: var(--surface-2); }
-/* 重なった区間は行を分けて置く（top / height は React 側で行ごとに入れる） */
-.tp-band-seg {
-  position: absolute;
-  display: flex; align-items: center; padding: 0 5px;
-  background: var(--cat, var(--brand1));
-  border-radius: 4px; box-shadow: 0 0 0 1.5px var(--surface);
-  color: var(--on-brand); font-size: 10.5px; font-weight: 700;
-  overflow: hidden; white-space: nowrap;
+/* 勤務時間の外は沈める（残っている仕事が目に入るように、消しはしない） */
+.tp-hourbars > li.is-off { opacity: .6; }
+.tp-hourbars-h { flex: none; width: 42px; font-size: 10.5px; font-weight: 700; color: var(--faint); }
+.tp-hourbars-track {
+  flex: 1; min-width: 0; height: 14px;
+  background: var(--surface-3); border-radius: 4px; overflow: hidden;
 }
-.tp-band-seg:hover { filter: brightness(1.08); }
-/* 予定は斜線を薄く重ねて、タスクと形でも見分ける */
-.tp-band-seg.is-plan {
-  background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.28) 0 4px, transparent 4px 9px);
+.tp-hourbars-fill { display: block; height: 100%; background: var(--brand1); border-radius: 4px; }
+.tp-hourbars-min {
+  flex: none; min-width: 92px; text-align: right;
+  font-size: 10.5px; font-weight: 700; color: var(--muted);
 }
-.tp-band-seg-name { overflow: hidden; text-overflow: ellipsis; }
-.tp-band-ticks { position: relative; height: 16px; margin-top: 3px; }
-.tp-band-ticks > span {
-  position: absolute; transform: translateX(-50%);
-  font-size: 9.5px; color: var(--faint);
-}
+.tp-hourbars-min small { display: block; font-size: 9.5px; font-weight: 600; color: var(--faint); }
 
 /* ---------- 実績を直す ---------- */
 .tp-actual-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -2788,6 +2781,53 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-card-bar .tp-icon-btn { width: 36px; height: 36px; }
 .tp-turn { transform: rotate(90deg); }
 .tp-turn-up { transform: rotate(-90deg); }
+
+/* ---------- 期間の切り替え（v1.30.0。利用者の指示）----------
+   どの面よりも上に置き、日／週／月／全体と前後の送りをここでまとめる。
+   上に貼り付けておくと、長い画面を下まで見てからでも期間を変えられる。 */
+.tp-dash-top {
+  /* ヘッダーの下に貼り付ける（`.tp-sticky` と同じ高さの基準を使う）。
+     top:0 にするとヘッダーの裏へ潜り、切り替えの段が隠れる */
+  position: sticky; top: calc(var(--safe-t) + var(--header-h)); z-index: 20;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px; margin: -4px -4px 0;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-sm);
+}
+.tp-period { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.tp-period-label { flex: 1; text-align: center; font-size: 14px; font-weight: 800; color: var(--ink); }
+.tp-period-sub { margin: 0; text-align: center; font-size: 11px; color: var(--muted); }
+
+/* ---------- 作業ごとの工数 ---------- */
+.tp-effort { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tp-effort > li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline;
+  gap: 2px 8px;
+  padding: 7px 9px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.tp-effort-name {
+  grid-column: 1; display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 12.5px; font-weight: 700; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tp-effort-meta { grid-column: 1; font-size: 10.5px; color: var(--faint); }
+.tp-effort > li > b { grid-row: 1 / span 2; grid-column: 2; font-size: 13px; color: var(--ink); }
+
+/* ---------- 日ごとに測った時間（推移の下の細い帯）---------- */
+.tp-daymins {
+  display: flex; align-items: flex-end; gap: 2px;
+  height: 26px; margin-top: 2px;
+  /* 上のグラフ（viewBox 340・左右の余白 26/34）と柱の位置を揃える */
+  padding: 0 10% 0 7.6%;
+}
+.tp-daymins-col {
+  flex: 1; min-width: 0; height: 100%;
+  display: flex; align-items: flex-end;
+  background: var(--surface-3); border-radius: 2px;
+}
+.tp-daymins-col > span { display: block; width: 100%; background: var(--brand1); border-radius: 2px; }
+.tp-daymins-col > span.is-over { background: var(--pri-high); }
 
 /* 時間帯のカード。押すと一覧（ポップアップ）が開く */
 .tp-band-card .tp-hint { margin-top: 6px; }
@@ -2889,6 +2929,15 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   border-color: color-mix(in srgb, var(--brand2) 45%, var(--surface));
   border-left-color: var(--brand2);
 }
+/* 実績＝実際に動かした記録（v1.30.0）。予定・タスク（これからやるもの）と
+   同じ軸に置くので、**濃い塗り＋左の太い線＋ ✓** で「もう起きたこと」を示す。
+   斜線（予定）とも、薄い塗り（これからやるタスク）とも地の作りが違う。 */
+.tp-tline-item.is-done {
+  background: color-mix(in srgb, var(--cat, var(--brand1)) 30%, var(--surface));
+  border-color: color-mix(in srgb, var(--cat, var(--brand1)) 70%, var(--surface));
+  border-left-width: 5px;
+}
+.tp-tline-ico.is-done { color: color-mix(in srgb, var(--cat, var(--brand1)) 78%, var(--ink)); }
 /* いま動かしているタスクは枠を光らせる（実行の画面と同じ扱い） */
 .tp-tline-item.is-running { box-shadow: 0 0 0 2px var(--rec); }
 .tp-tline-title {

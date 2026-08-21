@@ -18,19 +18,24 @@ import { busySlots, firstFit, fitLabel, freeMinutes, freeSlots } from '../lib/ti
 import { fetchEvents } from '../ports/in/fromCalendar'
 import { isConnected } from '../lib/googleAuth'
 import { groupOccurrences, occurrencesInRange } from '../lib/plans'
+import { dayBand, type DaySegment } from '../lib/worklog'
+import { groupOf } from '../lib/workCategories'
+import { ActualSheet } from './ActualSheet'
 import type { RunBox } from '../lib/runs'
 import type {
   CalendarEvent,
   Plan,
   Settings,
   Task,
+  WorkRun,
 } from '../types'
 
 /* =========================================================
  * スケジュールビュー
  *
  * 上から順に、
- *   1. DAY   … **縦軸の時間の並び**（`DayTimeline`）＋ 時刻未定の仕事
+ *   1. DAY   … **縦軸の時間の並び**（`DayTimeline`。予定・タスク・**実績**）
+ *              ＋ 時刻未定の仕事
  *   2. 期限超過 … 拾い残しを上に出す
  *   3. WEEK  … **予定のある日だけ**を並べる
  *   4. MONTH … 月の升目（v1.24.0 でカレンダーの画面から移した）
@@ -49,6 +54,7 @@ import type {
 export function ScheduleView({
   tasks,
   plans,
+  runs,
   today,
   settings,
   nowMin,
@@ -58,11 +64,14 @@ export function ScheduleView({
   onImportEvent,
   onAddLog,
   onPlace,
+  onPatch,
   onNotify,
 }: {
   tasks: Task[]
   /** 自分で入れた予定。繰り返しはここで展開する（作り置きしない） */
   plans: Plan[]
+  /** 実行の記録。**実際に動かした時間**を同じ軸に置くために渡す（v1.30.0） */
+  runs: WorkRun[]
   today: string
   settings: Settings
   /** いまの時刻（0時からの分）。今日の軸に線を引くのに使う */
@@ -76,9 +85,13 @@ export function ScheduleView({
   onAddLog: (day: string) => void
   /** 時刻を決めていない仕事を、その日の空きへ置く（タイムボックス。v1.29.0） */
   onPlace: (task: Task, time: string) => void
+  /** 実績（かかった時間・開始時刻）を直す */
+  onPatch: (task: Task, patch: Partial<Task>) => void
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [day, setDay] = useState(today)
+  /** 実績を直している相手。null なら閉じている */
+  const [fixing, setFixing] = useState<Task | null>(null)
   const [month, setMonth] = useState(() => monthKey(today))
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
@@ -154,6 +167,16 @@ export function ScheduleView({
   )
   const free = freeMinutes(slots)
 
+  /* --- 実績（v1.30.0。利用者の指示）---
+     予定だけを並べても、実際にはその通りに動かない日のほうが多い。
+     押して測った区間とあとから足した記録を、**同じ軸に**置く。
+     予定と実績が横に並ぶので、ずれた時間がそのまま読める。 */
+  const actual = useMemo(
+    () => dayBand(tasks, runs, day, (c) => groupOf(settings.categoryGroups, c)),
+    [tasks, runs, day, settings.categoryGroups],
+  )
+  const actualMin = useMemo(() => actual.reduce((s2, a) => s2 + a.minutes, 0), [actual])
+
   const overdue = useMemo(() => sortTasks(open.filter((t) => !!t.due && t.due < today)), [open, today])
 
   // 日付の横スクロール帯は、昨日から2週間先まで
@@ -180,6 +203,17 @@ export function ScheduleView({
 
   return (
     <div className="tp-view">
+      {fixing && (
+        <ActualSheet
+          tasks={[fixing]}
+          day={day}
+          categoryGroups={settings.categoryGroups}
+          defaultEstimateMin={settings.defaultEstimateMin}
+          onPatch={onPatch}
+          onClose={() => setFixing(null)}
+        />
+      )}
+
       {/* --- DAY（その日） --- */}
       <Reveal>
         <section className="tp-panel">
@@ -243,13 +277,25 @@ export function ScheduleView({
             tasks={dayTasks}
             occurrences={dayPlans}
             events={eventsByDay.get(day) ?? []}
+            actual={actual}
             settings={settings}
             isToday={day === today}
             nowMin={nowMin}
             onEdit={onEdit}
             onEditPlan={onEditPlan}
             onImportEvent={onImportEvent}
+            onPickActual={(seg: DaySegment) => {
+              const t = seg.taskId ? tasks.find((x) => x.id === seg.taskId) ?? null : null
+              if (t) setFixing(t)
+            }}
           />
+
+          {actual.length > 0 && (
+            <p className="tp-hint">
+              ✓ の付いた面は<b>実際に動かした記録</b>です（この日 {durationShort(actualMin)}）。
+              押すと、かかった時間と開始時刻を直せます。
+            </p>
+          )}
 
           {/* 時刻を決めていない仕事。軸に置けないぶんをここで拾う（未完了だけ）。
               v1.29.0 で、空いている時間へ置く釦を足した（タイムボックス）。

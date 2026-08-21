@@ -1,18 +1,9 @@
-import { addDaysKey, dayKey, dayOfIso, lastNDays } from './date'
+import { addDaysKey, dayKey, dayOfIso, diffDays, lastNDays } from './date'
 import { isWorkDay, taskMinutes, workMinutes } from './workday'
-import { loggedMinutes, measuredMin, ofDay } from './worklog'
-import { runSeconds } from './runs'
-import { planMinutes } from './plans'
-import { colorOfGroup, groupOf, primaryCategory } from './workCategories'
 import {
   PRIORITIES,
   UNCATEGORIZED,
-  UNGROUPED,
-  type CategoryColor,
-  type CategoryGroup,
-  type PlanOccurrence,
   type Priority,
-  type WorkRun,
   type Settings,
   type Source,
   type Task,
@@ -63,6 +54,12 @@ export function dailyPoints(tasks: Task[], n: number, today = dayKey()): DayPoin
       rate: denom > 0 ? Math.round((done / denom) * 100) : null,
     }
   })
+}
+
+/** from〜to（両端を含む）の推移。分析の期間に合わせて出すときに使う */
+export function pointsBetween(tasks: Task[], from: string, to: string): DayPoint[] {
+  const n = Math.max(1, diffDays(to, from) + 1)
+  return dailyPoints(tasks, n, to)
 }
 
 /** 最初にデータが出る日より前の空白日を落として左詰めにする */
@@ -199,186 +196,3 @@ export function overview(tasks: Task[], today = dayKey()): Overview {
 }
 
 export const PRIORITY_ORDER = PRIORITIES
-
-
-/* ---------------------------------------------------------
- * 区分ごとの時間（資材課日報の集計に相当）
- *
- * 日報は 0.25H 刻みで作業内容ごとに時間を積み、大分類ごとの合計と
- * 全体に占める割合を出している。同じ見方を Taskport でも作る。
- *
- * 実績（actualMin）が入っていればそれを積み、入っていないものだけ
- * 見込みで埋める（v1.14.0）。混ざるので、**実績で埋まっている割合**を
- * 一緒に返し、画面はそれを注記に出す。全部が見込みのときに
- * 「実績」と言い切らないための逃げ道であって、注記そのものは消さない。
- *
- * 区分を複数持つタスクは**先頭（主区分）にだけ**時間を積む。
- * ------------------------------------------------------- */
-
-export interface GroupMinutes {
-  group: string
-  minutes: number
-  /** 全体に占める割合 0〜1 */
-  share: number
-  /** 内訳（小分類ごと） */
-  items: { category: string; minutes: number }[]
-}
-
-/**
- * 期間内に完了したタスクの見込み時間を、大分類ごとに合計する。
- * @param from "YYYY-MM-DD"（この日を含む）
- * @param to   "YYYY-MM-DD"（この日を含む）
- */
-export function categoryMinutes(
-  tasks: Task[],
-  from: string,
-  to: string,
-  defaultEstimateMin: number,
-  master: CategoryGroup[],
-): { groups: GroupMinutes[]; total: number; actual: number } {
-  const byGroup = new Map<string, Map<string, number>>()
-  let total = 0
-  let actual = 0
-
-  for (const t of tasks) {
-    if (t.status !== 'done' || !t.doneAt) continue
-    const day = dayOfIso(t.doneAt) as string
-    if (day < from || day > to) continue
-    // 実績があれば実績。無いものだけ見込みで埋める
-    const min = loggedMinutes(t, defaultEstimateMin)
-    if (typeof t.actualMin === 'number' && t.actualMin > 0) actual += t.actualMin
-    // 時間は主区分（先頭）にだけ積む。区分ごとに同じ時間を積むと
-    // 合計が実際の勤務時間を超えて、稼働の判断が狂う。
-    const primary = primaryCategory(t.categories)
-    const g = groupOf(master, primary)
-    const key = primary || UNCATEGORIZED
-    const items = byGroup.get(g) ?? new Map<string, number>()
-    items.set(key, (items.get(key) ?? 0) + min)
-    byGroup.set(g, items)
-    total += min
-  }
-
-  const groups: GroupMinutes[] = [...byGroup.entries()]
-    .map(([group, items]) => {
-      const minutes = [...items.values()].reduce((a, b) => a + b, 0)
-      return {
-        group,
-        minutes,
-        share: total > 0 ? minutes / total : 0,
-        items: [...items.entries()]
-          .map(([category, m]) => ({ category, minutes: m }))
-          .sort((a, b) => b.minutes - a.minutes),
-      }
-    })
-    .sort((a, b) => b.minutes - a.minutes)
-
-  return { groups, total, actual }
-}
-
-/* ---------------------------------------------------------
- * その日の区分の割合（円グラフ）
- *
- * 「その日、どの種類の仕事に何割を使ったか」だけを出す。
- * 拾い方は日報と同じ（`worklog.ofDay`）で、実績が入っていればそれ、
- * 無いものだけ見込みで埋める。**予定（打合せなど）の時間も足す**
- * ——会議に出た時間が抜けると、その日の割合が実際と合わないため。
- *
- * 時間は主区分（先頭）にだけ積む。区分ごとに同じ時間を積むと
- * 合計が実際の勤務時間を超える。
- * ------------------------------------------------------- */
-
-/** 円グラフの1切れ */
-export interface DayShare {
-  /** グループ名（集計の単位） */
-  group: string
-  color: CategoryColor
-  minutes: number
-  /** 0〜1 */
-  share: number
-  /** うち予定（打合せなど）の分 */
-  planMinutes: number
-}
-
-/** 切れの数の上限。これを超えたぶんは「その他」へ畳む（色を作らない）。 */
-const SHARE_MAX = 8
-
-export function dayShares(
-  tasks: Task[],
-  plans: PlanOccurrence[],
-  day: string,
-  defaultEstimateMin: number,
-  master: CategoryGroup[],
-  /** 実行ログ。渡すと**実測だけ**で数える（見込みで埋めない） */
-  runs?: WorkRun[],
-  now = Date.now(),
-): { slices: DayShare[]; total: number; planMinutes: number; measured: number; unmeasured: number } {
-  const byGroup = new Map<string, { minutes: number; planMinutes: number }>()
-  let total = 0
-  let planTotal = 0
-  let measured = 0
-
-  const add = (group: string, minutes: number, fromPlan: boolean) => {
-    const cur = byGroup.get(group) ?? { minutes: 0, planMinutes: 0 }
-    cur.minutes += minutes
-    if (fromPlan) cur.planMinutes += minutes
-    byGroup.set(group, cur)
-    total += minutes
-    if (fromPlan) planTotal += minutes
-  }
-
-  // 実測だけで数えるか、見込みで埋めるか
-  const exact = Array.isArray(runs)
-  let unmeasured = 0
-
-  for (const t of ofDay(tasks, day, runs ?? [])) {
-    const min = exact ? measuredMin(t, now) : loggedMinutes(t, defaultEstimateMin)
-    if (min <= 0) {
-      if (exact) unmeasured++
-      continue
-    }
-    if (typeof t.actualMin === 'number' && t.actualMin > 0) measured += t.actualMin
-    add(groupOf(master, primaryCategory(t.categories)), min, false)
-  }
-
-  for (const o of plans) {
-    if (o.day !== day) continue
-    // 実測のときは、その予定を実際に動かした分だけ数える（入れただけの予定は0）
-    const min = exact
-      ? (runs as WorkRun[])
-          .filter((r) => r.kind === 'plan' && r.targetId === o.key)
-          .reduce((sum, r) => sum + Math.floor(runSeconds(r, now) / 60), 0)
-      : planMinutes(o.plan)
-    if (min <= 0) continue
-    add(groupOf(master, primaryCategory(o.plan.categories)), min, true)
-  }
-
-  const all = [...byGroup.entries()]
-    .map(([group, v]) => ({
-      group,
-      color: colorOfGroup(master, group),
-      minutes: v.minutes,
-      planMinutes: v.planMinutes,
-      share: total > 0 ? v.minutes / total : 0,
-    }))
-    .sort((a, b) => b.minutes - a.minutes)
-
-  // 多すぎるぶんは畳む。色を新しく作らない（design.md §10.1）
-  let slices = all
-  if (all.length > SHARE_MAX) {
-    const head = all.slice(0, SHARE_MAX - 1)
-    const rest = all.slice(SHARE_MAX - 1)
-    const minutes = rest.reduce((sum, r) => sum + r.minutes, 0)
-    slices = [
-      ...head,
-      {
-        group: UNGROUPED,
-        color: colorOfGroup(master, UNGROUPED),
-        minutes,
-        planMinutes: rest.reduce((sum, r) => sum + r.planMinutes, 0),
-        share: total > 0 ? minutes / total : 0,
-      },
-    ]
-  }
-
-  return { slices, total, planMinutes: planTotal, measured, unmeasured }
-}

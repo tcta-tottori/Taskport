@@ -13,9 +13,9 @@ import type { CategoryGroup, Task, WorkHours } from '../types'
 /* =========================================================
  * 時間帯（ポップアップ）
  *
- * カードの帯は狭くて、細い区間は名前も出せない。
+ * カードの帯は縮めてあるので、短い区間は名前が出せない。
  * 押したらここを開き、**一覧の形**で読めるようにする。
- *   - 上に帯（同時に動かしたぶんは行が分かれている）
+ *   - 上に縦軸の帯（同時に動かしたぶんは横に並ぶ）
  *   - 下に「何時から何時まで・何を・どれだけ」の一覧
  *   - タスクの行は押すとその場で実績（開始時刻・かかった時間）を直せる
  *
@@ -26,6 +26,8 @@ import type { CategoryGroup, Task, WorkHours } from '../types'
 export function BandSheet({
   segments,
   day,
+  today,
+  nowMin,
   tasks,
   workHours,
   categoryGroups,
@@ -36,6 +38,9 @@ export function BandSheet({
 }: {
   segments: DaySegment[]
   day: string
+  today: string
+  /** いまの時刻（0時からの分）。今日を見ているときだけ線を引く */
+  nowMin: number
   /** その日の記録（実績を直せるもの） */
   tasks: Task[]
   workHours: WorkHours
@@ -63,12 +68,14 @@ export function BandSheet({
         <div className="tp-sheet-body">
           <p className="tp-note">
             {formatMD(day)} に<b>押して動かした時間</b>です（合計 {durationLabel(total)}）。
-            同時に動かしたぶんは行が分かれています。
+            同時に動かしたぶんは横に並んでいます。
           </p>
 
           <DayBand
             segments={segments}
             workHours={workHours}
+            isToday={day === today}
+            nowMin={nowMin}
             colorOfGroupName={(g) => colorOfGroup(categoryGroups, g)}
             onPick={(seg) => setOpen(keyOf(seg))}
           />

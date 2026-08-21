@@ -1,4 +1,5 @@
 import { jobLabel, totalsByJob, NO_JOB } from '../../lib/jobs'
+import type { EffortRow } from '../../lib/analysis'
 import type { Job, Plan, Task, WorkRun } from '../../types'
 
 /* =========================================================
@@ -112,4 +113,41 @@ export function toJobCsv(
     )
   }
   return '﻿' + rows.join('\r\n')
+}
+
+
+/* ---------------------------------------------------------
+ * 作業ごとの工数（実績から）
+ *
+ * 「どの作業にどれだけかかったか」を、**押して測った時間だけ**で出す
+ * （v1.30.0。利用者の指示）。日報の集計や上長への報告にそのまま使えるよう、
+ * 時間は 0.1時間刻みの数字と分の両方を出す。
+ *
+ * 行の素は分析の画面と同じ（`lib/analysis.ts` の `effort`）。
+ * 画面と書き出しで数え方を変えない。
+ * ------------------------------------------------------- */
+
+const EFFORT_HEADERS = ['期間', '大区分', '区分', '件名', '案件', '時間', '分', '回数', '日数']
+
+export function toEffortCsv(rows: EffortRow[], jobs: Job[], label: string): string {
+  const nameOf = new Map(jobs.map((j) => [j.id, jobLabel(j)]))
+  const out = [EFFORT_HEADERS.join(',')]
+  for (const r of rows) {
+    out.push(
+      [
+        cell(label),
+        cell(r.group),
+        cell(r.category),
+        cell(r.title),
+        cell(r.jobId ? (nameOf.get(r.jobId) ?? '') : '案件なし'),
+        hours(r.minutes),
+        String(r.minutes),
+        String(r.count),
+        String(r.days),
+      ].join(','),
+    )
+  }
+  const total = rows.reduce((s, r) => s + r.minutes, 0)
+  out.push([cell(label), '合計', '', '', '', hours(total), String(total), '', ''].join(','))
+  return '\ufeff' + out.join('\r\n')
 }
