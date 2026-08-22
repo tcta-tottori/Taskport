@@ -2211,6 +2211,14 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
   font-size: 11.5px; color: var(--muted);
 }
+/* よくやる業務（v1.31.0）。作りは「次の作業」と同じで、違いは2つだけ。
+   ・**行ぜんぶが押しどころ**（開く先が無く、押したら始まる面なので）
+   ・左の線は**区分の色**（ここに並ぶのは優先度で選んだものではない） */
+.tp-up.tp-routine {
+  width: 100%; text-align: left;
+  border-left-color: var(--cat, var(--brand1));
+}
+.tp-up.tp-routine:hover .tp-up-run { background: var(--go); border-color: var(--go); color: var(--on-brand); }
 /* 区切りの点は**後ろの項目に付ける**（狭い端末で折り返したとき、
    行末に点だけが残らない）。中黒ではなく点にするのは字と混ざらないため。 */
 .tp-up-meta > * + *::before {
@@ -2446,6 +2454,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 .tp-start-item:hover { background: var(--surface); border-color: var(--go); }
 .tp-start-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .tp-start-meta { flex: none; font-size: 11px; color: var(--muted); }
+
 
 /* 動いている行は枠を脈打たせる（画面を離れて戻っても、数えているのが分かる） */
 .tp-live-row:not(.is-paused) { animation: tpLiveEdge 2s ease-in-out infinite; }

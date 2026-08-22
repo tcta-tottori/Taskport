@@ -10,6 +10,7 @@ import {
   diffDays,
   dueLabel,
   durationLabel,
+  durationShort,
   formatMD,
   formatMDShort,
 } from '../lib/date'
@@ -19,6 +20,7 @@ import { applyFilter, isFilterActive } from '../lib/taskFilter'
 import { colorOf, primaryCategory } from '../lib/workCategories'
 import { taskMinutes } from '../lib/workday'
 import { daySpent, isRunning, running, runningSec } from '../lib/worklog'
+import { topRoutines, ROUTINE_DAYS, type Routine } from '../lib/routines'
 import { activeRuns, runSeconds, type RunBox } from '../lib/runs'
 import type {
   Job,
@@ -36,9 +38,10 @@ import type {
  *
  *   1. 実行中   … タスクと予定。押した時刻から数える（画面を閉じても続く）
  *   2. 停止中   … 止めてあるもの。▶ で続きから数える
- *   3. 次の作業 … 今日締めのものを上から。▶ でその場で始まる
- *   4. 近日締切 … 明日から1週間。前倒しできるものを拾う
- *   5. タスク   … 台帳（検索・絞り込み・4つのタブ）
+ *   3. よくやる業務 … 押して動かした記録から上位3件。1押しで始まる（v1.31.0）
+ *   4. 次の作業 … 今日締めのものを上から。▶ でその場で始まる
+ *   5. 近日締切 … 明日から1週間。前倒しできるものを拾う
+ *   6. タスク   … 台帳（検索・絞り込み・4つのタブ）
  *
  * v1.28.0（利用者の指示）で、この画面から次の3つを外した。
  *   - やったことを足す … スケジュール（DAY）と分析（その日）から開く
@@ -70,6 +73,7 @@ export function WorkLogView({
   onRemoveSavedFilter,
   onTriage,
   onWrapUp,
+  onStartRoutine,
   jobs,
 }: {
   tasks: Task[]
@@ -93,6 +97,8 @@ export function WorkLogView({
   /** 朝の仕分け・明日の準備 */
   onTriage: () => void
   onWrapUp: () => void
+  /** よくやる業務を押したとき（台帳にあればそれを、無ければ1件立てて始める） */
+  onStartRoutine: (routine: Routine) => void
   /** 案件（工数の単位）。カードに名前を出すために使う */
   jobs: Job[]
 }) {
@@ -165,6 +171,16 @@ export function WorkLogView({
         ),
       ),
     [spent.tasks],
+  )
+
+  /**
+   * よくやる業務（v1.31.0。利用者の指示）。
+   * 押して動かした記録から「やった日の多い順」に上位3件。数え方は `lib/routines.ts`。
+   * 動かしている最中のものは出さない（上の実行中に出ているし、押すと止まる）。
+   */
+  const routines = useMemo(
+    () => topRoutines(tasks, box.runs, today, 3),
+    [tasks, box.runs, today],
   )
 
   const ahead = diffDays(day, today) > 0
@@ -388,6 +404,61 @@ export function WorkLogView({
             同時に {live.length + livePlans.length} 件を数えています。合計が実時間を超えるので、
             置いた作業は ⏸ で止めてください。
           </p>
+        )}
+
+        {/* --- よくやる業務（v1.31.0。利用者の指示）---
+            同じ仕事は何度も回ってくるので、台帳から探さずに1押しで始められるようにする。
+            出すのは上位3件だけ。並べすぎると「次の作業」が下がって、
+            いま締めるべきものが見えなくなる。 */}
+        {isToday && routines.length > 0 && (
+          <section className="tp-panel">
+            <div className="tp-panel-head">
+              <h2>よくやる業務</h2>
+              <span className="tp-badge tp-mono">直近{ROUTINE_DAYS}日</span>
+            </div>
+            {/* 行の作りは「次の作業」と同じ（▶ が左、件名が大きく、下に小さく数字）。
+                面ごとに ▶ の位置が変わると壊れて見える（CLAUDE.md §9）。
+                違うのは**行ぜんぶが1つの押しどころ**なところで、
+                ここは開くのではなく始めるための面だから。 */}
+            <ul className="tp-uplist">
+              {routines.map((r) => (
+                <li key={r.key}>
+                  <button
+                    type="button"
+                    className="tp-up tp-routine"
+                    style={r.category ? catStyle(colorOf(settings.categoryGroups, r.category)) : undefined}
+                    aria-label={`${r.title} を始める。直近${ROUTINE_DAYS}日で ${r.days}日、1日あたり平均 ${durationLabel(r.avgMin)}`}
+                    onClick={() => onStartRoutine(r)}
+                  >
+                    <span className="tp-up-run" aria-hidden="true">
+                      <Icon name="play" size={18} />
+                    </span>
+                    <span className="tp-up-body">
+                      <span className="tp-up-title">{r.title}</span>
+                      <span className="tp-up-meta">
+                        <span className="tp-mono">{r.days}日</span>
+                        <span className="tp-mono">平均 {durationShort(r.avgMin)}</span>
+                        {r.category && (
+                          <span
+                            className="tp-up-cat"
+                            style={catStyle(colorOf(settings.categoryGroups, r.category))}
+                          >
+                            <span className="tp-cat-dot" aria-hidden="true" />
+                            {r.category}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="tp-hint">
+              押すとその場で始まります。台帳に同じ件名の未完了があればそれを、
+              無ければ1件立てて始めます（件名と区分はあとから直せます）。
+              数字は<b>やった日の数</b>と、1日あたりに測った時間です。
+            </p>
+          </section>
         )}
 
         {/* --- 次の作業（今日締め）。今日を見ているときだけ出す --- */}

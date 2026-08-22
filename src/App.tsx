@@ -48,6 +48,7 @@ import {
   type RunBox,
 } from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
+import type { Routine } from './lib/routines'
 import { overview } from './lib/stats'
 import { isRunning, logToTask, running, runningSec } from './lib/worklog'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
@@ -968,12 +969,18 @@ export default function App() {
    * 件名は区分の名前。**確認画面は挟まない**（AIの解釈ではなく、人が押した1語なので）。
    * 始めるときは台帳の `startedAt` を入れる（タスクの実績はそちらが持つ）。
    */
-  const quickTask = useCallback(
-    async (category: string, start: boolean) => {
+  /**
+   * 台帳に1件立てる（必要ならそのまま始める）。
+   * 区分から立てるとき（件名＝区分）と、よくやる業務から立てるとき（v1.31.0）の共通の口。
+   * **見込みは入れない**。過去の実績の平均を見込みの欄に入れると、
+   * 実績と見込みが混ざる（CLAUDE.md §3.3）。
+   */
+  const newAndStart = useCallback(
+    async (title: string, categories: string[], start: boolean) => {
       const created = draftToTask({
         ...emptyDraft('form'),
-        title: category,
-        categories: [category],
+        title,
+        categories,
         due: today,
       })
       if (start) {
@@ -984,10 +991,34 @@ export default function App() {
       await rememberAll([created])
       await reload()
       await reloadWork()
-      notify(start ? `「${category}」を立てて始めました` : `「${category}」を立てました`)
+      notify(start ? `「${title}」を立てて始めました` : `「${title}」を立てました`)
       if (start) goRun()
     },
     [today, reload, reloadWork, rememberAll, notify, goRun],
+  )
+
+  const quickTask = useCallback(
+    (category: string, start: boolean) => newAndStart(category, [category], start),
+    [newAndStart],
+  )
+
+  /**
+   * よくやる業務を1押しで始める（v1.31.0。利用者の指示）。
+   * 台帳に同じ件名の未完了があればそれを始め、無ければ1件立てて始める。
+   * 同じ仕事が台帳に増えないようにするため、立てるのは見つからなかったときだけ。
+   */
+  const startRoutine = useCallback(
+    async (routine: Routine) => {
+      const found = routine.taskId
+        ? liveRef.current.tasks.find((t) => t.id === routine.taskId)
+        : undefined
+      if (found) {
+        await toggleRunning(found)
+        return
+      }
+      await newAndStart(routine.title, routine.category ? [routine.category] : [], true)
+    },
+    [newAndStart, toggleRunning],
   )
 
   /** 実行の操作をまとめて画面へ渡す。画面ごとに名前が変わらないようにする。 */
@@ -1596,6 +1627,7 @@ export default function App() {
             saved={settings.savedFilters}
             onSaveFilter={saveFilter}
             onRemoveSavedFilter={removeSavedFilter}
+            onStartRoutine={(r) => void guard(() => startRoutine(r))}
             onTriage={() => setTriaging(true)}
             onWrapUp={() => setWrappingUp(true)}
             jobs={jobs}
