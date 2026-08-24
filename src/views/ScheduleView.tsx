@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { Reveal } from '../components/Reveal'
 import { DayTimeline } from '../components/DayTimeline'
@@ -51,6 +51,12 @@ import type {
  * （前のタイムラインで見えなくなっていたのはここ）。完了したものは出さない。
  * =======================================================*/
 
+/**
+ * 日付帯に並べる日数（昨日＋今日＋2週間先）。
+ * 帯は今日に貼り付けず、◀▶ でどこまでも前後へずらせる（v1.32.0。利用者の指示）。
+ */
+const STRIP_DAYS = 15
+
 export function ScheduleView({
   tasks,
   plans,
@@ -90,6 +96,14 @@ export function ScheduleView({
   onNotify: (text: string, tone?: 'ok' | 'error') => void
 }) {
   const [day, setDay] = useState(today)
+  /**
+   * 日付帯の左端。既定は昨日。◀▶ で1週間ずつずらす。
+   * 今日を起点に固定していたころは、カレンダー（MONTH）から過去の日を選ぶと
+   * その日が帯に無く、前後の日へ動けなくなっていた（v1.32.0 で直したところ）。
+   */
+  const [stripStart, setStripStart] = useState(() => addDaysKey(today, -1))
+  /** 日付帯そのもの。選んでいる日を横スクロールで見えるところへ寄せるのに使う */
+  const stripRef = useRef<HTMLDivElement | null>(null)
   /** 実績を直している相手。null なら閉じている */
   const [fixing, setFixing] = useState<Task | null>(null)
   const [month, setMonth] = useState(() => monthKey(today))
@@ -179,12 +193,12 @@ export function ScheduleView({
 
   const overdue = useMemo(() => sortTasks(open.filter((t) => !!t.due && t.due < today)), [open, today])
 
-  // 日付の横スクロール帯は、昨日から2週間先まで
+  // 日付の横スクロール帯。左端（stripStart）から STRIP_DAYS 日ぶん
   const strip = useMemo(() => {
     const days: string[] = []
-    for (let i = -1; i < 14; i++) days.push(addDaysKey(today, i))
+    for (let i = 0; i < STRIP_DAYS; i++) days.push(addDaysKey(stripStart, i))
     return days
-  }, [today])
+  }, [stripStart])
 
   /** 1週間ぶん。**予定のある日だけ**を出す（空の日を並べても読むところがない） */
   const week = useMemo(() => {
@@ -196,10 +210,36 @@ export function ScheduleView({
     return days
   }, [today, plansByDay])
 
-  const pickDay = (d: string) => {
+  /**
+   * DAY をその日にする。
+   * 帯の外の日（カレンダーから選んだ過去の日など）を渡されたときは、
+   * その日が帯に入るまで帯をずらす。ずらさないと、選んだ日が帯に無いまま
+   * 前後の日へ動けなくなる。
+   */
+  const showDay = (d: string) => {
     setDay(d)
+    setStripStart((cur) => (d < cur || d > addDaysKey(cur, STRIP_DAYS - 1) ? addDaysKey(d, -1) : cur))
+  }
+
+  const pickDay = (d: string) => {
+    showDay(d)
     setMonth(monthKey(d))
   }
+
+  /* 選んでいる日の札を帯の中央へ寄せる。帯をずらした直後に
+     選んだ日が画面の外にいると、動いたことが分からない。
+     ◀▶ で選んだ日ごと通り越したときは、帯の左端（ずらした先の週）から見せる。 */
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el) return
+    const chip = el.querySelector<HTMLElement>('.tp-daychip.is-on')
+    if (!chip) {
+      el.scrollLeft = 0
+      return
+    }
+    const to = chip.offsetLeft - (el.clientWidth - chip.offsetWidth) / 2
+    el.scrollLeft = Math.max(0, to)
+  }, [day, stripStart])
 
   return (
     <div className="tp-view">
@@ -224,29 +264,53 @@ export function ScheduleView({
             <p className="tp-card-date tp-mono">{formatMD(day)}</p>
           </div>
 
-          <div className="tp-daystrip" role="tablist" aria-label="表示する日">
-            {strip.map((d) => {
-              const n =
-                (byDue.get(d) ?? []).filter((t) => t.status === 'open').length +
-                (plansByDay.get(d) ?? []).length
-              const off = !isWorkDay(d, settings.workHours, settings.workCalendar)
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  role="tab"
-                  aria-selected={d === day}
-                  className={`tp-daychip${d === day ? ' is-on' : ''}${off ? ' is-off' : ''}${
-                    d === today ? ' is-today' : ''
-                  }`}
-                  onClick={() => pickDay(d)}
-                >
-                  <span className="tp-mono">{formatMDShort(d)}</span>
-                  <span className="tp-daychip-wd">{weekdayLabel(d)}</span>
-                  <b className="tp-mono">{n > 0 ? n : '·'}</b>
-                </button>
-              )
-            })}
+          {/* 帯の左右の ◀▶ で1週間ずつずらす。過去へも先へも同じだけ行ける
+              （v1.32.0。今日に貼り付いていて先週へ行けなかったのを直した） */}
+          <div className="tp-daystrip-row">
+            <button
+              type="button"
+              className="tp-daynav"
+              aria-label="1週間前へ"
+              title="1週間前へ"
+              onClick={() => setStripStart((c) => addDaysKey(c, -7))}
+            >
+              <Icon name="chevron" size={18} className="tp-flip" />
+            </button>
+
+            <div className="tp-daystrip" role="tablist" aria-label="表示する日" ref={stripRef}>
+              {strip.map((d) => {
+                const n =
+                  (byDue.get(d) ?? []).filter((t) => t.status === 'open').length +
+                  (plansByDay.get(d) ?? []).length
+                const off = !isWorkDay(d, settings.workHours, settings.workCalendar)
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    role="tab"
+                    aria-selected={d === day}
+                    className={`tp-daychip${d === day ? ' is-on' : ''}${off ? ' is-off' : ''}${
+                      d === today ? ' is-today' : ''
+                    }`}
+                    onClick={() => pickDay(d)}
+                  >
+                    <span className="tp-mono">{formatMDShort(d)}</span>
+                    <span className="tp-daychip-wd">{weekdayLabel(d)}</span>
+                    <b className="tp-mono">{n > 0 ? n : '·'}</b>
+                  </button>
+                )
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="tp-daynav"
+              aria-label="1週間先へ"
+              title="1週間先へ"
+              onClick={() => setStripStart((c) => addDaysKey(c, 7))}
+            >
+              <Icon name="chevron" size={18} />
+            </button>
           </div>
 
           {!isWorkDay(day, settings.workHours, settings.workCalendar) && (
@@ -453,7 +517,7 @@ export function ScheduleView({
             plans={plans}
             settings={settings}
             onPickDay={(d) => {
-              setDay(d)
+              showDay(d)
               window.scrollTo({ top: 0, behavior: 'smooth' })
             }}
           />

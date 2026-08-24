@@ -48,7 +48,7 @@ import {
   type RunBox,
 } from './lib/runs'
 import { draftToTask, emptyDraft, LIST_TABS, type ListTab } from './lib/tasks'
-import type { Routine } from './lib/routines'
+import { topRoutines, ROUTINE_TOP, type Routine } from './lib/routines'
 import { overview } from './lib/stats'
 import { isRunning, logToTask, running, runningSec } from './lib/worklog'
 import { EMPTY_FILTER, sameFilter } from './lib/taskFilter'
@@ -1021,6 +1021,16 @@ export default function App() {
     [newAndStart, toggleRunning],
   )
 
+  /**
+   * よくやる業務（上位5件）。右下の ＋ を開くと、扇の上に名前の札で出る。
+   * 実行の画面に置いていたものを ＋ へ移した（v1.32.0。利用者の指示）。
+   * どの画面からでも同じ札が出るので、押したい仕事を探しに画面を移らなくてよい。
+   */
+  const routines = useMemo(
+    () => topRoutines(tasks, runs, today, ROUTINE_TOP),
+    [tasks, runs, today],
+  )
+
   /** 実行の操作をまとめて画面へ渡す。画面ごとに名前が変わらないようにする。 */
   const runBox: RunBox = useMemo(
     () => ({
@@ -1627,7 +1637,6 @@ export default function App() {
             saved={settings.savedFilters}
             onSaveFilter={saveFilter}
             onRemoveSavedFilter={removeSavedFilter}
-            onStartRoutine={(r) => void guard(() => startRoutine(r))}
             onTriage={() => setTriaging(true)}
             onWrapUp={() => setWrappingUp(true)}
             jobs={jobs}
@@ -1676,7 +1685,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 右下の ＋ だけ。押すと5つの入口（予定・手描き・記憶・文章・マイク）が扇に開く。 */}
+      {/* 右下の ＋ だけ。押すと7つの入口が扇に開き、その上によくやる業務の札が並ぶ。 */}
       {view !== 'settings' && !session.recording && (
         <QuickBar
           busy={busy}
@@ -1685,6 +1694,8 @@ export default function App() {
           onCreate={(mode) => setCreating(mode)}
           onAddPlan={() => openNewPlan(today)}
           onStart={(mode) => setStarting(mode)}
+          routines={routines}
+          onStartRoutine={(r) => void guard(() => startRoutine(r))}
         />
       )}
 

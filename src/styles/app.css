@@ -532,6 +532,62 @@ body::before {
   color: inherit;
   pointer-events: none;
 }
+/* ---------- ＋の扇の上に出る「よくやる業務」（v1.32.0） ----------
+   丸のアイコンでは件名が読めないので、ここだけ**名前の見える札**にする。
+   置き場所は扇の外側（2層目より上）。扇の丸とは重ならない。
+   下から順に「よくやる順」＝いちばん押すものが親指のいちばん近くに来る。 */
+.tp-fan-runs {
+  position: absolute; right: 0; bottom: calc(100% + var(--fan-r2) + 12px);
+  z-index: 1;
+  list-style: none; margin: 0; padding: 0;
+  width: min(74vw, 290px);
+  display: flex; flex-direction: column-reverse; gap: 6px;
+  /* 背の低い端末で画面の外へ出ないようにする */
+  max-height: calc(100vh - var(--fan-r2) - 170px);
+  overflow-y: auto;
+}
+.tp-fan-run-item {
+  animation: tpRunIn .3s cubic-bezier(.2, 1.2, .3, 1) backwards;
+  animation-delay: calc(var(--i) * 40ms);
+}
+.tp-fan-run-item.is-out {
+  animation: tpRunOut .2s ease-in forwards;
+  animation-delay: calc(var(--i) * 20ms);
+}
+.tp-fan-run {
+  width: 100%; min-height: 44px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 999px;
+  background: var(--surface); color: var(--go);
+  border: 1px solid color-mix(in srgb, var(--go) 42%, var(--line-strong));
+  box-shadow: var(--shadow-lg);
+  text-align: left; transition: transform .12s ease, color .16s, border-color .16s;
+}
+.tp-fan-run-title {
+  flex: 1; min-width: 0;
+  font-size: 13px; font-weight: 800; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tp-fan-run-min { flex: none; font-size: 11px; font-weight: 700; color: var(--muted); }
+.tp-fan-run:hover { border-color: var(--go); transform: translateY(-1px); }
+.tp-fan-run:active { transform: scale(.98); }
+/* 指が乗っている札（長押しのまま滑らせて選ぶとき）。離すとここが始まる */
+.tp-fan-run.is-hot {
+  background: var(--go); border-color: var(--go); color: var(--on-brand);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--go) 40%, transparent);
+}
+.tp-fan-run.is-hot .tp-fan-run-title,
+.tp-fan-run.is-hot .tp-fan-run-min { color: var(--on-brand); }
+
+@keyframes tpRunIn {
+  from { opacity: 0; transform: translateY(14px) scale(.94); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes tpRunOut {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(14px) scale(.94); }
+}
+
 /* 長押しのまま滑らせるので、押している間に画面が動かないようにする */
 .tp-quick-add { touch-action: none; }
 
@@ -737,7 +793,26 @@ body::before {
 .tp-pick-title { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- スケジュール ---------- */
+/* 日付帯と、その左右の ◀▶。
+   帯は今日に貼り付けず、◀▶ で1週間ずつどこまでも前後へずらせる（v1.32.0）。
+   カレンダー（MONTH）から過去の日を選んだときも、その日が帯に入るところまで
+   帯ごと動く。動かないと、選んだ日の前後へ行けなくなる。 */
+.tp-daystrip-row { display: flex; align-items: stretch; gap: 4px; }
+/* 指で押せる大きさ（44×44）は確保しつつ、面としては軽くする。
+   枠を付けると日付の札と同じ重さになり、どちらが日付か分からなくなる。 */
+.tp-daynav {
+  flex: none; width: 44px; min-height: 46px; align-self: flex-start;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--muted); transition: .16s;
+}
+.tp-daynav:hover { background: var(--surface-2); color: var(--brand1); }
+.tp-daynav:active { transform: scale(.94); }
+/* 右向きの山形を左向きにする（アイコンを1つで済ませる） */
+.tp-flip { transform: scaleX(-1); }
+
 .tp-daystrip {
+  flex: 1; min-width: 0;
   display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px;
   scrollbar-width: thin;
 }
@@ -2211,14 +2286,6 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
   font-size: 11.5px; color: var(--muted);
 }
-/* よくやる業務（v1.31.0）。作りは「次の作業」と同じで、違いは2つだけ。
-   ・**行ぜんぶが押しどころ**（開く先が無く、押したら始まる面なので）
-   ・左の線は**区分の色**（ここに並ぶのは優先度で選んだものではない） */
-.tp-up.tp-routine {
-  width: 100%; text-align: left;
-  border-left-color: var(--cat, var(--brand1));
-}
-.tp-up.tp-routine:hover .tp-up-run { background: var(--go); border-color: var(--go); color: var(--on-brand); }
 /* 区切りの点は**後ろの項目に付ける**（狭い端末で折り返したとき、
    行末に点だけが残らない）。中黒ではなく点にするのは字と混ざらないため。 */
 .tp-up-meta > * + *::before {

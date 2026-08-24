@@ -7,7 +7,10 @@ import type { Task, WorkRun } from '../types'
  *
  * 同じ仕事は何度も回ってくる（発注データを送る・納期の返事・伝票の入力）。
  * そのたびに台帳から探すか、1件立て直すかをしていたので、
- * **実行の画面に「押せばすぐ始まる」形で並べる**（v1.31.0。利用者の指示）。
+ * **「押せばすぐ始まる」形で並べる**（v1.31.0。利用者の指示）。
+ * v1.32.0 で置き場所を実行の画面から**右下の ＋**へ移し、件数を5件にした
+ * （利用者の指示）。実行の画面では「次の作業」を押し下げていたし、
+ * ＋はどの画面にも出ているので、押したい仕事を探しに画面を移らなくてよい。
  *
  * 【何をもって「よくやる」とするか】
  * 数えるのは**実際に手を動かした記録だけ**（実行の記録＋あとから足した記録）。
@@ -22,6 +25,12 @@ import type { Task, WorkRun } from '../types'
 
 /** 何日ぶんの記録から決めるか。実行の記録は90日ぶんしか残らない */
 export const ROUTINE_DAYS = 60
+
+/**
+ * ＋の上に並べる件数（v1.32.0。利用者の指示）。
+ * これ以上増やすと札が画面の上へはみ出し、扇の丸まで指が届かなくなる。
+ */
+export const ROUTINE_TOP = 5
 
 export interface Routine {
   /** 件名をそろえた鍵 */
@@ -60,7 +69,7 @@ export function topRoutines(
   tasks: Task[],
   runs: WorkRun[],
   today: string,
-  limit = 3,
+  limit = ROUTINE_TOP,
   days = ROUTINE_DAYS,
   now = Date.now(),
 ): Routine[] {

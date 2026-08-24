@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Icon, type IconName } from './Icon'
+import { durationShort } from '../lib/date'
+import type { Routine } from '../lib/routines'
 
 /* =========================================================
  * 画面下に固定するボタン
@@ -23,6 +25,10 @@ import { Icon, type IconName } from './Icon'
  * どのアイコンにも乗っていないまま離したときは、開いたままにして待つ
  * （狙いを外しただけで閉じられると、もう一度長押しからやり直しになる）。
  *
+ * **よくやる業務**（v1.32.0。利用者の指示）は、扇の上に名前の見える札で並ぶ。
+ * 実行の画面に置いていたときは「次の作業」を押し下げていたので、
+ * ここへ移した。扇と同じで、長押しのまま滑らせて選べる。
+ *
  * v1.10 までの統合バー（下辺いっぱいのバー）は廃止済み。
  * 左下に別で置いていた録音ボタンも v1.12.1 で外した。同じ形の丸が2つあると
  * どちらを押したのか分からなくなるうえ、マイクは扇の中にもう1つある。
@@ -34,6 +40,12 @@ import { Icon, type IconName } from './Icon'
  *   作る   … 予定（plan）・手描き（form）・記憶（memory）・文章（text）・マイク（voice）
  */
 export type MakeMode = 'catStart' | 'taskStart' | 'plan' | 'form' | 'memory' | 'text' | 'voice'
+
+/**
+ * 扇で選べるもの。よくやる業務は件名が人によって違うので、
+ * 決め打ちの入口とは分けて `routine:<番号>` で表す。
+ */
+type FanPick = MakeMode | `routine:${number}`
 
 /** タスクを作る画面を開く3つ（マイク・予定・始める系は別の道なので外してある） */
 export type SheetMode = 'form' | 'memory' | 'text'
@@ -74,6 +86,8 @@ export function QuickBar({
   onCreate,
   onAddPlan,
   onStart,
+  onStartRoutine,
+  routines,
   busy,
   voiceSupported,
 }: {
@@ -85,6 +99,10 @@ export function QuickBar({
   onAddPlan: () => void
   /** 「始める」の画面を開く。タスクから／区分から を選んだ側で開く */
   onStart: (mode: 'task' | 'category') => void
+  /** よくやる業務を1押しで始める */
+  onStartRoutine: (routine: Routine) => void
+  /** よくやる業務（上位5件）。空なら札は出さない */
+  routines: Routine[]
   busy: boolean
   voiceSupported: boolean
 }) {
@@ -92,8 +110,8 @@ export function QuickBar({
   /** 閉じている最中（吸い込まれるアニメーションを見せてから消す） */
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<number | null>(null)
-  /** 滑らせている指がいま乗っているアイコン */
-  const [hot, setHot] = useState<MakeMode | null>(null)
+  /** 滑らせている指がいま乗っているアイコン（または業務の札） */
+  const [hot, setHot] = useState<FanPick | null>(null)
   const holdRef = useRef<number | null>(null)
   /**
    * 次の click を1回だけ捨てる。
@@ -104,7 +122,7 @@ export function QuickBar({
   /** 指を置いたまま選んでいる最中か */
   const draggingRef = useRef(false)
   /** 離した瞬間の値を読むための控え（state は次の描画まで古いことがある） */
-  const hotRef = useRef<MakeMode | null>(null)
+  const hotRef = useRef<FanPick | null>(null)
 
   /** 閉じる。アニメーションを見せてから外す */
   const close = useCallback(() => {
@@ -155,14 +173,20 @@ export function QuickBar({
   }
   useEffect(() => clearHold, [])
 
-  const setHover = (mode: MakeMode | null) => {
-    hotRef.current = mode
-    setHot(mode)
+  const setHover = (next: FanPick | null) => {
+    hotRef.current = next
+    setHot(next)
   }
 
-  const pick = (mode: MakeMode) => {
+  const pick = (p: FanPick) => {
     close()
     setHover(null)
+    if (p.startsWith('routine:')) {
+      const r = routines[Number(p.slice('routine:'.length))]
+      if (r) onStartRoutine(r)
+      return
+    }
+    const mode = p as MakeMode
     if (mode === 'voice') onStartVoice()
     else if (mode === 'plan') onAddPlan()
     else if (mode === 'catStart') onStart('category')
@@ -170,12 +194,12 @@ export function QuickBar({
     else onCreate(mode)
   }
 
-  /** 指の下にあるアイコンを拾う（扇は＋の外にあるので、座標で見る） */
-  const hitTest = (x: number, y: number): MakeMode | null => {
+  /** 指の下にあるアイコン（または業務の札）を拾う。扇は＋の外にあるので、座標で見る */
+  const hitTest = (x: number, y: number): FanPick | null => {
     const el = document.elementFromPoint(x, y)
-    const btn = el instanceof Element ? el.closest('.tp-fan-btn') : null
+    const btn = el instanceof Element ? el.closest('.tp-fan-btn, .tp-fan-run') : null
     if (!(btn instanceof HTMLButtonElement) || btn.disabled) return null
-    return (btn.dataset.mode as MakeMode) ?? null
+    return (btn.dataset.mode as FanPick) ?? null
   }
 
   return (
@@ -191,6 +215,37 @@ export function QuickBar({
       )}
 
       <div className="tp-fan">
+        {/* よくやる業務（上位5件）。扇の上に**名前の見える札**で出す（v1.32.0。利用者の指示）。
+            丸のアイコンでは件名が読めないので、ここだけ形を変えてある。
+            下から順に「よくやる順」。いちばん押すものが親指のいちばん近くに来る。 */}
+        {open && routines.length > 0 && (
+          <ul className="tp-fan-runs" aria-label="よくやる業務">
+            {routines.map((r, i) => {
+              const key: FanPick = `routine:${i}`
+              return (
+                <li
+                  key={r.key}
+                  className={`tp-fan-run-item${closing ? ' is-out' : ''}`}
+                  style={{ '--i': i } as CSSProperties}
+                >
+                  <button
+                    type="button"
+                    className={`tp-fan-run${hot === key ? ' is-hot' : ''}`}
+                    data-mode={key}
+                    aria-label={`${r.title} を始める`}
+                    title={`${r.title} を始める（直近で ${r.days}日、1日あたり平均 ${durationShort(r.avgMin)}）`}
+                    onClick={() => pick(key)}
+                  >
+                    <Icon name="play" size={15} strokeWidth={2} />
+                    <span className="tp-fan-run-title">{r.title}</span>
+                    <span className="tp-mono tp-fan-run-min">{durationShort(r.avgMin)}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
         {open &&
           ITEMS.map((it, i) => {
             const rad = (it.angle * Math.PI) / 180
