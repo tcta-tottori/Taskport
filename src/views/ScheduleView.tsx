@@ -91,7 +91,8 @@ export function ScheduleView({
 }) {
   const [day, setDay] = useState(today)
   /** 実績を直している相手。null なら閉じている */
-  const [fixing, setFixing] = useState<Task | null>(null)
+  /** 実績を直している仕事。**IDで持つ**（実物を持つと、直したあとも古いままになる） */
+  const [fixing, setFixing] = useState<string | null>(null)
   const [month, setMonth] = useState(() => monthKey(today))
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
@@ -176,6 +177,11 @@ export function ScheduleView({
     [tasks, runs, day, settings.categoryGroups],
   )
   const actualMin = useMemo(() => actual.reduce((s2, a) => s2 + a.minutes, 0), [actual])
+  /** 実績を直す相手。台帳から引き直す（直した値がその場で欄に返る） */
+  const fixingTask = useMemo(
+    () => (fixing ? tasks.find((t) => t.id === fixing) ?? null : null),
+    [fixing, tasks],
+  )
 
   const overdue = useMemo(() => sortTasks(open.filter((t) => !!t.due && t.due < today)), [open, today])
 
@@ -203,10 +209,11 @@ export function ScheduleView({
 
   return (
     <div className="tp-view">
-      {fixing && (
+      {fixingTask && (
         <ActualSheet
-          tasks={[fixing]}
+          tasks={[fixingTask]}
           day={day}
+          runs={runs}
           categoryGroups={settings.categoryGroups}
           defaultEstimateMin={settings.defaultEstimateMin}
           onPatch={onPatch}
@@ -285,8 +292,7 @@ export function ScheduleView({
             onEditPlan={onEditPlan}
             onImportEvent={onImportEvent}
             onPickActual={(seg: DaySegment) => {
-              const t = seg.taskId ? tasks.find((x) => x.id === seg.taskId) ?? null : null
-              if (t) setFixing(t)
+              if (seg.taskId) setFixing(seg.taskId)
             }}
           />
 

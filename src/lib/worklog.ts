@@ -143,6 +143,84 @@ export function running(tasks: Task[]): Task[] {
     .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
 }
 
+/* ---------------------------------------------------------
+ * 実績を直す（開始時刻・かかった時間）
+ *
+ * 直した値をどの欄に書くかは、仕事の状態で変わる。画面側で分岐させると
+ * 3つの入口（スケジュールの DAY・分析の円グラフ・時間帯）でばらけるので、
+ * ここに1つだけ置く。
+ * ------------------------------------------------------- */
+
+/** 押して測った記録があるか（その日を指定すればその日のぶんだけ） */
+export function hasRunRecord(task: Task, runs: WorkRun[], day?: string): boolean {
+  return runs.some((r) => r.kind === 'task' && r.targetId === task.id && (!day || r.day === day))
+}
+
+/** 押して測った記録のうち、いちばん早い開始時刻 "HH:mm" */
+export function runStartTime(task: Task, runs: WorkRun[], day?: string): string | null {
+  let best: string | null = null
+  for (const r of runs) {
+    if (r.kind !== 'task' || r.targetId !== task.id) continue
+    if (day && r.day !== day) continue
+    for (const seg of r.segments) {
+      const hm = timeOfIso(seg.start)
+      if (hm && (best === null || hm < best)) best = hm
+    }
+  }
+  return best
+}
+
+/**
+ * 記録に出ている開始時刻。実績を直す画面に出すのはこれ。
+ *
+ * 台帳の開始時刻 → 押して測った記録の始まり → 予定の時刻、の順に見る。
+ * 止めた時点で `startedAt` は消えるので、台帳だけを見ると
+ * 押して測った1件が**予定の時刻**を自分の開始時刻として出してしまう（v1.31.1 で直した）。
+ */
+export function recordStart(task: Task, runs: WorkRun[] = [], day?: string): string | null {
+  return timeOfIso(task.startedAt) ?? runStartTime(task, runs, day) ?? task.dueTime
+}
+
+/**
+ * 開始時刻を直せるか。
+ *
+ * 未完了で止まっている仕事では、台帳の開始時刻（`startedAt`）が
+ * 「いま動かしている」印を兼ねている。押して測った記録があるものにここを書くと、
+ * 止めたはずの仕事が実行中に戻り、時間が勝手に伸びる。
+ */
+export function canFixStart(task: Task, runs: WorkRun[] = [], day?: string): boolean {
+  if (task.status === 'done' || isRunning(task)) return true
+  return !hasRunRecord(task, runs, day)
+}
+
+/**
+ * 開始時刻を直す差分。
+ *
+ *   完了済み        … 台帳の開始時刻。完了時刻も合わせる（日報の並びがずれる）
+ *   実行中          … 台帳の開始時刻（いつから動かしているか、そのもの）
+ *   未完了で止まり  … 予定の時刻（`dueTime`）。記録の始まりもそこを見る
+ */
+export function startPatch(task: Task, day: string, hm: string | null): Partial<Task> {
+  if (task.status !== 'done' && !isRunning(task)) return { dueTime: hm }
+  const startedAt = hm ? isoAt(day, hm) : null
+  if (task.status !== 'done') return { startedAt }
+  const min = typeof task.actualMin === 'number' && task.actualMin > 0 ? task.actualMin : 0
+  const doneAt = hm ? isoAt(day, hm, min) : null
+  // 直した結果が日をまたぐときは、完了時刻をそのままにする（記録を別の日へ飛ばさない）
+  return { startedAt, doneAt: doneAt && dayOfIso(doneAt) === day ? doneAt : task.doneAt }
+}
+
+/** かかった時間を直す差分。完了済みは完了時刻も合わせる */
+export function minutesPatch(task: Task, minutes: number | null): Partial<Task> {
+  const actualMin = minutes !== null && minutes > 0 ? Math.round(minutes) : null
+  if (task.status !== 'done' || !task.startedAt) return { actualMin }
+  const day = dayOfIso(task.startedAt)
+  const hm = timeOfIso(task.startedAt)
+  if (!day || !hm) return { actualMin }
+  const doneAt = isoAt(day, hm, actualMin ?? 0)
+  return { actualMin, doneAt: dayOfIso(doneAt) === day ? doneAt : task.doneAt }
+}
+
 /**
  * やった業務を完了済みのタスクとして保存するための差分。
  * 開始時刻とかかった時間から完了時刻を出す（画面側で時刻を組み立てない）。
@@ -352,9 +430,7 @@ export function entriesInRange(
     })
   }
 
-  applyFixedTotals(out, tasks, runs)
-
-  return out.sort(
+  return applyLedgerFix(out, tasks, runs).sort(
     (a, b) =>
       (a.day < b.day ? -1 : a.day > b.day ? 1 : 0) ||
       (a.from ?? 9999) - (b.from ?? 9999) ||
@@ -363,51 +439,92 @@ export function entriesInRange(
 }
 
 /**
- * 人が直した実績（台帳の `actualMin`）があれば、**そちらを正**として合計を合わせる。
+ * 人が直した実績（台帳の `startedAt` / `actualMin`）を**正**として、出すぶんを合わせる。
  *
- * 実行の記録（区間）は「実際に押した時刻」なので書き換えない（CLAUDE.md §9）。
- * 直せるのは台帳の合計だけなので、区間の位置はそのままに、
- * 数える分だけを比で寄せる（帯は動かず、時間の合計だけが直した値になる）。
+ * 実行の記録（区間）は「実際に押した時刻」なので書き換えない（design.md §10）。
+ * ここで直すのは**出すときの形だけ**で、保存してある区間はそのまま残る。
+ *
+ *   かかった時間を直した … 位置はそのまま、長さと数える分を寄せる
+ *   開始時刻を直した     … その時刻から1本にまとめて置き直す
+ *
+ * 長さまで合わせるのは、帯の見た目（何時から何時まで）が区間のままだと、
+ * 15分に直した仕事が 1時間36分の面のまま残るため（v1.31.1。利用者の指摘）。
  *
  * 直すのは**その日の記録がここに全部そろっているとき**だけ。
  * `actualMin` はその日の合計なので、別の日の記録も持つ仕事に当てると比が狂う。
  * 動いている最中のもの（まだ伸びる）にも当てない。
  */
-function applyFixedTotals(entries: WorkEntry[], tasks: Task[], runs: WorkRun[]): void {
+function applyLedgerFix(entries: WorkEntry[], tasks: Task[], runs: WorkRun[]): WorkEntry[] {
+  const live = new Set<string>()
   const mine = new Map<string, WorkEntry[]>()
   for (const e of entries) {
-    if (e.kind !== 'task' || !e.taskId) continue
+    if (e.kind !== 'task' || !e.taskId || e.from === null) continue
     if (e.live) {
-      mine.delete(e.taskId)
+      live.add(e.taskId)
       continue
     }
     const list = mine.get(e.taskId)
     if (list) list.push(e)
     else mine.set(e.taskId, [e])
   }
-  if (mine.size === 0) return
+  for (const id of live) mine.delete(id)
+  if (mine.size === 0) return entries
 
   const taskById = new Map(tasks.map((t) => [t.id, t]))
+  /** 差し替えるぶん。鍵は仕事のID */
+  const fixed = new Map<string, WorkEntry[]>()
   for (const [id, list] of mine) {
     const task = taskById.get(id)
     if (!task) continue
-    const fixed = typeof task.actualMin === 'number' ? task.actualMin : 0
-    if (fixed <= 0) continue
     const days = new Set(list.map((e) => e.day))
     if (days.size !== 1) continue
     const day = [...days][0]
     // 別の日にも記録がある仕事は触らない（actualMin がどの日のぶんか決められない）
     if (runs.some((r) => r.kind === 'task' && r.targetId === id && r.day !== day)) continue
     const sum = list.reduce((s, e) => s + e.minutes, 0)
-    if (sum <= 0 || sum === fixed) continue
-    // 端数は最後の1件へ寄せて、合計が直した値とぴったり合うようにする
-    let left = fixed
-    list.forEach((e, i) => {
-      const share = i === list.length - 1 ? left : Math.max(1, Math.round((e.minutes / sum) * fixed))
-      e.minutes = Math.max(0, i === list.length - 1 ? left : Math.min(share, left))
-      left -= e.minutes
-    })
+    if (sum <= 0) continue
+    const total = typeof task.actualMin === 'number' && task.actualMin > 0 ? task.actualMin : sum
+    const hm = dayOfIso(task.startedAt) === day ? timeOfIso(task.startedAt) : null
+    const start = hm ? toMinutes(hm) : null
+    if (start !== null) {
+      // 人が入れ直した開始時刻がある。1回ぶんとして、その時刻から置く
+      fixed.set(id, [placedAt(list[0], start, total)])
+    } else if (total !== sum) {
+      // 端数は最後の1件へ寄せて、合計が直した値とぴったり合うようにする
+      let left = total
+      fixed.set(
+        id,
+        list.map((e, i) => {
+          const share =
+            i === list.length - 1 ? left : Math.min(left, Math.max(1, Math.round((e.minutes / sum) * total)))
+          left -= share
+          return placedAt(e, e.from as number, share)
+        }),
+      )
+    }
   }
+  if (fixed.size === 0) return entries
+
+  const out: WorkEntry[] = []
+  const used = new Set<string>()
+  for (const e of entries) {
+    const next = e.taskId ? fixed.get(e.taskId) : undefined
+    if (!next) {
+      out.push(e)
+      continue
+    }
+    // 1本にまとめたぶんは、最初の1件のところで置き換える（残りは落とす）
+    if (used.has(e.taskId as string)) continue
+    used.add(e.taskId as string)
+    out.push(...next)
+  }
+  return out
+}
+
+/** 1件を、決めた時刻から決めた分だけ置き直す。長さは最低1分 */
+function placedAt(base: WorkEntry, from: number, minutes: number): WorkEntry {
+  const min = Math.max(1, minutes)
+  return { ...base, from, to: Math.min(24 * 60 - 1, from + min), minutes: min }
 }
 
 /** 帯に置けるものだけ（時刻の分かっているもの） */

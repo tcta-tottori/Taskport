@@ -8,7 +8,7 @@ import { durationLabel, formatMD, fromMinutes } from '../lib/date'
 import { trim } from '../lib/workday'
 import { colorOfGroup } from '../lib/workCategories'
 import type { DaySegment } from '../lib/worklog'
-import type { CategoryGroup, Task, WorkHours } from '../types'
+import type { CategoryGroup, Task, WorkHours, WorkRun } from '../types'
 
 /* =========================================================
  * 時間帯（ポップアップ）
@@ -29,6 +29,7 @@ export function BandSheet({
   today,
   nowMin,
   tasks,
+  runs,
   workHours,
   categoryGroups,
   defaultEstimateMin,
@@ -43,6 +44,8 @@ export function BandSheet({
   nowMin: number
   /** その日の記録（実績を直せるもの） */
   tasks: Task[]
+  /** 実行の記録。押して測った開始時刻をここから読む */
+  runs: WorkRun[]
   workHours: WorkHours
   categoryGroups: CategoryGroup[]
   defaultEstimateMin: number
@@ -52,8 +55,10 @@ export function BandSheet({
   onClose: () => void
 }) {
   const [open, setOpen] = useState<string | null>(focusKey ?? null)
-  const rows = byStart(segments)
-  const total = rows.reduce((sum, s) => sum + (s.to - s.from), 0)
+  const rows = bandRows(segments)
+  const total = rows.reduce((sum, r) => sum + (r.seg.to - r.seg.from), 0)
+  /** 帯を押したときに開く行。区間そのもので引く（鍵は並びから作る） */
+  const keyOfSeg = (seg: DaySegment) => rows.find((r) => r.seg === seg)?.key ?? null
 
   return createPortal(
     <div className="tp-sheet tp-sheet-over" role="dialog" aria-modal="true" aria-label="時間帯">
@@ -77,12 +82,11 @@ export function BandSheet({
             isToday={day === today}
             nowMin={nowMin}
             colorOfGroupName={(g) => colorOfGroup(categoryGroups, g)}
-            onPick={(seg) => setOpen(keyOf(seg))}
+            onPick={(seg) => setOpen(keyOfSeg(seg))}
           />
 
           <ul className="tp-span-list">
-            {rows.map((seg) => {
-              const key = keyOf(seg)
+            {rows.map(({ seg, key }) => {
               const task = seg.taskId ? tasks.find((t) => t.id === seg.taskId) ?? null : null
               const isOpen = open === key
               return (
@@ -116,6 +120,7 @@ export function BandSheet({
                           <ActualRow
                             task={task}
                             day={day}
+                            runs={runs}
                             categoryGroups={categoryGroups}
                             defaultEstimateMin={defaultEstimateMin}
                             onPatch={onPatch}
@@ -148,7 +153,19 @@ export function BandSheet({
   )
 }
 
-/** 区間の鍵。同じ仕事を2回動かしても別の行として扱う */
-export function keyOf(seg: DaySegment): string {
-  return `${seg.from}-${seg.to}-${seg.title}`
+/**
+ * 一覧に出す並びと、行ごとの鍵。
+ *
+ * 鍵に**時刻を入れない**（v1.31.1）。入れていたときは、実績を直した拍子に
+ * 区間の位置が変わって鍵も変わり、いま開いて直している行がその場で閉じていた。
+ * 同じ仕事を2回動かしたぶんは、並び順の番号で分ける。
+ */
+export function bandRows(segments: DaySegment[]): { seg: DaySegment; key: string }[] {
+  const seen = new Map<string, number>()
+  return byStart(segments).map((seg) => {
+    const id = `${seg.kind}:${seg.taskId ?? seg.planId ?? seg.title}`
+    const nth = seen.get(id) ?? 0
+    seen.set(id, nth + 1)
+    return { seg, key: `${id}#${nth}` }
+  })
 }

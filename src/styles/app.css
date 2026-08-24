@@ -617,6 +617,12 @@ body::before {
 .tp-field input[type="date"], .tp-field input[type="time"], .tp-field input[type="number"] {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
 }
+/* 直せない欄。読めるまま（コントラストは落とさない）、触れないことだけ見せる */
+.tp-field input:disabled, .tp-field textarea:disabled, .tp-field select:disabled {
+  background: var(--surface-3); border-style: dashed;
+  color: var(--muted); cursor: default;
+}
+.tp-field input:disabled:hover { border-color: var(--line-strong); }
 /* 時刻の欄。入れた時刻は ✕ で消せる（時刻なしに戻す道を消さない） */
 /* 時刻の欄。
    端末の時刻入力は中身（10:00）を縮めてくれないので、

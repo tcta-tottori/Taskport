@@ -31,7 +31,7 @@ import { logDay, timed } from '../lib/worklog'
 import { jobLabel, NO_JOB, sortJobs } from '../lib/jobs'
 import { DayBand } from '../components/DayBand'
 import { ActualSheet } from './ActualSheet'
-import { BandSheet, keyOf } from './BandSheet'
+import { BandSheet, bandRows } from './BandSheet'
 import {
   DASH_LABEL,
   DEFAULT_DASH_ORDER,
@@ -103,8 +103,9 @@ export function DashboardView({
   /** 期間の単位と、期間の中の1日（送りはこれを動かす） */
   const [span, setSpan] = useState<Span>('day')
   const [anchor, setAnchor] = useState(today)
-  /** 実績を直す画面。開いている区分（または1件） */
-  const [fixing, setFixing] = useState<{ title?: string; tasks: Task[] } | null>(null)
+  /** 実績を直す画面。開いている区分（または1件）。
+      仕事は**IDで持つ**（実物を持つと、直したあとも古い値のままになる） */
+  const [fixing, setFixing] = useState<{ title?: string; ids: string[] } | null>(null)
   /** 時間帯のポップアップ。focus は帯を押して開いたときの区間 */
   const [banding, setBanding] = useState<{ focus: string | null } | null>(null)
   /** 並べ替え中か。押している間だけ各カードに ↑↓ が出る */
@@ -148,6 +149,13 @@ export function DashboardView({
     const ids = new Set(stats.entries.map((e) => e.taskId).filter((id): id is string => !!id))
     return tasks.filter((t) => ids.has(t.id))
   }, [stats.entries, tasks])
+
+  /** 実績を直す相手。台帳から引き直す（直した値がその場で欄に返る） */
+  const fixingTasks = useMemo(() => {
+    if (!fixing) return []
+    const ids = new Set(fixing.ids)
+    return tasks.filter((t) => ids.has(t.id))
+  }, [fixing, tasks])
 
   const ov = useMemo(() => overview(tasks, today), [tasks, today])
   const cats = useMemo(() => categoryStats(tasks), [tasks])
@@ -263,7 +271,7 @@ export function DashboardView({
                   onPick={(group) =>
                     setFixing({
                       title: group,
-                      tasks: fixable.filter((t) => groupOfTask(t) === group),
+                      ids: fixable.filter((t) => groupOfTask(t) === group).map((t) => t.id),
                     })
                   }
                 />
@@ -313,7 +321,7 @@ export function DashboardView({
                   isToday={period.from === today}
                   nowMin={nowMin}
                   colorOfGroupName={(g) => colorOfGroup(settings.categoryGroups, g)}
-                  onPick={(seg) => setBanding({ focus: keyOf(seg) })}
+                  onPick={(seg) => setBanding({ focus: bandRows(band).find((r) => r.seg === seg)?.key ?? null })}
                 />
                 <p className="tp-hint">
                   {formatMD(period.from)}／押した時刻から止めた時刻まで。
@@ -708,10 +716,11 @@ export function DashboardView({
     <div className="tp-view tp-dash tp-grid">
       {fixing && (
         <ActualSheet
-          tasks={fixing.tasks}
+          tasks={fixingTasks}
           day={period.from}
           label={period.label}
           title={fixing.title}
+          runs={runs}
           categoryGroups={settings.categoryGroups}
           defaultEstimateMin={settings.defaultEstimateMin}
           onPatch={onPatch}
@@ -725,6 +734,7 @@ export function DashboardView({
           today={today}
           nowMin={nowMin}
           tasks={fixable}
+          runs={runs}
           workHours={settings.workHours}
           categoryGroups={settings.categoryGroups}
           defaultEstimateMin={settings.defaultEstimateMin}

@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom'
 import { Icon } from '../components/Icon'
 import { CategoryChip } from '../components/CategoryChip'
 import { TimeField } from '../components/TimeField'
-import { durationLabel, formatMD, formatMDShort, isoAt } from '../lib/date'
-import { logDay, logStartTime, loggedMinutes } from '../lib/worklog'
+import { durationLabel, formatMD, formatMDShort } from '../lib/date'
+import { canFixStart, logDay, loggedMinutes, minutesPatch, recordStart, startPatch } from '../lib/worklog'
 import { colorOf } from '../lib/workCategories'
-import type { CategoryGroup, Task } from '../types'
+import type { CategoryGroup, Task, WorkRun } from '../types'
 
 /* =========================================================
  * 実績を直す
@@ -15,8 +15,10 @@ import type { CategoryGroup, Task } from '../types'
  * 直すのは**かかった時間と開始時刻**の2つだけ（件名や期限は編集画面で）。
  *
  * 実行ログ（区間）は書き換えない。あれは「実際に押した時刻」の記録で、
- * ここで直すのは台帳側の合計（`actualMin`）。数字が食い違ったときは、
- * 人が入れたほうを正とする。
+ * ここで直すのは台帳側（`startedAt` / `actualMin`）。数字が食い違ったときは、
+ * 人が入れたほうを正とし、**帯もその値で置き直す**（v1.31.1）。
+ *
+ * 直した値をどの欄に書くか・直せるかは `lib/worklog` が決める（画面で分岐させない）。
  *
  * この面は画面の中（`.tp-main`）から開くので、body へ出して描く。
  * `.tp-main` は重なりの基準になっていて、その中に置くと ＋ ボタンの下へ潜り、
@@ -31,6 +33,7 @@ export function ActualSheet({
   day,
   label,
   title,
+  runs,
   categoryGroups,
   defaultEstimateMin,
   onPatch,
@@ -44,6 +47,8 @@ export function ActualSheet({
   label?: string
   /** 見出しの補足（区分の名前など） */
   title?: string
+  /** 実行の記録。押して測った開始時刻をここから読む */
+  runs: WorkRun[]
   categoryGroups: CategoryGroup[]
   defaultEstimateMin: number
   onPatch: (task: Task, patch: Partial<Task>) => void
@@ -77,6 +82,7 @@ export function ActualSheet({
                   key={t.id}
                   task={t}
                   day={day}
+                  runs={runs}
                   categoryGroups={categoryGroups}
                   defaultEstimateMin={defaultEstimateMin}
                   onPatch={onPatch}
@@ -101,6 +107,7 @@ export function ActualSheet({
 export function ActualRow({
   task,
   day,
+  runs,
   categoryGroups,
   defaultEstimateMin,
   onPatch,
@@ -108,6 +115,8 @@ export function ActualRow({
   task: Task
   /** 日が分からないときの受け皿。記録そのものが日を持っていればそちらを使う */
   day: string
+  /** 実行の記録。押して測った開始時刻をここから読む */
+  runs: WorkRun[]
   categoryGroups: CategoryGroup[]
   defaultEstimateMin: number
   onPatch: (task: Task, patch: Partial<Task>) => void
@@ -118,13 +127,16 @@ export function ActualRow({
   const [min, setMin] = useState<string>(
     typeof task.actualMin === 'number' && task.actualMin > 0 ? String(task.actualMin) : '',
   )
-  const start = logStartTime(task)
+  // 押して測った記録があるものは、止めた時点で台帳の開始時刻が消えている。
+  // 台帳だけを見ると予定の時刻が出てしまうので、記録の始まりを読む
+  const start = recordStart(task, runs, rowDay)
+  const canStart = canFixStart(task, runs, rowDay)
   const shown = loggedMinutes(task, defaultEstimateMin)
 
   const commit = (value: string) => {
     setMin(value)
     const n = Number(value)
-    onPatch(task, { actualMin: value === '' || n <= 0 ? null : Math.round(n) })
+    onPatch(task, minutesPatch(task, value === '' || n <= 0 ? null : n))
   }
 
   return (
@@ -145,8 +157,9 @@ export function ActualRow({
           <span className="tp-label">開始</span>
           <TimeField
             value={start}
+            disabled={!canStart}
             ariaLabel={`${task.title} の開始時刻`}
-            onChange={(v) => onPatch(task, { startedAt: v ? isoAt(rowDay, v) : null })}
+            onChange={(v) => onPatch(task, startPatch(task, rowDay, v))}
           />
         </label>
         <label className="tp-field">
@@ -165,6 +178,12 @@ export function ActualRow({
           </div>
         </label>
       </div>
+
+      {!canStart && (
+        <p className="tp-note tp-small">
+          開始時刻は押した時刻のまま（未完了のあいだ直すと、止めた仕事が実行中に戻る）。完了にすれば直せる。
+        </p>
+      )}
 
       <div className="tp-chips tp-actual-quick">
         {QUICK.map((q) => (
