@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '../components/Icon'
 import { catStyle, CategoryChip } from '../components/CategoryChip'
 import { colorOf, guessGroupId } from '../lib/workCategories'
@@ -117,7 +118,10 @@ export function CategorySheet({
       ),
     )
 
-  return (
+  // タスクを作る画面（＝別のポップアップ）の中から開くので body へ出して描く。
+  // ポップアップは地をぼかしている＝内側の `position: fixed` の基準になるため、
+  // 中に置いたままだと、この面が親のポップアップの枠に合わせて縮む（v1.33.0）。
+  return createPortal(
     <div
       className="tp-sheet tp-sheet-over"
       role="dialog"
@@ -403,6 +407,7 @@ export function CategorySheet({
           )}
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

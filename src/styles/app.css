@@ -532,18 +532,28 @@ body::before {
   color: inherit;
   pointer-events: none;
 }
-/* ---------- ＋の扇の上に出る「よくやる業務」（v1.32.0） ----------
+/* ---------- ＋から出る「よくやる業務」（v1.32.0 / 置き場所は v1.33.0） ----------
    丸のアイコンでは件名が読めないので、ここだけ**名前の見える札**にする。
-   置き場所は扇の外側（2層目より上）。扇の丸とは重ならない。
+   置き場所は**画面の真ん中あたり**（v1.33.0。利用者の指示）。
+   扇の丸が要る場所を下の余白として空けてあるので、重なることはない。
+   出すのは項目の名前だけ。時間は出さない（押す前に読むものではない）。
    下から順に「よくやる順」＝いちばん押すものが親指のいちばん近くに来る。 */
-.tp-fan-runs {
-  position: absolute; right: 0; bottom: calc(100% + var(--fan-r2) + 12px);
+.tp-fan-runs-wrap {
+  position: fixed; left: 0; right: 0;
+  top: var(--vv-t, 0px);
+  height: var(--vv-h, 100dvh);
   z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  /* 下は扇の丸のぶん、上はヘッダーのぶんを空ける */
+  padding: 76px 16px calc(var(--fan-r2) + var(--fan-size) + 28px);
+  pointer-events: none;
+}
+.tp-fan-runs {
+  pointer-events: auto;
   list-style: none; margin: 0; padding: 0;
-  width: min(74vw, 290px);
-  display: flex; flex-direction: column-reverse; gap: 6px;
-  /* 背の低い端末で画面の外へ出ないようにする */
-  max-height: calc(100vh - var(--fan-r2) - 170px);
+  width: min(84vw, 320px);
+  max-height: 100%;
+  display: flex; flex-direction: column-reverse; gap: 8px;
   overflow-y: auto;
 }
 .tp-fan-run-item {
@@ -555,9 +565,9 @@ body::before {
   animation-delay: calc(var(--i) * 20ms);
 }
 .tp-fan-run {
-  width: 100%; min-height: 44px;
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border-radius: 999px;
+  width: 100%; min-height: 48px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 16px; border-radius: 999px;
   background: var(--surface); color: var(--go);
   border: 1px solid color-mix(in srgb, var(--go) 42%, var(--line-strong));
   box-shadow: var(--shadow-lg);
@@ -565,10 +575,9 @@ body::before {
 }
 .tp-fan-run-title {
   flex: 1; min-width: 0;
-  font-size: 13px; font-weight: 800; color: var(--ink);
+  font-size: 14px; font-weight: 800; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tp-fan-run-min { flex: none; font-size: 11px; font-weight: 700; color: var(--muted); }
 .tp-fan-run:hover { border-color: var(--go); transform: translateY(-1px); }
 .tp-fan-run:active { transform: scale(.98); }
 /* 指が乗っている札（長押しのまま滑らせて選ぶとき）。離すとここが始まる */
@@ -576,8 +585,7 @@ body::before {
   background: var(--go); border-color: var(--go); color: var(--on-brand);
   box-shadow: 0 10px 24px color-mix(in srgb, var(--go) 40%, transparent);
 }
-.tp-fan-run.is-hot .tp-fan-run-title,
-.tp-fan-run.is-hot .tp-fan-run-min { color: var(--on-brand); }
+.tp-fan-run.is-hot .tp-fan-run-title { color: var(--on-brand); }
 
 @keyframes tpRunIn {
   from { opacity: 0; transform: translateY(14px) scale(.94); }
@@ -701,38 +709,60 @@ body::before {
 .tp-pri-btn.tp-pri-mid.is-on  { background: var(--pri-mid);  border-color: var(--pri-mid);  color: var(--on-brand); }
 .tp-pri-btn.tp-pri-low.is-on  { background: var(--pri-low);  border-color: var(--pri-low);  color: var(--on-brand); }
 
-/* ---------- シート（確認・編集・書き出し） ---------- */
+/* ---------- ポップアップ（確認・編集・始める・書き出し） ----------
+   v1.33.0（利用者の指示）で、画面の下辺に貼り付く形をやめた。
+   **地をぼかした全画面の上に、真ん中の1枚**を浮かせる。
+   下辺に貼り付いていた頃は、キーボードが出ると入力欄も決める釦も
+   キーボードの下に潜って、どこに何を打っているのか見えなかった。
+
+   【キーボードが出ている間】
+   面の大きさを**いま見えている範囲**（visual viewport）に合わせる。
+   --vv-h / --vv-t は lib/viewport.ts が置く。対応していない端末では
+   ここに書いてある既定（100dvh / 0）で、これまでどおり動く。 */
 .tp-sheet {
-  position: fixed; inset: 0; z-index: 60;
-  display: flex; align-items: flex-end; justify-content: center;
-  background: rgba(20, 26, 40, .45);
-  animation: tpFade .22s ease;
+  position: fixed; left: 0; right: 0; z-index: 60;
+  top: var(--vv-t, 0px);
+  height: var(--vv-h, 100dvh);
+  display: flex; align-items: center; justify-content: center;
+  padding: max(12px, var(--safe-t)) 12px max(12px, var(--safe-b));
+  background: color-mix(in srgb, var(--ink) 34%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.06);
+  backdrop-filter: blur(10px) saturate(1.06);
+  animation: tpFade .2s ease;
 }
 .tp-sheet-card {
-  width: 100%; max-width: 620px; max-height: 92vh;
+  width: 100%; max-width: 620px; max-height: 100%;
   display: flex; flex-direction: column;
   background: var(--surface);
-  border-radius: 22px 22px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
   box-shadow: var(--shadow-lg);
-  animation: tpRise .28s cubic-bezier(.22, 1, .36, 1);
+  overflow: hidden;
+  animation: tpZoom .24s cubic-bezier(.2, 1.1, .3, 1);
 }
 .tp-sheet-head {
+  flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 12px 14px 10px 18px; border-bottom: 1px solid var(--line);
 }
 .tp-sheet-head h2 { margin: 0; font-size: 16px; font-weight: 800; }
 .tp-sheet-body {
-  flex: 1; overflow-y: auto; padding: 14px 18px;
+  flex: 1; min-height: 0; overflow-y: auto; padding: 14px 18px;
   display: flex; flex-direction: column; gap: 12px;
+  /* 中で閉じる。裏の画面まで一緒に動くと、どこを触っているか分からなくなる */
+  overscroll-behavior: contain;
+  /* 端末が自動で寄せたとき、入力欄が縁にぴったり付かないようにする */
+  scroll-padding: 16px 0 24px;
 }
+/* 押した欄は、上下に少し余白を持って見えるところへ寄る */
+.tp-sheet-body input,
+.tp-sheet-body textarea,
+.tp-sheet-body select { scroll-margin: 16px 0 24px; }
 .tp-sheet-foot {
+  flex: none;
   display: flex; justify-content: flex-end; gap: 8px;
-  padding: 12px 18px calc(14px + var(--safe-b));
+  padding: 12px 18px 14px;
   border-top: 1px solid var(--line);
-}
-@media (min-width: 620px) {
-  .tp-sheet { align-items: center; }
-  .tp-sheet-card { border-radius: 20px; }
 }
 
 .tp-engine {
@@ -1022,6 +1052,7 @@ svg.tp-trend { width: 100%; max-width: 480px; height: auto; display: block; marg
 /* ---------- アニメーション ---------- */
 @keyframes tpFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tpRise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes tpZoom { from { opacity: 0; transform: scale(.96) translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes tpBlink { 50% { opacity: .2; } }
 @keyframes tpRing { 0% { opacity: .7; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.5); } }
 @keyframes tpFabBlink {

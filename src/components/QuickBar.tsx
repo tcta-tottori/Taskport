@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Icon, type IconName } from './Icon'
-import { durationShort } from '../lib/date'
 import type { Routine } from '../lib/routines'
 
 /* =========================================================
@@ -25,9 +24,10 @@ import type { Routine } from '../lib/routines'
  * どのアイコンにも乗っていないまま離したときは、開いたままにして待つ
  * （狙いを外しただけで閉じられると、もう一度長押しからやり直しになる）。
  *
- * **よくやる業務**（v1.32.0。利用者の指示）は、扇の上に名前の見える札で並ぶ。
- * 実行の画面に置いていたときは「次の作業」を押し下げていたので、
- * ここへ移した。扇と同じで、長押しのまま滑らせて選べる。
+ * **よくやる業務**（v1.32.0。利用者の指示）は、名前の見える札で並ぶ。
+ * 実行の画面に置いていたときは「次の作業」を押し下げていたので、ここへ移した。
+ * v1.33.0（利用者の指示）で**画面の真ん中あたり**へ置き、時間の表示をやめた。
+ * 出すのは何をやるか（項目の名前）だけ。扇と同じで、長押しのまま滑らせて選べる。
  *
  * v1.10 までの統合バー（下辺いっぱいのバー）は廃止済み。
  * 左下に別で置いていた録音ボタンも v1.12.1 で外した。同じ形の丸が2つあると
@@ -219,31 +219,32 @@ export function QuickBar({
             丸のアイコンでは件名が読めないので、ここだけ形を変えてある。
             下から順に「よくやる順」。いちばん押すものが親指のいちばん近くに来る。 */}
         {open && routines.length > 0 && (
-          <ul className="tp-fan-runs" aria-label="よくやる業務">
-            {routines.map((r, i) => {
-              const key: FanPick = `routine:${i}`
-              return (
-                <li
-                  key={r.key}
-                  className={`tp-fan-run-item${closing ? ' is-out' : ''}`}
-                  style={{ '--i': i } as CSSProperties}
-                >
-                  <button
-                    type="button"
-                    className={`tp-fan-run${hot === key ? ' is-hot' : ''}`}
-                    data-mode={key}
-                    aria-label={`${r.title} を始める`}
-                    title={`${r.title} を始める（直近で ${r.days}日、1日あたり平均 ${durationShort(r.avgMin)}）`}
-                    onClick={() => pick(key)}
+          <div className="tp-fan-runs-wrap">
+            <ul className="tp-fan-runs" aria-label="よくやる業務">
+              {routines.map((r, i) => {
+                const key: FanPick = `routine:${i}`
+                return (
+                  <li
+                    key={r.key}
+                    className={`tp-fan-run-item${closing ? ' is-out' : ''}`}
+                    style={{ '--i': i } as CSSProperties}
                   >
-                    <Icon name="play" size={15} strokeWidth={2} />
-                    <span className="tp-fan-run-title">{r.title}</span>
-                    <span className="tp-mono tp-fan-run-min">{durationShort(r.avgMin)}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+                    <button
+                      type="button"
+                      className={`tp-fan-run${hot === key ? ' is-hot' : ''}`}
+                      data-mode={key}
+                      aria-label={`${r.title} を始める`}
+                      title={`${r.title} を始める`}
+                      onClick={() => pick(key)}
+                    >
+                      <Icon name="play" size={15} strokeWidth={2} />
+                      <span className="tp-fan-run-title">{r.title}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         )}
 
         {open &&
